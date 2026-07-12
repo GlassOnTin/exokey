@@ -4,6 +4,7 @@
 #   ./cloud/hetzner.sh price          # what the CCX line ACTUALLY costs, from the API
 #   ./cloud/hetzner.sh up [type]      # create the server + install deps + push the repo
 #   ./cloud/hetzner.sh run  ...       # run the optimiser on it (args passed to opt.run)
+#   ./cloud/hetzner.sh burn ...       # run, fetch the results, then DELETE the box. use this.
 #   ./cloud/hetzner.sh fetch          # pull out/ back
 #   ./cloud/hetzner.sh down           # DELETE the server (this is what stops the billing)
 #   ./cloud/hetzner.sh status         # what exists and roughly what it has cost
@@ -122,6 +123,28 @@ cmd_run() {
 
 cmd_fetch() { rsync -az "root@$(server_ip):/opt/exokey/out/" "$REPO_DIR/out/"; echo "pulled -> out/"; }
 
+cmd_burn() {
+  # Run, pull the results back, then DELETE the box. The whole point of a burst machine is
+  # that it stops existing. Forgetting to delete it is the only way this gets expensive --
+  # a powered-off Hetzner Cloud server bills exactly the same as a running one -- so the
+  # teardown is wired to the run instead of left to memory.
+  #
+  # The trap fires on error and on interrupt too: a crashed run must not leave a box billing.
+  trap 'echo "--- tearing down (trap) ---"; cmd_fetch 2>/dev/null || true; cmd_force_down' EXIT INT TERM
+  cmd_run "$@"
+  trap - EXIT INT TERM
+  echo "--- run finished; fetching and tearing down ---"
+  cmd_fetch
+  cmd_force_down
+}
+
+cmd_force_down() {  # no prompt: the caller already committed to burning the box
+  local id; id=$(server_json | jq -r '.id // empty')
+  [[ -z "$id" ]] && { echo "nothing to delete"; return; }
+  api DELETE "/servers/$id" >/dev/null
+  echo "deleted '$NAME'. billing stopped."
+}
+
 cmd_status() {
   local s; s=$(server_json)
   [[ -z "$s" ]] && { echo "no server named '$NAME' — you are being billed nothing"; return; }
@@ -140,6 +163,7 @@ cmd_down() {
 
 case "${1:-}" in
   price) shift; cmd_price "$@" ;;
+  burn) shift; cmd_burn "$@" ;;
   up) shift; cmd_up "$@" ;;
   run) shift; cmd_run "$@" ;;
   fetch) shift; cmd_fetch "$@" ;;

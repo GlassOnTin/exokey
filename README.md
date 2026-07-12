@@ -74,13 +74,18 @@ numbers.
 echo "$HCLOUD_TOKEN" > ~/hetzner.api && chmod 600 ~/hetzner.api
 ./cloud/hetzner.sh price          # real prices, from the API
 ./cloud/hetzner.sh up cpx62       # create + install + run the test suite on it
-./cloud/hetzner.sh run --pop 200 --gen 150
-./cloud/hetzner.sh fetch
-./cloud/hetzner.sh down           # DELETE — this is what stops the billing
+./cloud/hetzner.sh burn --pop 200 --gen 150   # run, fetch results, DELETE the box
 ```
 
-⚠ Hetzner bills for a server while it *exists*. Powering it off changes nothing. There is
-deliberately no `stop` subcommand.
+⚠ **Hetzner bills for a server while it *exists*.** Powering it off changes nothing — only
+deleting stops the meter. There is deliberately no `stop` subcommand, because a "stop" that
+keeps charging you is a trap. Use `burn`: it tears the box down when the run ends, and its
+trap fires on crash and interrupt too, so a failed run cannot leave a machine billing.
+
+Take a **dedicated-vCPU** tier only if you have quota for a big one. Measured on this
+workload: a 16-vCPU *shared* box (`cpx62`) beat an 8-vCPU *dedicated* one (`ccx33`) by
+**2.3×** for the same money — shared cores deliver ~77% of a dedicated core, but you get
+twice as many.
 
 ---
 
