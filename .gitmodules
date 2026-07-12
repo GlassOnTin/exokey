@@ -1,0 +1,3 @@
+[submodule "data/myo_sim"]
+	path = data/myo_sim
+	url = https://github.com/MyoHub/myo_sim.git

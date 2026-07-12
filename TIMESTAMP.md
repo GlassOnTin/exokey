@@ -1,0 +1,57 @@
+# Timestamp — proof of prior-art publication date
+
+This repository contains a **defensive publication** ([VISION.md § 8](VISION.md#8-disclosed-variants-defensive-publication)).
+Prior art is only worth anything if its **date is provable to a third party**.
+
+**Git commit dates are worthless for this.** They are set by the committer, trivially forged,
+and rewritten by any rebase. So the disclosure is anchored independently.
+
+## What is anchored
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) | `a1d7c32e743780be7fee98dccf2ef727d4ea26fda8d2b970862b7357f91232be` |
+| `MANIFEST.sha256` (hashes of all 27 source + doc files) | `4c45f8cdd21e1f5b48e0ad9852ad195cf5c4a07d89d1b46ba3262ef52367c1e4` |
+
+Stamped: **2026-07-12T22:50:22Z** (UTC, submission time).
+
+## How the proof works
+
+[OpenTimestamps](https://opentimestamps.org/) aggregates the hash into a Merkle tree and
+commits the root into the **Bitcoin blockchain**. Once a block confirms it, the proof shows
+the file existed *before that block was mined* — a fact anchored in the most expensive
+public ledger in existence, verifiable by anyone, forever, with no trusted third party.
+
+The attestation matures in a few hours (it needs a Bitcoin block). Until then `ots verify`
+reports a *pending* attestation from the calendar servers; afterwards it reports a
+**Bitcoin block height and time**.
+
+## Verify it yourself
+
+```bash
+pip install opentimestamps-client
+
+ots verify VISION.md.ots          # -> "Success! Bitcoin block <N> attests existence as of <date>"
+ots verify MANIFEST.sha256.ots
+
+# and check the manifest still matches the tree it covers
+sha256sum -c MANIFEST.sha256
+```
+
+If `ots verify` reports "pending", upgrade the proof once the block is mined:
+
+```bash
+ots upgrade VISION.md.ots MANIFEST.sha256.ots
+```
+
+## Belt and braces
+
+The Bitcoin anchor is the strong one, but redundancy is cheap:
+
+- **Zenodo DOI** — archival, independently timestamped, and the venue patent examiners and
+  courts actually accept. See `CITATION.cff`.
+- **Internet Archive** — snapshot the public repository URL.
+- **IP.com / Linux Defenders** — purpose-built defensive-publication venues that examiners
+  search.
+
+⚠ Not legal advice.

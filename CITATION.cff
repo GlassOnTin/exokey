@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+title: "ExoKey: a wearable Svalboard — musculoskeletal co-design of a wearable QWERTY keyboard"
+message: "If you use this work, please cite it. This repository is also a defensive publication; see VISION.md section 8."
+type: software
+authors:
+  - family-names: Williams
+    given-names: Ian
+license: AGPL-3.0-or-later
+repository-code: "https://github.com/GlassOnTin/exokey"
+abstract: >-
+  A wearable keyboard with one adjustable concave finger well per digit, each well sensing
+  multiple fingertip force directions driven by different muscle groups, on a body gripped in
+  the palm and retained by a strap. Device geometry, per-finger adjustment range and the
+  mapping from sensed direction to typed character are co-designed by multi-objective
+  optimisation against a musculoskeletal hand model (MyoSuite MyoHand, 23 DOF, 39 Hill-type
+  muscles), minimising muscle activation with feasibility as hard constraints. Measured: the
+  five directions differ in muscle cost by up to a million-fold; pressing into the well is
+  cheapest on every finger; QWERTY's top row is its most-used, not the "home" row; choosing
+  the direction-to-character mapping by this method is worth ~5x; and spanning the 5th-95th
+  percentile hand requires approximately 12 mm of per-finger well adjustment, in essentially
+  two axes rather than five.
+keywords:
+  - wearable keyboard
+  - musculoskeletal model
+  - ergonomics
+  - co-design
+  - multi-objective optimisation
+  - DataHand
+  - defensive publication
