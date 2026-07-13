@@ -125,3 +125,21 @@ def free(effort: dict, resid: dict, residual_max: float) -> tuple[dict, float]:
     r, c = linear_sum_assignment(C)
     mapping = {names[i]: sl[j] for i, j in zip(r, c)}
     return mapping, float(C[r, c].sum()) / sum(chars.values())
+
+
+def pointer_hosts(resid: dict, mapping: dict, residual_max: float) -> dict[str, int]:
+    """Which digits could host a 2-axis pointer, given a layout already assigned.
+
+    ⚠ COUNTING TOTAL SPARE SLOTS IS THE WRONG QUESTION, and I asked it first. A layout can
+    leave 6 performable directions unused and still have NOWHERE to put a mouse, because a
+    2-axis stick needs FOUR TILTS ON ONE DIGIT -- and spares scattered across five digits are
+    useless to it. Returns {digit: number of its four tilts that are both PERFORMABLE and
+    UNUSED}; a host needs 4.
+    """
+    tilts = ("forward", "back", "left", "right")
+    used = set(mapping.values())
+    return {
+        f: sum(1 for a in tilts
+               if resid.get((f, a), 1.0) <= residual_max and (f, a) not in used)
+        for f in FINGERS
+    }

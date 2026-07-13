@@ -539,3 +539,31 @@ def test_only_the_thumb_or_index_can_be_a_two_axis_pointer(hands):
     assert not ({"middle", "ring"} & can_point), (
         "middle/ring cannot perform left/right -- they cannot drive a 2-axis pointer"
     )
+
+
+def test_scattered_spare_slots_cannot_host_a_pointer(hands):
+    """SPARE SLOTS ARE NOT FUNGIBLE, and I reported them as if they were.
+
+    The shipped layout leaves SIX performable directions unused -- and a 2-axis pointer needs
+    only four. It still does not fit, because a stick needs FOUR TILTS ON ONE DIGIT, and the
+    six spares are scattered across five digits. Counting the total was the wrong question.
+    """
+    from design.layout import pointer_hosts, qwerty_plus_thumb
+    from design.vector import RESIDUAL_MAX
+
+    h = hands[50]
+    x = mid_design()
+    x["tp_hand"], x["tm_hand"] = 0.35, 0.40
+    eff, res = _slot_costs(h, x)
+    mapping, _ = qwerty_plus_thumb(eff, res, RESIDUAL_MAX)
+
+    free_tilts = pointer_hosts(res, mapping, RESIDUAL_MAX)
+    total_spare = sum(
+        1 for f in FINGERS for a in ("click", "forward", "back", "left", "right")
+        if res[(f, a)] <= RESIDUAL_MAX and (f, a) not in set(mapping.values())
+    )
+    assert total_spare >= 4, "there ARE at least four spare directions in total"
+    assert not any(n >= 4 for n in free_tilts.values()), (
+        f"...but none on a single digit: {free_tilts}. A pointer needs 4 tilts on ONE digit. "
+        "Freeing SHIFT to a hold/chord is what makes it fit."
+    )

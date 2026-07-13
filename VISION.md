@@ -136,6 +136,73 @@ instead of being carried around the hand through a cantilever.
 
 ---
 
+## 3b. The layout, and the pointer
+
+**The thumb carries space.** It was idle — five performable directions on the cheapest digit
+on the hand — while the **little finger**, the weakest digit there is, carried three QWERTY
+rows. And **space was not in the objective at all**: ~18 keystrokes per 100 letters, against a
+left hand whose 15 QWERTY letters are only 58.7 of those 100. **Space is ~22% of the left
+hand's entire load** — more than any letter, more than `e`. The objective was missing its
+single largest term.
+
+```
+digit        click   forward      back      left     right
+thumb        SPACE         ·     SHIFT         ·         ·
+index            R         V         F         ·         ·
+middle           E         D         C        --        --
+ring             S         X         W        --        --
+little           A         Q         Z        --         ·
+```
+`--` the digit **cannot** perform it (weak interossei) · `·` performable but unused
+
+| layout | effort/keystroke | | cost to the user |
+|---|---|---|---|
+| QWERTY-strict, thumb idle | 2.36e-06 | 1.00× | — |
+| **QWERTY + thumb** (shipped) | **1.73e-06** | **1.36×** | **nothing to learn** |
+| FREE assignment (exact) | 6.11e-07 | **3.86×** | a new layout |
+
+QWERTY+thumb costs the user **nothing** to learn: nobody's muscle memory encodes *which
+direction means which row* — that mapping is new either way. ⚠ But note the last row: **QWERTY
+costs 3.9×** on a device where "rows" are not rows at all, they are muscle directions. That is
+a large number to leave on the table, and it should be a conscious choice, not an inherited one.
+
+**Not a QAP.** The plan deferred character assignment as an NP-hard quadratic assignment
+problem. That is right for a *chording* keyboard, where a chord's cost depends on what else is
+in it. This device has one key per action and no chords, so cost is just `freq(c) × effort(slot)`
+— a **linear** assignment, solved *exactly* by Hungarian in milliseconds. The NP-hard framing
+was inherited from a device we no longer build.
+
+### The pointer (Svalboard ships a trackball / touch sensor)
+
+A 5-direction well **is** a 2-axis stick with a click, so a well can *be* the mouse — at the
+price of its four tilts, which stop being characters.
+
+**Only the thumb and the index can drive one at all.** A 2-axis stick needs all four tilts, and
+the middle and ring cannot perform `left`/`right` — they could only ever be a *one*-axis mouse.
+That falls out of the muscle model; it is not an opinion.
+
+**And the answer inverts convention:**
+
+| | typing cost |
+|---|---|
+| pointer on the **thumb** (where every keyboard puts it) | **6.08× worse** |
+| pointer on the **index** | **1.88× worse** |
+
+Putting it on the thumb is the *worst* choice — precisely **because** the thumb turned out to be
+the cheapest digit, so surrendering it is expensive. You cannot see that until the thumb has its
+muscles.
+
+⚠ **And it does not fit at all without freeing a slot.** The shipped layout leaves **six**
+performable directions unused and a pointer needs only four — but a stick needs **four tilts on
+ONE digit**, and the six spares are scattered across five. *Counting total spares was the wrong
+question.* Moving **shift** to a hold or a chord is what makes the mouse fit — which is why
+`SHIFT_FREQ` is load-bearing despite being a guess.
+
+(Svalboard sidesteps all of this: its trackball is a **separate sensor**, so it consumes no
+directions — only hardware and thumb *time*.)
+
+---
+
 ## 4. Design gates
 
 Each is a pass/fail test defined *before* the work. `pytest tests/ -q` — **57 passing.**
