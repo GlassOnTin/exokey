@@ -442,8 +442,22 @@ def test_the_cradle_resolves_the_pressing_vs_packing_tension(hands):
             "the cradle should have resolved this"
         )
 
-    # 3. THE CONTROL: the thumb still cannot. The cradle lends no muscle.
-    assert n_performable("thumb") < len(ROWS), (
-        "the thumb became pressable -- the cradle is too permissive. It has no adductor; a "
-        "cradle cannot lend it one. Check for self-cancelling contacts."
+    # 3. THE THUMB NOW WORKS TOO -- it has its thenar group (hand/thenar.py), and with it a
+    #    66.8 N pinch, inside the published 45-70 N band.
+    assert n_performable("thumb") >= len(ROWS), "the thumb has its thenar muscles; it should press"
+
+    # 4. THE CONTROL, and it is the important half: a cradle must LEND NO MUSCLE.
+    #
+    #    The old control was "the thumb must still fail", which is now obsolete -- so it is
+    #    replaced, not deleted. STOCK MyoHand's thumb has no adductor at all, and NO amount of
+    #    cradling may let it press. An earlier cradle DID: it let the finger lean on the floor,
+    #    BOTH walls and the end stop at once, and those forces SELF-CANCEL, so it conjured a
+    #    keypress out of a completely passive finger and duly reported the stock thumb pressing
+    #    4 of 5 directions. That is how a too-permissive contact model announces itself.
+    stock = MyoHand(thenar=False)
+    q = posture(stock, "thumb", OPEN_TP, OPEN_TM, 0.0)
+    n_stock = sum(cradle_solve(stock, q, "thumb", a, PRESS_N)[2] <= RESIDUAL_MAX for a in ACTIONS)
+    assert n_stock == 0, (
+        f"a thumb with NO ADDUCTOR pressed {n_stock}/5 directions. The cradle is too "
+        "permissive -- check for self-cancelling contacts."
     )

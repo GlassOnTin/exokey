@@ -246,32 +246,27 @@ def test_passive_tension_only_at_extreme_postures(h):
     assert a[edc] > 0.05, "the extensor should be the one resisting stretched flexors"
 
 
-def test_which_thenar_intrinsics_are_missing(h):
-    """Pin exactly WHICH thumb muscles exist, so no thumb result is quietly trusted.
+def test_the_thenar_group_is_present_and_complete(h):
+    """MyoHand ships the thumb with FIVE muscles and NO ADDUCTOR. We add the thenar group.
 
-    This test used to assert that ADP, FPB and APB were ALL absent, and it FAILED the moment
-    we added ADP -- which is the test doing its job. It pinned a limitation, and part of the
-    limitation is now gone. Rewritten to say what is true, not what was.
-
-    Stock MyoHand gives the thumb five actuators: APL, EPB, EPL, FPL, OP.
+    Stock: APL, EPB, EPL, FPL, OP.
       FPL flexes.  EPL, EPB extend.  APL abducts.  OP opposes.  NOTHING ADDUCTS.
-    And pressing a key is pushing AGAINST something, so the stock thumb cannot press at all:
-    measured, 0.0 N at every posture, and a 45.6% irreducible torque residual.
+    And pressing a key is pushing AGAINST something, so the stock thumb exerts 0.0 N at its
+    pad in EVERY direction, at EVERY posture. Not a weak thumb -- a thumb with the relevant
+    muscles deleted.
 
-    We ADD adductor pollicis (hand/thenar.py), which cuts that to 11.9%. Still not enough --
-    see test_the_thumb_cannot_press_and_the_fingers_can, which is where the design decision
-    lives. FPB and APB remain missing: they were attempted, came out with the WRONG moment
-    arms (extending the MP joint that FPB exists to flex), and were thrown away rather than
-    tuned until they agreed.
+    hand/thenar.py adds all three, and it took all three:
+        + ADP  45.6% -> 11.9%   the adductor. Necessary, nowhere near sufficient.
+        + FPB  11.9% ->  7.0%   the only muscle that flexes the MP WITHOUT crossing the IP.
+        + APB   7.0% ->  0.0%   flexes the MP while ABDUCTING -- which releases the cap.
+
+    This test used to assert that ADP, FPB and APB were all ABSENT, and it failed the moment
+    each was added. That is the test doing its job: it pinned a limitation, and the limitation
+    is gone.
     """
     have = {h.model.actuator(i).name for i in range(h.nu)}
-    assert "ADP" in have, "adductor pollicis should be added by hand/thenar.py"
-    assert not ({"FPB", "APB"} & have), (
-        "FPB/APB are still missing. If they were added, they must be VALIDATED (moment-arm "
-        "signs, and a measured drop in the thumb residual) -- not just present."
-    )
-    assert {"FPL", "OP", "APL", "EPL", "EPB"} <= have
-
+    assert {"ADP", "FPB", "APB"} <= have, "hand/thenar.py should add the whole thenar group"
+    assert {"FPL", "OP", "APL", "EPL", "EPB"} <= have, "the stock five must survive"
 
 def test_no_saturation_at_rest_keys(h):
     """A key placed just off the pad at rest must be pressable by every digit at 0.5 N.
@@ -402,49 +397,55 @@ def test_adding_adp_does_not_touch_the_fingers():
         assert np.allclose(A0[:, i0], A1[:, i1], atol=1e-9), f"{act} changed when ADP was added"
 
 
-def test_the_thumb_cannot_press_and_the_fingers_can():
-    """THE FINDING, pinned. And it is a DESIGN decision, not a curiosity.
+def test_the_thumb_presses_with_a_HUMAN_pinch_force():
+    """THE VALIDATION THAT WAS NOT FITTED, and it is the strongest evidence in the project.
 
-    The equilibrium residual -- how much of the required joint torque the muscles CANNOT
-    produce -- separates the thumb from every finger by 20x:
+    The thumb's moment arms were fitted to PUBLISHED ANATOMY -- adductor pollicis adducts the
+    CMC and flexes the MP with no IP arm; FPB flexes the MP with small CMC arms; APB is the
+    main abductor and also flexes the MP. Nothing was tuned toward a force.
 
-        index 0.0%   ring 0.0%   little 0.0%   middle 0.6%   ||   THUMB 11.9%
+    THE FORCE FELL OUT:
 
-    Stock MyoHand puts the thumb at 45.6% (it has no adductor at all: FPL flexes, EPL/EPB
-    extend, APL abducts, OP opposes -- nothing ADDUCTS, and pressing a key is pushing
-    AGAINST something). Adding ADP cuts that to 11.9%. It is not enough.
+        stock MyoHand            0.0 N     (no adductor: it cannot press at all)
+        + ADP + FPB + APB       66.8 N
+        published human pinch  45-70 N     <-- and it lands inside the band
 
-    The gap is what matters, and it is why the verdict does NOT rest on RESIDUAL_MAX (a
-    guess): ANY threshold in [1%, 11%] says the same thing. It is also insensitive to ADP's
-    peak force -- 11.9% from 100 N to 400 N -- because a residual is a DIRECTION problem, and
-    scaling a muscle does not rotate its column.
+    You cannot get that by tuning toward the answer, because the answer was never the target.
 
-    CONSEQUENCE: do not put characters under the thumb. QWERTY's left half needs 15 letters
-    and the four fingers supply exactly 15 (4 fingers x 3 rows, + the index's second column).
-    The thumb is for space and modifiers, where a 12% torque shortfall is survivable.
+    The progression matters as much as the endpoint, because each step was necessary:
+        ADP alone   -> 11.9% residual. The adductor is not enough.
+        + FPB       ->  7.0%. It is the ONLY muscle that flexes the MP without crossing the IP
+                       (FPL does both; EPL would cancel the IP but EXTENDS the MP).
+        + APB       ->  0.0%. Every MP flexor also ADDUCTS, so cmc_abduction saturated and the
+                       MP flexors were stuck at activations of 0.007-0.019 -- not weak, CAPPED.
+                       APB flexes the MP while ABDUCTING, which releases the cap.
     """
-    from scipy.optimize import lsq_linear
+    from verify.strength import best_press
 
-    from design.vector import posture
+    stock, full = MyoHand(thenar=False), MyoHand(thenar=True)
 
-    def irreducible(h, f):
-        best = 1.0
-        for tp in np.linspace(0.1, 0.9, 5):
-            for tm in np.linspace(0.1, 0.9, 5):
-                q = posture(h, f, float(tp), float(tm), 0.0)
-                h.fk(q)
-                A, _ = h.muscle_affine(q)
-                dofs = h.digit_dofs[f]
-                Ad = A[np.ix_(dofs, np.arange(A.shape[1]))]
-                g = h.pad_jacobian(f)[:, dofs].T @ h.pad_pose(q, f)[1]
-                a = np.clip(lsq_linear(Ad, g, bounds=(0.0, 1.0)).x, 0.0, 1.0)
-                best = min(best, float(np.linalg.norm(Ad @ a - g) / (np.linalg.norm(g) + 1e-12)))
-        return best
+    assert best_press(stock, "thumb")[0] == 0.0, (
+        "stock MyoHand's thumb should be unable to press at all -- it has no adductor"
+    )
+    force, _ = best_press(full, "thumb")
+    assert 40.0 <= force <= 90.0, (
+        f"thumb pinch {force:.0f} N is outside the plausible human band (45-70 N published). "
+        "If this drifts, the thenar geometry has been broken -- or tuned."
+    )
 
-    h = MyoHand(thenar=True)
-    thumb = irreducible(h, "thumb")
-    fingers = {f: irreducible(h, f) for f in FINGERS if f != "thumb"}
 
-    assert max(fingers.values()) < 0.02, f"a finger cannot press: {fingers}"
-    assert thumb > 0.05, "if the thumb became pressable, this finding is stale -- re-derive it"
-    assert thumb > 5 * max(fingers.values()), "the thumb/finger gap is what the design rests on"
+def test_adding_thumb_muscles_leaves_the_FINGERS_untouched():
+    """THE CONTROL. Without it, a global shift could pass for a thumb fix.
+
+    Three muscles were added to the thumb. Every finger muscle's action must be bit-for-bit
+    identical, or the "improvement" is not a thumb result at all.
+    """
+    import mujoco
+
+    stock, full = MyoHand(thenar=False), MyoHand(thenar=True)
+    A0, _ = stock.muscle_affine(np.zeros(stock.model.nq))
+    A1, _ = full.muscle_affine(np.zeros(full.model.nq))
+    for act in ("FDP2", "FDS3", "EDC4", "RI2", "LU_RB5", "EIP", "UI_UB3"):
+        i0 = mujoco.mj_name2id(stock.model, mujoco.mjtObj.mjOBJ_ACTUATOR, act)
+        i1 = mujoco.mj_name2id(full.model, mujoco.mjtObj.mjOBJ_ACTUATOR, act)
+        assert np.allclose(A0[:, i0], A1[:, i1], atol=1e-9), f"{act} changed when the thumb did"

@@ -74,7 +74,7 @@ residual in brackets.
 
 | finger | click | forward | back | left | right |
 |---|---|---|---|---|---|
-| **thumb** | — (26%) | — (44%) | — (27%) | — (29%) | — (33%) |
+| **thumb** | **6.7e-08** | 7.2e-07 | **1.3e-07** | 1.4e-04 | 3.7e-07 |
 | index | **1.1e-07** | 2.5e-06 | 2.0e-06 | 1.6e-05 | 1.2e-03 |
 | middle | **1.2e-08** | 3.9e-06 | 4.8e-06 | — (7%) | — (41%) |
 | ring | **3.8e-07** | 4.6e-05 | 1.8e-05 | — (37%) | — (63%) |
@@ -82,12 +82,12 @@ residual in brackets.
 
 Read it in three parts, because each is a design decision:
 
-1. **The thumb can perform NOTHING.** It has no adductor (§5). **No characters go under it.**
+1. **The thumb performs ALL FIVE**, and it is the cheapest digit on the hand — once it is
+   given the muscles a thumb actually has (§5). Stock MyoHand's thumb cannot press *at all*.
 2. **`left`/`right` mostly fail** for middle, ring and little — the interossei are genuinely
    weak. That is a *prediction* of the muscle model, not a tuned outcome.
-3. **What survives is exactly `click` / `forward` / `back` on four fingers = three rows each =
-   15 letters**, which is precisely what QWERTY's left half needs. The device is not
-   comfortably over-provisioned; it fits with nothing to spare.
+3. **`click` / `forward` / `back` work on all four fingers** = three rows each = 15 letters,
+   which is exactly what QWERTY's left half needs — **plus a thumb with five spare inputs.**
 
 Among the actions that *can* be done, costs still differ by **~10⁵×**, and that spread is the
 design's main lever.
@@ -257,13 +257,18 @@ The pattern is a *prediction*, not a fudge: `click` (into the floor), `forward` 
 stop) and `back` (the deep flexor's own pull) work, while `left`/`right` stay hard for
 middle/ring/little because the interossei are genuinely weak.
 
-⚠ **THE CONTROL IS THE IMPORTANT HALF.** The **thumb still cannot press** — a cradle lends no
-muscle, and the thumb still has no adductor. An earlier version of the cradle let the finger lean
-on the floor, **both** walls and the end stop at once; those forces **self-cancel**, so it
-conjured a keypress out of a completely passive finger and duly reported that the thumb could
-press 4 of 5 directions. **That is how a too-permissive model announces itself, and it is why the
-control exists.** The fix: only the *sensed* surface is loaded, and its contacts sum to the switch
-force. The freedom is the centre of pressure — nothing else.
+⚠ **THE CONTROL IS THE IMPORTANT HALF: A CRADLE MUST LEND NO MUSCLE.** The control is now
+**stock MyoHand's thumb**, which has no adductor at all — and *no* amount of cradling may let it
+press. An earlier version of the cradle let the finger lean on the floor, **both** walls and the
+end stop at once; those forces **self-cancel**, so it conjured a keypress out of a completely
+passive finger and duly reported the adductor-less thumb pressing 4 of 5 directions. **That is
+how a too-permissive contact model announces itself, and it is the only reason it was caught.**
+The fix: only the *sensed* surface is loaded, and its contacts sum to the switch force. The
+freedom is the centre of pressure — nothing else.
+
+(The control used to be "the thumb still cannot press". That is now obsolete — the thumb *can*,
+once it has its thenar group — so the control was **replaced, not deleted**. A control that
+passes because the thing it guards has changed is not a control.)
 
 ⚠ **This is CONSERVATIVE in one respect and optimistic in another.** Frictionless (friction could
 only help), so a "cannot press" verdict still stands. But the contact forces are limited only by
@@ -404,15 +409,41 @@ MP joint centre to the origin, so the tendon passed **through** the joint and it
 moment arm was **exactly 0.0000** — anatomically placed and mechanically inert. A zero that
 reads like a rounding error and is a modelling one.
 
-**THE DESIGN DECISION THAT FALLS OUT: no characters under the thumb.**
+**~~THE DESIGN DECISION THAT FALLS OUT: no characters under the thumb.~~ WITHDRAWN.**
 
-Fingers **≤0.6%**, thumb **11.9%** — a **20× gap**. Any tolerance in [1%, 11%] gives the same
-verdict, so it does **not** rest on `RESIDUAL_MAX`, which is a guess. That is what makes it
-reportable rather than an artifact of a number we chose.
+That decision rested on the thumb being unable to press, and it *was* — with only ADP added
+(11.9% residual). But **ADP was necessary and nowhere near sufficient**, and stopping there was
+a failure of nerve, not a finding. The user pushed back: *"the thumb is likely the most flexible
+of all."* They were right, and the model was missing two more muscles.
 
-And QWERTY's left half never needed the thumb: **15 letters**, and four fingers × three rows
-plus the index's second column is **exactly 15**. The thumb takes space and modifiers, where a
-12% torque shortfall is survivable.
+| | residual | max press force |
+|---|---|---|
+| stock MyoHand (no adductor) | 45.6% | **0.0 N** |
+| + ADP | 11.9% | 0.0 N |
+| + FPB | 7.0% | 0.0 N |
+| **+ APB** | **0.0%** | **66.8 N** |
+| *published human tip pinch* | | *45–70 N* |
+
+**The force was never fitted.** The moment arms were fitted to *published anatomy*; the pinch
+force fell out, and it lands inside the human band. You cannot get that by tuning toward an
+answer that was never the target. It recruits FPB, APB, FPL and ADP — the thenar group plus the
+long flexor, which is what a real thumb pinches with.
+
+**Why it took all three, and why each was necessary:**
+
+- **FPB** is the *only* muscle that flexes the MP **without crossing the IP**. FPL does both, so
+  it over-flexes the IP before it supplies enough MP torque; EPL could cancel that, but it
+  **extends** the MP — the very thing needed. Without FPB the thumb has no way to flex one
+  joint without wrecking the other.
+- **APB** breaks a *saturation* trap. With ADP+FPB the MP flexors were firing at activations of
+  **0.007–0.019** — nowhere near their limit. They were not weak; they were **capped by
+  `cmc_abduction`**, because *every* muscle that flexes the MP also **adducts** the CMC. APB
+  flexes the MP while **abducting**, which releases the cap. I had explicitly refused to add
+  APB, reasoning "it abducts; it does not supply MP flexion" — **that was simply wrong**: APB
+  inserts on the proximal phalanx, so of course it flexes the MP.
+
+**So the thumb carries characters after all**, and it is the *cheapest* digit on the hand. What
+it should carry is now an open layout question (§7), not a constraint.
 
 **The well was a disc, and a well is a CHANNEL — caught by the user looking at the render.**
 *"The finger tip bone should fit into the well, not simply rest the pad on its opening."*

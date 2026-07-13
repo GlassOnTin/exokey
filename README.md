@@ -16,9 +16,11 @@ DataHand / Svalboard geometry, made wearable — you can stand up and walk away 
 > the finger acts as a **strut** (piano technique names this exactly). Fixing it dissolved the
 > contradiction. See [VISION.md §5](VISION.md#5-what-we-already-learned-by-failing).
 >
-> The **thumb still cannot press** — it has no adductor, and a cradle lends no muscle. That
-> finding survived the correction, and it is a design decision: **no characters under the
-> thumb**.
+> **Stock MyoHand's thumb cannot press at all** (0.0 N, every direction, every posture) — it
+> has *no adductor*, and pressing a key is pushing *against* something. We add the thenar group
+> (`hand/thenar.py`: ADP, FPB, APB) and the thumb reaches a **66.8 N pinch — inside the
+> published human band of 45–70 N**, a number that was *never fitted*. It is now the cheapest
+> digit on the hand.
 
 ---
 
@@ -40,9 +42,9 @@ co-designs a wearable keyboard by multi-objective optimisation:
 |---|---|
 | **MyoHand's thumb cannot press a key.** Not "weakly" — **at all** | **0.0 N**, at every posture, in all 600 directions sampled |
 | ...because it has **no adductor**. FPL flexes, EPL/EPB extend, APL abducts, OP opposes | pressing a key is pushing *against* something |
-| We add **adductor pollicis** ([`hand/thenar.py`](hand/thenar.py)) and it is still not enough | irreducible torque residual **45.6% → 11.9%** |
-| The four fingers, by contrast, can press **exactly** | **≤0.6%** residual — a **20× gap**, and it is what the design rests on |
-| So: **no characters under the thumb.** QWERTY's left half never needed it | 15 letters; 4 fingers × 3 rows + the index's 2nd column = exactly 15 |
+| Adding the thenar group ([`hand/thenar.py`](hand/thenar.py)) took **all three** muscles | ADP 45.6%→11.9%, FPB →7.0%, **APB →0.0%** |
+| The resulting pinch force **was never fitted** — the moment arms were fitted to anatomy | **66.8 N** vs a published human **45–70 N** |
+| `click`/`forward`/`back` work on every finger = 3 rows × 4 fingers | = 15 letters, exactly QWERTY's left half — **plus a 5-input thumb** |
 | A well is a **cup**, not a cap: the fingertip *bone* slides in along its own axis | so the wells need a **spread, open** hand — gripping converges the fingertips |
 | QWERTY's *top* row is the most-used, not "home" | 30.2% vs 23.0% |
 | A palm-strapped body vs an articulated exoskeleton | **3× stiffer, 35% lighter** |
