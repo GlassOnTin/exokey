@@ -64,13 +64,6 @@ STRAP_K = P("STRAP_K", 3.3e5, "N/m", Source.DERIVED,
             "It is 20x SOFTER than the tissue patch it works against, so it is the compliant "
             "element in the anchor and it dominates lift-off.")
 
-ALPHA = P("ALPHA", 3.7, "-", Source.DERIVED,
-          "How the gauntlet's button deflection scales with bar radius: w ~ r^-ALPHA. MEASURED on "
-          "the real lattice by halving r three times (x2.8, x12.7, x14.0 -> alpha = 3.6, 3.7, "
-          "3.8). A pure bending frame gives 4 and a pure truss gives 2, so this structure is "
-          "bending-dominated -- which is itself worth knowing. Used to estimate, from ONE solve of "
-          "the solid, how much material a layout needs to reach the deflection gate.")
-
 # The palm's palmar surface is not available: that is where the fingers work.
 PALMAR_CUTOFF = -0.35
 
@@ -380,50 +373,53 @@ def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
     return nodes, bars, live, btn, cases, ak, an, hist, pc
 
 
-def cost(h, q, wired=None, press_N=0.196, pitch=0.008, gate=0.5e-3, mat="cf_pa12"):
-    """THE STRUCTURAL COST OF A LAYOUT, cheaply: how many grams of bone does it need?
+def cost(h, q, wired=None, press_N=0.196, pitch=0.008, gate=0.5e-3, mat="cf_pa12", rate=0.20):
+    """THE STRUCTURAL COST OF A LAYOUT: how many grams of bone does it need? GROW IT. Coarsely.
 
-    This is the Tier-1 evaluator -- the one the GA calls ~5000 times. Growing the real structure
-    takes ~10 minutes, so what it does instead is solve the SOLID lattice ONCE (all wired load
-    cases) and estimate the mass needed to reach the gate by scaling the bar radius:
+    This is what the GA calls ~2500 times, so it has to be cheap -- but NOT at the price of being
+    a different question.
 
-        w ~ r^-ALPHA   and   m ~ r^2      =>      m_gate = m_solid * (w_solid / gate)^(2/ALPHA)
+    ⚠ THE FIRST ATTEMPT WAS A PROXY, AND IT FAILED ITS OWN TEST. It estimated the mass from ONE
+    solve of the solid lattice by scaling the bar radius (w ~ r^-3.7, m ~ r^2). Scored against
+    eight real growths it managed SPEARMAN rho = +0.45 (p = 0.26) -- no better than chance. The
+    reason is visible in the numbers: three designs had near-identical proxy masses (18.8, 18.8,
+    19.4 g) and real masses of 4.8, 6.5 and 7.4 g. The solid's compliance hardly varies between
+    layouts; what varies is HOW EFFICIENTLY ESO CAN ROUTE THE LOAD, and uniform scaling cannot see
+    that, because uniform scaling is precisely the thing ESO refuses to do.
 
-    ALPHA = 3.7 is MEASURED on this structure, not assumed.
+    So the answer is not a better estimator. It is to GROW THE STRUCTURE, on a coarser lattice:
+    the same physics, the same load cases, the same Wolff's law, a bigger mesh. Against the fine
+    growth it scores rho = +0.76 (p = 0.028) and costs 19 s instead of 10 minutes.
 
-    ⚠ IT IS AN UPPER BOUND AND IT IS A PROXY. Uniform scaling is the DUMBEST way to hit a
-    stiffness target -- ESO does far better by moving material to where it works -- so this
-    over-estimates the mass. What the optimiser needs is the RANKING, and whether the ranking
-    survives is not something to assume: it is checked against the real grown mass on a sample
-    (scripts/verify_surrogate.py), and the correlation is reported, not hoped for.
-
-    Returns dict(mass_g, solid_g, worst, util, feasible).
+    ⚠ IT IS STILL A COARSER ANSWER, NOT THE ANSWER. It over-estimates the mass by ~10-20% (a
+    coarse lattice routes load less efficiently), rho = 0.76 is measured on only n = 8, and one of
+    those eight (4.2 g coarse vs 6.9 g fine) it gets badly wrong. The Pareto front is re-grown at
+    full resolution afterwards; the coarse number is for STEERING, not for reporting.
     """
     p = MATERIALS[mat]
+    try:
+        nodes, bars, live, btn, cases, ak, an, hist, _pc = grow(
+            h, q, pitch=pitch, rate=rate, gate=gate, mat=mat, press_N=press_N, wired=wired)
+    except (RuntimeError, ValueError):
+        return dict(mass_g=float("inf"), solid_g=float("inf"), worst=float("inf"),
+                    util=float("inf"), struts=0, feasible=False)
+    if not live or not np.isfinite(hist[-1][1]):
+        return dict(mass_g=float("inf"), solid_g=float("inf"), worst=float("inf"),
+                    util=float("inf"), struts=0, feasible=False)
+
+    n_solid, w_solid, m_solid = hist[0][:3]
+    _n, w, m, _t = hist[-1]
+
+    # THE STRESS, on the structure that actually survived -- not on the solid, which is a
+    # different structure carrying the same load through 30x more material.
     r = float(BAR_R)
-    nodes, bars, btn, _loads, ak, an = ground(h, q, pitch=pitch, press_N=press_N)
-    cases = load_cases(h, q, btn, press_N=press_N, wired=wired)
-    live, reachable = connected(bars, list(range(len(bars))), ak, btn, len(nodes))
-    if not reachable or not live:
-        return dict(mass_g=float("inf"), solid_g=float("inf"), worst=float("inf"),
-                    util=float("inf"), feasible=False)
-    w, _se, m_solid, _t, _pc = solve(nodes, bars, live, btn, cases, ak, an, r=r, mat=mat)
-    if not np.isfinite(w) or w <= 0:
-        return dict(mass_g=float("inf"), solid_g=float("inf"), worst=float("inf"),
-                    util=float("inf"), feasible=False)
-
-    scale = (w / gate) ** (2.0 / float(ALPHA))          # < 1 whenever the solid beats the gate
-    m_gate = m_solid * min(scale, 1.0)
-
-    # THE STRESS, at the radius the mass estimate implies -- not at the solid's. A thinner rod is
-    # what the estimate is BUYING, so it is the thinner rod that has to survive.
-    r_gate = r * (w / gate) ** (1.0 / float(ALPHA))
-    A = np.pi * r_gate ** 2
-    I = np.pi * r_gate ** 4 / 4
-    J = 2 * I
-    fr = Frame(nodes, [bars[e] for e in live], p["E"], p["E"] / 2.6, A, I, J,
+    A = np.pi * r ** 2
+    I = np.pi * r ** 4 / 4
+    fr = Frame(nodes, [bars[e] for e in live], p["E"], p["E"] / 2.6, A, I, 2 * I,
                spring={i: k for i, k in ak.items()})
     U = fr.solve([c[2] for c in cases])
-    util = float(fr.stress(U, r_gate).max() / (p["yield_"] / 2.0))    # SF = 2
-    return dict(mass_g=float(m_gate) * 1000.0, solid_g=float(m_solid) * 1000.0,
-                worst=float(w), util=util, feasible=bool(w <= gate))
+    util = float(fr.stress(U, r).max() / (p["yield_"] / 2.0))        # SF = 2
+
+    return dict(mass_g=float(m) * 1000.0, solid_g=float(m_solid) * 1000.0,
+                worst=float(w_solid), util=util, struts=len(live),
+                feasible=bool(w_solid <= gate))
