@@ -678,6 +678,67 @@ modelled honestly yet.
 
 ---
 
+## 5d. "It gets in the way" — and the law that follows from it
+
+**The user, and it is the best argument made about this device:**
+
+> *"Having the supporting structure far from the hand is a problem because it 'gets-in-the-way'
+> of me using my hands. If the supporting structure hugs the hand and stays above the sensors
+> as much as possible it becomes more a natural extension, rather than holding a big ball."*
+
+**Measured, and they are right.** Of `build_body`'s structural nodes:
+
+| | |
+|---|---|
+| nodes **palmar** of the hand (the space the palm needs) | **15 of 16** |
+| mean standoff from the hand | **27 mm** |
+| worst (the floor ring) | **68 mm** |
+
+The palm is the **working surface** of the hand. Every one of those nodes sits in the volume you
+use to hold a cup, a pen, a door handle. **The device is not on the hand — it is a ball the hand
+is wrapped around.**
+
+### The law
+
+> **A BEAM FRAME BUYS ITS STIFFNESS WITH DEPTH.
+> DEPTH IS EXACTLY WHAT GETS IN THE WAY.**
+
+The palmar box is stiff *because* it is **57 mm deep** — and that depth **is** the ball. A dorsal
+frame that hugs the hand has ~5 mm of depth, and as a **stick figure** it is hopeless:
+triangulated, forked and cross-braced, `build_dorsal` still deflected **2.58 mm** against a
+0.5 mm gate. Ergonomically perfect (mean standoff **5 mm**), structurally useless.
+
+**A SHELL needs no depth.** It gets its stiffness from **curvature** — a curved section cannot
+bend without also *stretching*, and stretching is expensive. That is a tape measure, an eggshell,
+a fingernail. Same material, same thickness, same width, merely **wrapped around the finger**
+instead of laid flat across it:
+
+| finger | flat strip | curved shell | gain |
+|---|---|---|---|
+| index | 0.035 mm | **0.001 mm** | **46×** |
+| middle | 0.035 mm | **0.001 mm** | **48×** |
+| ring | 0.026 mm | 0.001 mm | 44× |
+
+⚠ And the gain scales the right way: a flat strip's bending stiffness goes as **t³**, so thick
+stock is already stiff and curvature buys less (9× on the thick hand-built baseline). **The
+thinner and lighter you want the device, the more curvature is worth** — which is exactly the
+regime a wearable lives in.
+
+**So "hug the hand" and "use shell elements" are the same request.** A hugging structure does not
+have to be floppy; it has to be a **shell**. And the *structure model* had to change before the
+*architecture* could even be seen — which is the whole lesson of this project.
+
+### And the objection that killed the exoskeleton is dead
+
+The articulated dorsal exoskeleton was abandoned because "an open frame cannot reach into the
+palm from outside" — its thumb arm cut the hand three ways. **But that was when the keys were
+deep in a GRIPPING palm.** The hand is now **open** and the wells are **at the fingertips**,
+which a dorsal rail reaches by running along the finger and wrapping the tip. **The topological
+trap died with the gripping posture, and it was never re-examined.** It should have been, and it
+took the user's ergonomic intuition to force the re-examination.
+
+---
+
 ## 6. Model limitations — stated, not hidden
 
 These bound every conclusion above.

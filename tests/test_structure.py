@@ -299,3 +299,96 @@ def test_the_beam_model_lied_about_the_arch_by_25x():
         "beam model charged 3.1x, which is what made the arch look not worth having."
     )
     assert w_arch < w_flat, "an arch should be stiffer than a flat plate of the same thickness"
+
+
+def test_a_hugging_frame_must_be_a_SHELL_not_sticks():
+    """THE LAW, and it is why "hug the hand" and "use shells" are the SAME request.
+
+    The user: "having the supporting structure far from the hand is a problem because it
+    gets-in-the-way of me using my hands. If the supporting structure hugs the hand ... it
+    becomes more a natural extension, rather than holding a big ball."
+
+    Measured, and they are right: of `build_body`'s structural nodes, 15 of 16 are PALMAR of
+    the hand, standing off it by a mean of 27 mm and a MAXIMUM OF 68 mm. That is the volume you
+    use to hold a cup. The device is not on the hand -- it is a ball the hand is wrapped around.
+
+        A BEAM FRAME BUYS ITS STIFFNESS WITH DEPTH.
+        DEPTH IS EXACTLY WHAT GETS IN THE WAY.
+
+    The palmar box is stiff because it is 57 mm deep. A dorsal frame that HUGS has ~5 mm of
+    depth, and as a STICK FIGURE it is hopeless: triangulated, forked and cross-braced, it still
+    deflected 2.58 mm against a 0.5 mm gate.
+
+    A SHELL needs no depth. It gets stiffness from CURVATURE -- a curved section cannot bend
+    without STRETCHING, and stretching is expensive. That is a tape measure, an eggshell, a
+    fingernail. Same material, same thickness, same width, merely WRAPPED round the finger
+    instead of laid flat across it:
+
+        index  0.035 mm flat  ->  0.001 mm curved   (46x)
+        middle 0.035 mm       ->  0.001 mm          (48x)
+
+    So the hugging structure does not have to be floppy. It has to be a shell. And the STRUCTURE
+    MODEL had to change before the ARCHITECTURE could even be seen -- which is the whole lesson
+    of this project.
+    """
+    from design.vector import PRESS_N
+    from opt.problem import hands
+    from opt.run import baseline
+    from structure.shell import dorsal_rail
+
+    h = hands()[50]
+    x = baseline()
+    par = dict(alu_t=float(x["alu_t"]), mat_frame=str(x["material"]), press_N=PRESS_N)
+
+    w_flat, m_flat, _ = dorsal_rail(h, h.q_neutral, "index", par, curved=False)
+    w_curv, m_curv, _ = dorsal_rail(h, h.q_neutral, "index", par, curved=True)
+
+    assert abs(m_curv / m_flat - 1.0) < 0.05, "same material -- curvature must be FREE"
+    # ⚠ THE GAIN DEPENDS ON THICKNESS, and it depends the way it should. A FLAT strip's
+    # bending stiffness goes as t^3, so thick stock is already stiff and curvature buys less;
+    # a CURVED shell is stiff even when thin. Measured: 9x on the (thick) hand-built baseline,
+    # 46x on the optimiser's own (0.85 mm) design. The thinner and lighter you want the device,
+    # the MORE curvature is worth -- which is exactly the regime a wearable lives in.
+    assert w_curv < w_flat / 5.0, (
+        f"curvature should buy nearly an order of magnitude ({w_flat/w_curv:.0f}x measured). "
+        "If it does not, a hugging frame cannot be made stiff and the palmar ball is "
+        "unavoidable."
+    )
+    assert w_curv < 0.5e-3, "the curved rail must pass the 0.5 mm key-deflection gate"
+
+
+def test_the_floor_legs_must_reach_DISTINCT_feet():
+    """A DEFECT THE BEAM MODEL HID FOR THE WHOLE PROJECT.
+
+    The rule was "connect each palm corner to its NEAREST key foot". Every palm corner is
+    PROXIMAL of every well (corners at distal 8-45 mm, feet at 65-126 mm), so the nearest foot
+    to all four is the SAME ONE -- the thumb's. ALL FOUR LEGS LANDED ON foot_thumb0: the entire
+    keypress load from five wells funnelled through ONE NODE, and the whole key face
+    cantilevered off it.
+
+    A chain of struts carries load AXIALLY and axial stiffness is enormous, so the beam model
+    still reported it as stiff (27 um). A SHELL cannot hide it -- a plate held at one node is a
+    floppy cantilever (990 um). The idealisation was flattering a structure that is genuinely
+    badly supported.
+
+    Fixed with a one-to-one assignment (Hungarian), like the character layout, and for the same
+    reason: "nearest" is a greedy rule, and greedy rules collide. Worth 1.2x stiffness for zero
+    mass.
+    """
+    from design.vector import BODY_PROX, keys_on_reference
+    from opt.problem import hands
+    from opt.run import baseline
+    from structure.frame import build_body
+
+    h = hands()[50]
+    x = baseline()
+    keys, _ = keys_on_reference(h, x)
+    par = dict(sec_alu=(float(x["alu_w"]), float(x["alu_t"])), palm_offset=float(x["palm_offset"]),
+               body_half=float(x["body_half"]), body_prox=BODY_PROX, body_dist=float(x["body_dist"]),
+               stem=float(x["stem"]), mat_frame=str(x["material"]))
+    exo = build_body(h, h.q_neutral, keys, par)
+    landed = {m.j for m in exo.members if m.name.startswith("floorleg")}
+    assert len(landed) >= 3, (
+        f"the floor legs land on only {len(landed)} foot(feet): {landed}. The whole device is "
+        "hanging off one node."
+    )

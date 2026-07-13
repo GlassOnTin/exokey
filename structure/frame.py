@@ -471,15 +471,44 @@ def build_body(h: MyoHand, q: np.ndarray, keys: dict, p: dict | None = None) -> 
     # then run distally along a floor to the key face. Both legs are outside the hand by
     # construction -- the first goes away from the palm surface it starts on, the second
     # lies palmar of everything.
-    face_o = float(np.mean([(nodes[t[2]] - o) @ e_o for t in feet]))  # depth of the key face
-    for corner in ("palm_rd", "palm_ud", "palm_rp", "palm_up"):
+    # ⚠ EACH FLOOR LEG MUST REACH A DISTINCT FOOT. The rule used to be "connect each palm
+    # corner to its NEAREST foot" -- and it DEGENERATED: every palm corner is PROXIMAL of every
+    # well (corners at distal 8-45 mm, feet at 65-126 mm), so the nearest foot to all four is
+    # the same one, the thumb's. ALL FOUR LEGS LANDED ON foot_thumb0. The entire keypress load
+    # from all five wells funnelled through ONE NODE and the whole key face cantilevered off it.
+    #
+    # The BEAM MODEL HID THIS for two years of this project's life: a chain of struts carries
+    # load AXIALLY and axial stiffness is enormous, so a one-point support still came out stiff
+    # (27 um). A SHELL cannot hide it -- a plate held at one node is a floppy cantilever
+    # (990 um). The idealisation was flattering a structure that is genuinely badly supported.
+    #
+    # So: a one-to-one assignment of corners to feet, minimising total leg length. Exact
+    # (Hungarian), like the character layout -- and for the same reason: "nearest" is a greedy
+    # rule and greedy rules collide.
+    from scipy.optimize import linear_sum_assignment
+
+    # THE FLOOR MUST SIT BELOW THE *DEEPEST* WELL, NOT THE AVERAGE ONE.
+    #
+    # It used to be the MEAN foot depth -- and the wells are not at one depth: the fingers'
+    # sit at -58 mm while the THUMB's reaches -85, because the thumb opposes across the palm.
+    # A floor at the mean (-66) is DORSAL of the deepest fingertips, so the legs running along
+    # it cut back into the hand (-3.3 mm). Take the most palmar well and go below it: then the
+    # floor is palmar of everything BY CONSTRUCTION, which is the only way to be sure.
+    face_o = min((nodes[t[2]] - o) @ e_o for t in feet) - 0.008
+    corners = ["palm_rd", "palm_ud", "palm_rp", "palm_up"]
+    C = np.array([[(t[0] - float((nodes[c] - o) @ e_r)) ** 2
+                   + (t[1] - float((nodes[c] - o) @ e_d)) ** 2 for t in feet]
+                  for c in corners])
+    ci, fi = linear_sum_assignment(C)
+    pick = {corners[a]: feet[b][2] for a, b in zip(ci, fi)}
+
+    for corner in corners:
         c = nodes[corner] - o
         cr, cd = float(c @ e_r), float(c @ e_d)
         fl = f"floor_{corner[5:]}"
         nodes[fl] = P(cd, cr, face_o)  # straight out from the palm, into free space
         strut(f"wall_{corner}", corner, fl)
-        nearest = min(feet, key=lambda t: (t[0] - cr) ** 2 + (t[1] - cd) ** 2)
-        strut(f"floorleg_{corner[5:]}", fl, nearest[2])
+        strut(f"floorleg_{corner[5:]}", fl, pick[corner])
     for a, b in (("floor_rd", "floor_ud"), ("floor_ud", "floor_up"),
                  ("floor_up", "floor_rp"), ("floor_rp", "floor_rd")):
         strut(f"floorring_{a}_{b}", a, b)
@@ -876,3 +905,152 @@ def clearance(h: MyoHand, q: np.ndarray, frame: Frame, offset=None, only=None, b
         a, b = frame.nodes[m.i] + off, frame.nodes[m.j] + off
         gaps[m.name] = min(_seg_seg_dist(a, b, c0, c1) - r for c0, c1, r in caps)
     return gaps
+
+
+def build_dorsal(h: MyoHand, q: np.ndarray, keys: dict, p: dict | None = None) -> Frame:
+    """A FRAME THAT HUGS THE BACK OF THE HAND. The palm stays free.
+
+    THE USER, and it is the best argument made about this device:
+
+        "having the supporting structure far from the hand is a problem because it
+         'gets-in-the-way' of me using my hands. If the supporting structure hugs the hand and
+         stays above the sensors as much as possible it becomes more a natural extension,
+         rather than holding a big ball."
+
+    MEASURED, and they are right: of `build_body`'s 16 structural nodes, **15 are PALMAR of the
+    hand**, standing off it by a mean of 27 mm and a maximum of 68 mm. That is the volume you
+    use to hold a cup, a pen, a door handle. The device is not ON the hand. It is a BALL the
+    hand is wrapped around.
+
+    THE BACK OF THE HAND IS FREE. Nothing uses it. So:
+
+        dorsal spine over the metacarpals  ->  a rail dorsal of each finger  ->  around the
+        fingertip  ->  the well, which sits just palmar of the pad.
+
+    Everything hugs. The palm is empty.
+
+    WHY THE OLD OBJECTION IS DEAD. The articulated exoskeleton was abandoned because "an open
+    frame cannot reach into the palm from outside" -- its thumb arm cut the hand three ways.
+    But that was when the keys were DEEP IN A GRIPPING PALM. The hand is now OPEN and the wells
+    are AT THE FINGERTIPS, which a dorsal rail reaches by simply running along the finger and
+    wrapping the tip. The topological trap died with the gripping posture, and it was never
+    re-examined. It should have been.
+
+    THE LOAD PATH ALSO INVERTS, and in the right direction. A keypress drives the well PALMAR.
+    A rail that comes over the fingertip and wraps to the well takes that in TENSION round the
+    wrap, then hands it back along the finger to the knuckles and into the strap. The palmar box
+    took the same load as BENDING through a 90 mm cantilever hung in mid-air.
+
+    ⚠ The rail is anchored to the METACARPALS, not to the finger -- otherwise the finger and
+    the well would move together and no keypress would ever register. It hugs the finger; it is
+    not strapped to it.
+    """
+    import mujoco
+
+    p = {**BODY_DEFAULTS, **(p or {})}
+    keys = {(k if isinstance(k, tuple) else (k, 0)): v for k, v in keys.items()}
+    o, e_d, e_r, e_o = hand_axes(h, q)
+    h.fk(q)
+    m = h.model
+
+    nodes: dict[str, np.ndarray] = {}
+    members: list[Member] = []
+    ab, ad = p["sec_alu"]
+    nb, nd = p["sec_nylon"]
+    sb, sd = p["sec_strap"]
+
+    def strut(name, i, j, kind="alu"):
+        mat = {"alu": p["mat_frame"], "nylon": p["mat_stalk"], "strap": "webbing"}[kind]
+        bd = {"alu": (ab, ad), "nylon": (nb, nd), "strap": (sb, sd)}[kind]
+        members.append(Member(name, i, j, mat, bd[0], bd[1], kind))
+
+    hug = float(p.get("hug", 0.004))   # how far the rail stands off the skin. HUGGING.
+
+    def dorsal_of(body: str) -> np.ndarray:
+        """A point just DORSAL of a bone's flesh -- derived from its own capsule, not guessed."""
+        bid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, body)
+        best = None
+        for g in range(m.body_geomadr[bid], m.body_geomadr[bid] + m.body_geomnum[bid]):
+            if m.geom_type[g] != mujoco.mjtGeom.mjGEOM_CAPSULE:
+                continue
+            r = float(m.geom_size[g][0])
+            c = h.data.geom_xpos[g]
+            best = c + (r + hug) * e_o
+        if best is None:
+            bid_pos = h.data.xpos[bid]
+            best = bid_pos + 0.010 * e_o
+        return best
+
+    # --- the DORSAL SPINE: a bar across the knuckles, and one across the wrist -------------
+    for i, mc in enumerate(("secondmc", "thirdmc", "fourthmc", "fifthmc")):
+        nodes[f"knuck{i}"] = dorsal_of(mc)
+    for i in range(3):
+        strut(f"spine{i}", f"knuck{i}", f"knuck{i+1}")
+
+    # --- a RAIL dorsal of each finger, out to the fingertip, then AROUND it ----------------
+    CHAIN = {
+        "thumb": ("firstmc", "proximal_thumb", "distal_thumb"),
+        "index": ("proxph2", "midph2", "distph2"),
+        "middle": ("proxph3", "midph3", "distph3"),
+        "ring": ("proxph4", "midph4", "distph4"),
+        "little": ("proxph5", "midph5", "distph5"),
+    }
+    anchor = {"thumb": "knuck0", "index": "knuck0", "middle": "knuck1",
+              "ring": "knuck2", "little": "knuck3"}
+
+    # ⚠ A CHAIN IS A LINKAGE, NOT A TRUSS. The first version ran a serial chain
+    #   knuckle -> proximal -> middle -> distal -> wrap -> well
+    # with NO triangulation anywhere, and a keypress simply FOLDED it: 3.72 mm of deflection
+    # against a 0.5 mm gate -- 105x worse than the palmar box. It hugged beautifully and it was
+    # useless. Struts in a line carry nothing but the line.
+    #
+    # So: TRIANGULATE. A diagonal from the anchor to the distal node braces the chain, and the
+    # well hangs from a FORK -- two members, from the middle AND distal rail nodes -- because
+    # one member to a well is a LEVER ARM and two are a COUPLE. That is the whole difference.
+    dist_nodes = {}
+    for (f, row), (kp, kn) in keys.items():
+        kp, kn = np.asarray(kp, float), np.asarray(kn, float)
+        prev = anchor[f]
+        chain = []
+        for k, bone in enumerate(CHAIN[f]):
+            nm = f"rail_{f}{k}"
+            nodes[nm] = dorsal_of(bone)
+            strut(f"rail_{f}{k}", prev, nm)
+            chain.append(nm)
+            prev = nm
+        strut(f"brace_{f}", anchor[f], chain[-1])       # triangulate the rail itself
+        dist_nodes[f] = chain[-1]
+
+        kk, ft = f"key_{f}{row}", f"foot_{f}{row}"
+        nodes[kk] = kp
+        nodes[ft] = kp - p["stem"] * kn
+        # THE FORK. Two members round the fingertip to the well: a couple, not a lever.
+        strut(f"wrap_{f}", chain[-1], ft)
+        strut(f"fork_{f}", chain[-2], ft)
+        strut(f"stem_{f}{row}", ft, kk, kind="nylon")
+
+    # cross-brace the rails to each other. They are all part of ONE rigid frame anchored to the
+    # METACARPALS -- the fingers move UNDER them -- so bracing between fingers costs the hand
+    # nothing and turns five floppy cantilevers into a shell.
+    order = [f for f in ("thumb", "index", "middle", "ring", "little") if f in dist_nodes]
+    for a, b in zip(order, order[1:]):
+        strut(f"xbrace_{a}_{b}", dist_nodes[a], dist_nodes[b])
+
+    # --- STRAP around the palm: what the dorsal frame reacts against ----------------------
+    # The keypress ends up pulling the frame PALMAR; the strap round the hand holds it on, and
+    # the load goes into the palm's soft tissue -- the same place it always went, but WITHOUT
+    # a rigid box occupying the palm.
+    o_p, dp, dd = o, p["body_prox"], p["body_dist"]
+    nodes["palm_r"] = o_p + 0.5 * (dp + dd) * e_d + 0.030 * e_r - 0.012 * e_o
+    nodes["palm_u"] = o_p + 0.5 * (dp + dd) * e_d - 0.030 * e_r - 0.012 * e_o
+    strut("strap_r", "knuck0", "palm_r", kind="strap")
+    strut("strap_u", "knuck3", "palm_u", kind="strap")
+    strut("strap_x", "palm_r", "palm_u", kind="strap")
+
+    return Frame(
+        nodes=nodes,
+        members=members,
+        supports=["knuck0", "knuck1", "knuck2", "knuck3", "palm_r", "palm_u"],
+        keys={(f, r): f"key_{f}{r}" for (f, r) in keys},
+        key_normal={(f, r): np.asarray(v[1], float) for (f, r), v in keys.items()},
+    )

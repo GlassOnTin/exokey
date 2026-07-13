@@ -270,3 +270,219 @@ def key_face(h, q, keys: dict, params: dict, n: int = 4):
                                   model.nodes[nd].DZ["Combo 1"]])) for nd in model.nodes)
     area = abs(r1 - r0) * abs(d1 - d0)
     return float(w), float(area * t * MATERIALS[mat]["rho"])
+
+
+def face_domain(h, q, keys: dict, params: dict, nu_: int = 14, nv: int = 10):
+    """The key face's DESIGN DOMAIN: nodes, quads, loads, supports. No footprint chosen yet.
+
+    THE FOOTPRINT IS NOT MINE TO DRAW. It is what the structure needs, and the structure can
+    say so -- so `face_footprint` deletes material until only what carries load is left.
+    """
+    from structure.frame import hand_axes
+
+    o, e_d, e_r, e_o = hand_axes(h, q)
+    feet = {}
+    for (f, row), (kp, kn) in keys.items():
+        p = np.asarray(kp, float) - float(params["stem"]) * np.asarray(kn, float)
+        feet[f] = ((p - o) @ e_r, (p - o) @ e_d, (p - o) @ e_o)
+
+    m = 0.010
+    r0 = min(v[0] for v in feet.values()) - m
+    r1 = max(v[0] for v in feet.values()) + m
+    d0 = min(v[1] for v in feet.values()) - m
+    d1 = max(v[1] for v in feet.values()) + m
+    zf = float(np.mean([v[2] for v in feet.values()]))
+
+    nodes = {}
+    for i in range(nu_ + 1):
+        for j in range(nv + 1):
+            P = o + (d0 + (d1 - d0) * j / nv) * e_d + (r0 + (r1 - r0) * i / nu_) * e_r + zf * e_o
+            nodes[(i, j)] = P
+    cell = abs(r1 - r0) / nu_ * abs(d1 - d0) / nv
+
+    def nearest(rr, dd_):
+        i = int(round((rr - r0) / (r1 - r0) * nu_))
+        j = int(round((dd_ - d0) / (d1 - d0) * nv))
+        return min(max(i, 0), nu_), min(max(j, 0), nv)
+
+    loads = {nearest(v[0], v[1]): e_o * float(params["press_N"]) for v in feet.values()}
+
+    # THE FACE IS HELD AT FEET, NOT AT CORNERS. I first supported the four corners of the
+    # design domain -- a rectangle's corners -- and that is not how the part is held. In
+    # `build_body` the FLOOR LEGS attach to the key foot NEAREST each palm corner, so the face
+    # is supported at up to four of the WELL FEET themselves. Optimising a differently
+    # supported plate answers a different question.
+    hw, dp, dd = float(params["body_half"]), float(params["body_prox"]), float(params["body_dist"])
+    sups = []
+    for cr, cd in ((hw, dd), (-hw, dd), (hw, dp), (-hw, dp)):
+        near = min(feet.values(), key=lambda v: (v[0] - cr) ** 2 + (v[1] - cd) ** 2)
+        sups.append(nearest(near[0], near[1]))
+    sups = list(dict.fromkeys(sups))
+    return dict(nodes=nodes, nu=nu_, nv=nv, cell=cell, loads=loads, sups=sups,
+                keep_seed={k for k in loads} | set(sups))
+
+
+def _solve_face(dom, live: set, t: float, mat: str):
+    """(max deflection, {elem: strain energy}) for a given footprint `live`."""
+    model = FEModel3D()
+    _mat(model, mat)
+    used = set()
+    for (i, j) in live:
+        for c in ((i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1)):
+            used.add(c)
+    for c in used:
+        model.add_node(f"N{c[0]}_{c[1]}", *dom["nodes"][c])
+    for (i, j) in live:
+        model.add_quad(f"Q{i}_{j}", f"N{i}_{j}", f"N{i+1}_{j}",
+                       f"N{i+1}_{j+1}", f"N{i}_{j+1}", t, mat)
+    for c in dom["sups"]:
+        if c in used:
+            model.def_support(f"N{c[0]}_{c[1]}", support_DX=True, support_DY=True,
+                              support_DZ=True, support_RX=True, support_RY=True, support_RZ=True)
+    for c, F in dom["loads"].items():
+        if c in used:
+            for ax, val in zip(("FX", "FY", "FZ"), F):
+                model.add_node_load(f"N{c[0]}_{c[1]}", ax, float(val))
+    try:
+        model.analyze_linear(check_statics=False)
+    except Exception:
+        return float("inf"), {}
+    w = max(float(np.linalg.norm([model.nodes[n].DX["Combo 1"], model.nodes[n].DY["Combo 1"],
+                                  model.nodes[n].DZ["Combo 1"]])) for n in model.nodes)
+    se = {}
+    for (i, j) in live:
+        Q = model.quads[f"Q{i}_{j}"]
+        dv, fv = Q.d("Combo 1"), Q.f("Combo 1")
+        se[(i, j)] = float(abs(0.5 * (dv.T @ fv)[0, 0]))
+    return w, se
+
+
+def face_footprint(h, q, keys: dict, params: dict, keep: float = 0.35, rate: float = 0.06):
+    """EVOLUTIONARY STRUCTURAL OPTIMISATION: delete the material that carries no load.
+
+    THE FOOTPRINT IS A DESIGN VARIABLE, and this is the point the user made -- the real work
+    here has never been searching the design space, it has been fixing WHAT WE OPTIMISE. The
+    key face carries 44% of the whole structure's compliance and it has been idealised as a
+    CHAIN OF STRUTS, then as a SOLID SLAB, and neither is the part. So: mesh a design domain,
+    solve, and iteratively delete the elements with the LOWEST STRAIN ENERGY -- the ones doing
+    no work -- until only the load path is left.
+
+    Nodes that carry a WELL or a SUPPORT are never orphaned: their elements are protected.
+
+    Returns (live elements, deflection, mass).
+    """
+    dom = face_domain(h, q, keys, params)
+    t = float(params["alu_t"])
+    mat = str(params["mat_frame"])
+    rho = MATERIALS[mat]["rho"]
+
+    live = {(i, j) for i in range(dom["nu"]) for j in range(dom["nv"])}
+    target = max(1, int(keep * len(live)))
+    protected = set()
+    for (ci, cj) in dom["keep_seed"]:
+        for e in ((ci - 1, cj - 1), (ci - 1, cj), (ci, cj - 1), (ci, cj)):
+            if 0 <= e[0] < dom["nu"] and 0 <= e[1] < dom["nv"]:
+                protected.add(e)
+
+    w, se = _solve_face(dom, live, t, mat)
+    while len(live) > target:
+        n_cut = max(1, int(rate * len(live)))
+        cand = sorted((v, k) for k, v in se.items() if k not in protected)
+        if not cand:
+            break
+        for _, k in cand[:n_cut]:
+            live.discard(k)
+        w2, se2 = _solve_face(dom, live, t, mat)
+        if not np.isfinite(w2):     # the structure fell apart: put them back and stop
+            for _, k in cand[:n_cut]:
+                live.add(k)
+            break
+        w, se = w2, se2
+    return live, float(w), float(len(live) * dom["cell"] * t * rho), dom
+
+
+def dorsal_rail(h, q, finger: str, params: dict, curved: bool, n_long: int = 12, n_arc: int = 6):
+    """A rail hugging the back of ONE finger: a FLAT STRIP vs a CURVED SHELL, same material.
+
+    THE LAW THIS TESTS, and it is the whole reason "hug the hand" and "use shells" are the
+    SAME request:
+
+        A BEAM FRAME GETS ITS STIFFNESS FROM DEPTH.
+        DEPTH IS EXACTLY WHAT GETS IN THE WAY.
+
+    The palmar box is stiff because it is 57 mm deep -- and that depth IS the ball in the palm.
+    A frame that hugs the hand has ~5 mm of depth, so AS A STICK FIGURE it can never be stiff:
+    triangulated, it still deflected 2.58 mm against a 0.5 mm gate.
+
+    A SHELL does not need depth. It gets its stiffness from CURVATURE. That is a tape measure,
+    an eggshell, a fingernail: thin, hugging, and stiff -- because a curved cross-section cannot
+    bend without also stretching, and stretching is expensive.
+
+    So: wrap the same thickness of material around the finger instead of laying it flat, and
+    ask what it costs. Cantilevered at the knuckle, loaded at the fingertip by one keypress.
+    """
+    import mujoco
+
+    from structure.frame import hand_axes
+
+    CHAIN = {"thumb": ("firstmc", "proximal_thumb", "distal_thumb"),
+             "index": ("proxph2", "midph2", "distph2"),
+             "middle": ("proxph3", "midph3", "distph3"),
+             "ring": ("proxph4", "midph4", "distph4"),
+             "little": ("proxph5", "midph5", "distph5")}
+    mat = str(params["mat_frame"])
+    t = float(params["alu_t"])
+    hug = 0.004
+    o, e_d, e_r, e_o = hand_axes(h, q)
+    h.fk(q)
+    m = h.model
+
+    # the finger's own axis and radius, from its capsules
+    cs = []
+    for bone in CHAIN[finger]:
+        bid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, bone)
+        for g in range(m.body_geomadr[bid], m.body_geomadr[bid] + m.body_geomnum[bid]):
+            if m.geom_type[g] == mujoco.mjtGeom.mjGEOM_CAPSULE:
+                cs.append((h.data.geom_xpos[g].copy(), float(m.geom_size[g][0])))
+    A, B = cs[0][0], cs[-1][0]
+    r = float(np.mean([c[1] for c in cs])) + hug
+    axis = B - A
+    L = float(np.linalg.norm(axis))
+    axis /= L
+    u = np.cross(axis, e_o)
+    u /= np.linalg.norm(u) + 1e-12
+    v = np.cross(axis, u)          # completes the frame; v ~ dorsal
+
+    # arc: WRAP round the finger (curved) or lie FLAT across it (a strip of the same width)
+    half = np.pi / 3.0             # 120 deg of wrap
+    width = 2.0 * r * half         # SAME material width either way -- that is the point
+
+    model = FEModel3D()
+    _mat(model, mat)
+    for i in range(n_long + 1):
+        c = A + axis * (L * i / n_long)
+        for j in range(n_arc + 1):
+            s = -half + 2.0 * half * j / n_arc
+            if curved:
+                P = c + r * (np.cos(s) * v + np.sin(s) * u)      # wraps the finger
+            else:
+                P = c + r * v + (width * (j / n_arc - 0.5)) * u  # a flat strip, same width
+            model.add_node(f"N{i}_{j}", *P)
+    for i in range(n_long):
+        for j in range(n_arc):
+            model.add_quad(f"Q{i}_{j}", f"N{i}_{j}", f"N{i+1}_{j}",
+                           f"N{i+1}_{j+1}", f"N{i}_{j+1}", t, mat)
+
+    for j in range(n_arc + 1):     # built in at the knuckle
+        model.def_support(f"N0_{j}", support_DX=True, support_DY=True, support_DZ=True,
+                          support_RX=True, support_RY=True, support_RZ=True)
+    load = -e_o * float(params["press_N"]) / (n_arc + 1)   # a keypress, PALMAR, at the tip
+    for j in range(n_arc + 1):
+        for ax, val in zip(("FX", "FY", "FZ"), load):
+            model.add_node_load(f"N{n_long}_{j}", ax, float(val))
+
+    model.analyze_linear(check_statics=False)
+    w = max(float(np.linalg.norm([model.nodes[nd].DX["Combo 1"], model.nodes[nd].DY["Combo 1"],
+                                  model.nodes[nd].DZ["Combo 1"]])) for nd in model.nodes)
+    mass = width * L * t * MATERIALS[mat]["rho"]
+    return float(w), float(mass), float(L)
