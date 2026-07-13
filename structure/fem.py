@@ -195,6 +195,13 @@ class Frame:
         M = np.maximum(np.hypot(f[:, :, 4], f[:, :, 5]), np.hypot(f[:, :, 10], f[:, :, 11]))
         return (N / A + M * r / I).max(axis=0)
 
+    def axial(self, U):
+        """Axial force in each bar, per load case. (ncase, nbar). Tension positive."""
+        Uf = U.reshape(U.shape[0], -1)
+        ul = np.einsum("bij,cbj->cbi", self.T, Uf[:, self.dofs])
+        f = np.einsum("bij,cbj->cbi", self.kloc, ul)
+        return -f[:, :, 0]                # local x at end i points i->j; sign so tension is +
+
     def mass(self, A, rho, live=None):
         L = self.L if live is None else self.L[np.asarray(live, int)]
         return float(A * rho * L.sum())

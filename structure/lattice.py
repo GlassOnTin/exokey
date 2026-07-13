@@ -64,6 +64,14 @@ STRAP_K = P("STRAP_K", 3.3e5, "N/m", Source.DERIVED,
             "It is 20x SOFTER than the tissue patch it works against, so it is the compliant "
             "element in the anchor and it dominates lift-off.")
 
+SEG_CLEAR = P("SEG_CLEAR", 0.75, "-", Source.GUESS,
+              "Minimum gap between any point along a STRUT and the skin, as a fraction of `hug` "
+              "(so 3.0 mm at the 4 mm standoff). It cannot be 1.0: a straight chord between two "
+              "nodes each `hug` off a CONVEX surface dips below `hug` at its midpoint, which is "
+              "geometry, not a fault -- even the un-relaxed lattice sits at 0.83. This is the "
+              "floor below which the gauntlet would be RUBBING, and nothing has worn one to find "
+              "out where that really is.")
+
 # The palm's palmar surface is not available: that is where the fingers work.
 PALMAR_CUTOFF = -0.35
 
@@ -336,7 +344,7 @@ def solve(nodes, bars, live, buttons, cases, anchor_k, anchor_n, r=None, mat="cf
 
 
 def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
-         press_N=0.196, wired=None, on_step=None):
+         press_N=0.196, wired=None, relax=True, on_step=None):
     """WOLFF'S LAW. Delete the bars that carry no load, until the buttons stop being crisp.
 
     Bone is not designed, it is grown: it lays down material where it is strained and resorbs it
@@ -348,6 +356,8 @@ def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
     """
     nodes, bars, btn, _loads, ak, an = ground(h, q, hug=hug, pitch=pitch, press_N=press_N)
     cases = load_cases(h, q, btn, press_N=press_N, wired=wired)
+    Vs, Fs, _Ls = skin(h, q, labels=True)
+    Ns = _normals(Vs, Fs)
     live, reachable = connected(bars, list(range(len(bars))), ak, btn, len(nodes))
     if not reachable:
         raise RuntimeError("a button has no load path to the anchor: the domain is disconnected")
@@ -363,6 +373,25 @@ def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
         drop = set(order[:max(1, int(cut * len(live)))])
         trial = [e for e in live if e not in drop]
         w2, se2, mass2, tens2, pc2 = solve(nodes, bars, trial, btn, cases, ak, an, mat=mat)
+
+        # ⚠ AND NOW LET THE SURVIVORS DRIFT, EVERY STEP -- not once at the end.
+        # The user: "Perhaps we'd find some better solutions allowing the elements to drift
+        # throughout the optimisation?" They are right, and it is not merely tidier: deleting a
+        # strut changes where the load goes, so the joints that are left are no longer where the
+        # NEW load path wants them. Relaxing them recovers stiffness, and stiffness recovered is
+        # slack ESO can spend on deleting MORE. Topology and shape are one problem; solving them
+        # in sequence leaves material on the table.
+        if relax and np.isfinite(w2):
+            fr2 = Frame(nodes, [bars[e] for e in trial], MATERIALS[mat]["E"],
+                        MATERIALS[mat]["E"] / 2.6, np.pi * float(BAR_R) ** 2,
+                        np.pi * float(BAR_R) ** 4 / 4, np.pi * float(BAR_R) ** 4 / 2,
+                        spring={i: k for i, k in ak.items()})
+            U2 = fr2.solve([c[2] for c in cases])
+            moved = relax_nodes(fr2, U2, nodes, bars, trial, btn, ak, Vs, Ns, hug=hug)
+            w3, se3, mass3, tens3, pc3 = solve(moved, bars, trial, btn, cases, ak, an, mat=mat)
+            if np.isfinite(w3) and w3 <= max(w2, gate) and _clears(moved, bars, trial, Vs, hug):
+                nodes, w2, se2, mass2, tens2, pc2 = moved, w3, se3, mass3, tens3, pc3
+
         if w2 > gate or not np.isfinite(w2):
             cut *= 0.5                      # took too much: back off and try a smaller bite
             continue
@@ -371,6 +400,35 @@ def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
         if on_step:
             on_step(step, live, w, mass, tens)
     return nodes, bars, live, btn, cases, ak, an, hist, pc
+
+
+def _clears(nodes, bars, live, skin_V, hug):
+    """No STRUT may pass through flesh -- and it is the segment that matters, not just its ends.
+
+    Clamping the NODES to the standoff is not enough: a strut between two legal nodes can still
+    bow across a valley and graze the skin. The first relaxation did exactly that -- nodes all
+    legal, struts down to 0.70 mm.
+    """
+    from scipy.spatial import cKDTree
+
+    tree = cKDTree(skin_V)
+    pts = []
+    for e in live:
+        a, b = nodes[bars[e][0]], nodes[bars[e][1]]
+        pts += [a + (b - a) * t for t in np.linspace(0.0, 1.0, 9)]
+    # ⚠ THE SEGMENT, NOT THE NODES -- AND THE FLOOR IS NOT `hug`.
+    #
+    # Clamping the NODES to the standoff is not enough: a strut between two legal nodes can bow
+    # across a valley and graze the skin. So sample along it.
+    #
+    # But demanding the SEGMENT clear the full `hug` IS IMPOSSIBLE, and I briefly demanded it. A
+    # straight chord between two nodes each 4 mm off a CONVEX surface necessarily dips BELOW 4 mm
+    # at its midpoint -- that is geometry, not a defect, and the un-relaxed lattice already sits at
+    # 3.31 mm. The check rejected every relaxation, including ones that made nothing worse, and
+    # reported "no gain" as though the physics had spoken. It had not; I had mis-set the bar.
+    #
+    # The floor is SEG_CLEAR: a real minimum gap between any part of a strut and the skin.
+    return bool(tree.query(np.array(pts))[0].min() >= float(SEG_CLEAR) * hug)
 
 
 def cost(h, q, wired=None, press_N=0.196, pitch=0.008, gate=0.5e-3, mat="cf_pa12", rate=0.20):
@@ -399,7 +457,8 @@ def cost(h, q, wired=None, press_N=0.196, pitch=0.008, gate=0.5e-3, mat="cf_pa12
     p = MATERIALS[mat]
     try:
         nodes, bars, live, btn, cases, ak, an, hist, _pc = grow(
-            h, q, pitch=pitch, rate=rate, gate=gate, mat=mat, press_N=press_N, wired=wired)
+            h, q, pitch=pitch, rate=rate, gate=gate, mat=mat, press_N=press_N, wired=wired,
+            relax=False)
     except (RuntimeError, ValueError):
         return dict(mass_g=float("inf"), solid_g=float("inf"), worst=float("inf"),
                     util=float("inf"), struts=0, feasible=False)
@@ -423,3 +482,102 @@ def cost(h, q, wired=None, press_N=0.196, pitch=0.008, gate=0.5e-3, mat="cf_pa12
     return dict(mass_g=float(m) * 1000.0, solid_g=float(m_solid) * 1000.0,
                 worst=float(w_solid), util=util, struts=len(live),
                 feasible=bool(w_solid <= gate))
+
+
+def relax_nodes(fr, U, nodes, bars, live, buttons, anchor_k, skin_V, skin_N,
+                hug=0.004, layer=None, step=0.35, iters=1):
+    """LET THE NODES DRIFT, AND LET THE PHYSICS SAY WHERE. Form-finding, not smoothing.
+
+    THE USER: "Its becoming fairly minimalist in appearance, but still somewhat jaggedy. Is there a
+    smoothness penalisation we could use to discourage zig-zagging?" ...and then, correctly:
+    "Perhaps we'd find some better solutions allowing the elements to drift throughout the
+    optimisation?"
+
+    WHY THE ZIG-ZAGS ARE NOT PHYSICS. A STRAIGHT strut carries load AXIALLY -- stiffness EA/L. A
+    KINKED one carries it in BENDING -- ~12EI/L^3, which for a 1.8 mm rod over a 10 mm span is
+    three orders of magnitude softer. A kink is not a cheap way to get somewhere; it is a ruinously
+    expensive one. ESO is not choosing them. IT HAS NO CHOICE: every node is pinned to a lattice
+    site, so a load path running at an angle to the grid can only STAIRCASE. The jaggedness is a
+    DISCRETISATION ARTEFACT.
+
+    WHY NOT A SMOOTHNESS PENALTY. It is a soft constraint, and a soft constraint is something the
+    optimiser can BUY -- this project exists because v1 died of exactly that. The weight would
+    become a design variable nobody voted for. And it treats the symptom: the structure does not
+    need to be TOLD to prefer straight lines. It already prefers them, by a factor of ~1000. It
+    needs to be ALLOWED to have them.
+
+    WHY NOT LAPLACIAN SMOOTHING EITHER, which is what I tried first. It straightened the struts
+    (mean kink 58 deg -> 18 deg) and cut 29% of the mass -- and it did it by COLLAPSING THE
+    STRUCTURE ONTO THE HAND. Median standoff fell 9.1 -> 4.2 mm and the struts came within 0.70 mm
+    of the skin. It had thrown away the two-sheet DEPTH -- the entire bending lever arm -- and
+    called that a saving. Geometric smoothing does not know what the structure is FOR.
+
+    WHAT THIS DOES INSTEAD. The FEA already knows where every node wants to be. At a joint carrying
+    only AXIAL force, the forces balance:  sum_e N_e * u_e = 0.  Whatever is left over is being
+    held by BENDING -- the expensive mode -- so that residual IS the error, in newtons, and it
+    points the way out. Move each free node along it and the joint straightens BECAUSE that is what
+    kills the bending, not because it was asked to look tidy. (This is form-finding / dynamic
+    relaxation, and its fixed point is the funicular shape.)
+
+    ⚠ AND HERE IS WHAT IT ACTUALLY BUYS, MEASURED, PAIRED OVER ALL 15 DESIGNS OF THE FRONT:
+
+        mean kink   51.0 deg -> 45.4 deg   Wilcoxon p = 0.006   SIGNIFICANT
+        bone mass    5.60 g  ->  5.32 g    Wilcoxon p = 0.22    NOT significant
+
+    It straightens the structure and it DOES NOT make it lighter. A single A/B had shown 16%
+    lighter; a different one showed 12% heavier; the per-design spread is -29% to +13%. That was
+    trajectory noise in a greedy heuristic, and reporting it as a gain would have been wrong.
+
+    WHICH CORRECTS THE ARGUMENT ABOVE. "A kink is 1000x softer" is true of ONE strut in isolation.
+    This lattice is REDUNDANT -- node degree ~12 -- so when a path kinks, the load simply goes
+    around it. The zig-zags look bad and cost almost nothing. Smoothness is real, and it is worth
+    having (a straight strut prints better and reads as a structure rather than a mesh artefact),
+    but it is NOT where the grams are. So it is ON for the structures that get reported and OFF in
+    the GA loop, where it doubles the cost of an evaluation for no measurable return.
+
+    THE NODE IS STILL NOT FREE TO DO ANYTHING. It must stay in the band the gauntlet is allowed to
+    occupy -- between `hug` and `hug + layer` off the skin -- so it cannot sink into the hand and
+    it cannot flatten the lever arm. BUTTONS and ANCHORS are held: they are where the load enters
+    and leaves, and they are not the optimiser's to move.
+    """
+    from scipy.spatial import cKDTree
+
+    layer = float(LAYER) if layer is None else layer
+    X = np.array(nodes, float)
+    held = set(buttons.values()) | set(anchor_k)
+    lb = [bars[e] for e in live]
+    tree = cKDTree(skin_V)
+
+    for _ in range(iters):
+        N = fr.axial(U)                                  # (ncase, nbar) tension positive
+        Nrms = np.sqrt((N ** 2).mean(axis=0))            # one number per bar, over all load cases
+        R = np.zeros_like(X)
+        deg = np.zeros(len(X))
+        for e, (i, j) in enumerate(lb):
+            u = X[j] - X[i]
+            L = np.linalg.norm(u)
+            if L < 1e-9:
+                continue
+            u /= L
+            R[i] += Nrms[e] * u                          # the bar pulls node i toward j
+            R[j] -= Nrms[e] * u
+            deg[i] += abs(Nrms[e])
+            deg[j] += abs(Nrms[e])
+
+        for i in range(len(X)):
+            if i in held or deg[i] < 1e-12:
+                continue
+            # step in METRES: the residual, normalised by the force scale at this joint, times a
+            # length scale. A joint in axial equilibrium does not move.
+            X[i] += step * (R[i] / deg[i]) * (0.5 * layer)
+
+        # ...and back into the band. The skin is not negotiable and neither is the lever arm.
+        d, k = tree.query(X)
+        out = X - skin_V[k]
+        nrm = np.linalg.norm(out, axis=1, keepdims=True)
+        out = np.where(nrm > 1e-12, out / np.maximum(nrm, 1e-12), skin_N[k])
+        lo, hi = hug, hug + layer
+        bad = (d < lo) | (d > hi)
+        if bad.any():
+            X[bad] = skin_V[k[bad]] + out[bad] * np.clip(d[bad], lo, hi)[:, None]
+    return X

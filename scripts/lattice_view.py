@@ -16,7 +16,7 @@ from hand.myohand import FINGERS
 from opt.problem import hands
 from structure.frame import hand_axes
 from structure.lattice import BAR_R, solve
-from viz.scene import skin_trace
+from viz.scene import skin_trace, well_traces
 
 
 def tubes(nodes, bars, live, se, r, n=7):
@@ -64,26 +64,50 @@ def main():
     q = h.compose({f: posture(h, f, tp_of(x, f), tm_of(x, f), x.get(f"ab_{f}", 0.0))
                    for f in FINGERS})
 
-    z = np.load("out/lattice.npz", allow_pickle=True)
+    z = np.load("out/final.npz", allow_pickle=True)
     nodes = z["nodes"]
     bars = [tuple(b) for b in z["bars"]]
     live = [int(e) for e in z["live"]]
     btn = {f: int(i) for f, i in zip(z["fingers"], z["buttons"])}
-    from structure.lattice import ground
-    _n, _b, _btn, loads, anchor_k, anchor_n = ground(h, q)
+    import pickle as _pk
 
-    w, se, mass, tension = solve(nodes, bars, live, btn, loads, anchor_k, anchor_n)
+    from design.qwerty import used_actions
+    from structure.lattice import ground, load_cases
+
+    fd = _pk.load(open("out/final_design.pkl", "rb"))
+    x = fd["x"]
+    q = h.compose({f: posture(h, f, tp_of(x, f), tm_of(x, f), float(x.get(f"ab_{f}", 0.0)))
+                   for f in FINGERS})
+    _n, _b, _btn, _l, anchor_k, anchor_n = ground(h, q)
+    cases = load_cases(h, q, btn, wired=used_actions(fd["action_map"]))
+    w, se, mass, tension, per_case = solve(nodes, bars, live, btn, cases, anchor_k, anchor_n)
 
     traces = []
     sk = skin_trace(h, q, opacity=0.20)
     if sk is not None:
         traces.append(sk)
     traces.append(tubes(nodes, bars, live, se, float(BAR_R)))
+
+    # THE WELLS -- the whole reason the structure exists. Drawn as the U-CHANNELS they are: the
+    # distal phalanx SLIDES INTO one along its own axis (it does not rest its pad on a disc), and
+    # each is a five-direction joystick. The struts have to reach around the fingertip to hold
+    # them, which is why the digits are allowed a full wrap in the domain and the palm is not.
+    from design.vector import action_dirs
+
+    cups = []
+    for f in FINGERS:
+        wf = h.well_frame(q, f)
+        cups.append(dict(pos=wf["pos"], axis=wf["axis"], floor=wf["floor"],
+                         lateral=wf["lateral"], half=wf["half"], radius=wf["radius"],
+                         finger=f, label=f"{f} well",
+                         dirs={a: v for a, v in action_dirs(h, q, f).items()}))
+    traces += well_traces(cups)
+
     for f, i in btn.items():
         p = nodes[i]
         traces.append(go.Scatter3d(x=[p[0]], y=[p[1]], z=[p[2]], mode="markers",
-                                   marker=dict(size=6, color="#00d0ff", symbol="diamond"),
-                                   name=f"{f} button", hoverinfo="name", showlegend=False))
+                                   marker=dict(size=5, color="#111", symbol="diamond"),
+                                   name=f"{f} mount", hoverinfo="name", showlegend=False))
     # only the anchor nodes the GROWN structure actually stands on
     used = {i for e in live for i in bars[e]}
     A = nodes[[int(i) for i in z["anchors"] if int(i) in used]]
@@ -96,22 +120,26 @@ def main():
     eye = 1.55 * e_o + 0.62 * e_r
     fig = go.Figure(traces)
     fig.update_layout(
-        title=f"ExoKey — the gauntlet, GROWN ON A FREE-FORM DOMAIN.  "
+        title=f"ExoKey — the layout and the gauntlet, CO-OPTIMISED.  "
               f"{int(z['bars0'])} candidate struts → <b>{len(live)}</b> "
-              f"({100*(1-len(live)/int(z['bars0'])):.1f}% deleted).  "
-              f"{float(z['mass0'])*1000:.0f} g → <b>{mass*1000:.1f} g</b>, "
-              f"buttons steady at {w*1e6:.0f} µm (gate 500 µm), strap carries {tension:.2f} N.<br>"
-              f"<sub>Nothing was drawn by hand. Bright = carrying load. "
-              f"Flesh can only PUSH; the strap supplies the pull.</sub>",
+              f"({100*(1-len(live)/int(z['bars0'])):.1f}% deleted), "
+              f"<b>{mass*1000:.1f} g</b> of bone, buttons steady at {w*1e6:.0f} µm "
+              f"(gate 500 µm), strap {tension:.2f} N.<br>"
+              f"<sub>Nothing drawn by hand: Wolff's law on a free-form lattice, 15 wired load "
+              f"cases pressed one at a time, nodes free to drift. Bright = carrying load. "
+              f"Flesh can only PUSH — the strap supplies the pull.</sub>",
         scene=dict(aspectmode="data", xaxis_visible=False, yaxis_visible=False,
                    zaxis_visible=False,
                    camera=dict(eye=dict(x=eye[0], y=eye[1], z=eye[2]),
                                up=dict(x=e_r[0], y=e_r[1], z=e_r[2]))),
         margin=dict(l=0, r=0, t=70, b=0), template="plotly_white", showlegend=False)
-    fig.write_html("out/lattice.html", include_plotlyjs="cdn")
+    fig.write_html("out/final.html", include_plotlyjs="cdn")
     print(f"  {len(live)} struts, {mass*1000:.1f} g, buttons {w*1e6:.0f} um, "
           f"strap {tension:.2f} N")
-    print("\nbrowser view: out/lattice.html")
+    print("\nbrowser view: out/final.html")
+    worst = max(per_case, key=per_case.get)
+    print(f"  worst load case: {worst[0]}/{worst[1]} at "
+          f"{per_case[worst]*1e6:.0f} um")
 
 
 if __name__ == "__main__":

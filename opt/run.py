@@ -55,9 +55,65 @@ def main():
     args = ap.parse_args()
 
     from pymoo.algorithms.moo.nsga2 import RankAndCrowdingSurvival
+    from pymoo.core.callback import Callback
     from pymoo.core.mixed import MixedVariableGA
     from pymoo.optimize import minimize
     from pymoo.parallelization import StarmapParallelization
+
+    class Live(Callback):
+        """THE OPTIMISER STREAMS INTO THE RENDER. It should always have done.
+
+        The user, twice: "I usually prefer to do this sort of project with a tight coupled
+        visualisation, or sometimes even visualisation being first and optimisation event coupled
+        to it." And every substantial bug in this project was caught by LOOKING -- the fingernail,
+        the thumb's sign, the wells intersecting, the bone not fitting the well, the black sheet
+        across the back of the hand. Not one by a test written in advance, because you cannot
+        write a test for a mistake you do not know you are making.
+
+        And yet every run so far has been: optimise for an hour, THEN render a page. The picture
+        arrived after the decision.
+
+        Each generation writes the front (cheap). Every `every` generations it also RE-GROWS the
+        knee design's gauntlet (~19 s) so the bone structure on screen is the bone structure the
+        optimiser currently believes in.
+        """
+
+        def __init__(self, hands_, every=5):
+            super().__init__()
+            self.h = hands_
+            self.every = every
+            self.t0 = time.time()
+
+        def notify(self, algorithm):
+            import json
+
+            from viz.live import publish
+
+            g = algorithm.n_gen
+            F = algorithm.opt.get("F")
+            X = algorithm.opt.get("X")
+            if F is None or not len(F):
+                return
+            F = np.atleast_2d(F)
+            os.makedirs("out", exist_ok=True)
+            payload = dict(gen=int(g), elapsed=time.time() - self.t0,
+                           front=[[float(a), float(b)] for a, b in F[:, :2]],
+                           n_feasible=int(len(F)))
+            with open("out/front.json.tmp", "w") as fh:
+                json.dump(payload, fh)
+            os.replace("out/front.json.tmp", "out/front.json")
+            print(f"[live] gen {g}: {len(F)} on the front, "
+                  f"effort {F[:,0].min():.3e}-{F[:,0].max():.3e}, "
+                  f"mass {F[:,1].min():.1f}-{F[:,1].max():.1f} g "
+                  f"[{time.time()-self.t0:.0f}s]", flush=True)
+            if g % self.every == 0 and len(X):
+                Fn = (F - F.min(0)) / (F.max(0) - F.min(0) + 1e-12)
+                knee = X[int(np.argmin((Fn ** 2).sum(1)))]
+                try:
+                    publish(self.h[50], knee, gen=int(g),
+                            note=f"gen {g} — knee: {F[int(np.argmin((Fn**2).sum(1))), 1]:.1f} g")
+                except Exception as e:                       # the render must never kill the run
+                    print(f"[live] publish failed: {type(e).__name__}: {e}", flush=True)
 
     from design.vector import evaluate
 
@@ -82,7 +138,7 @@ def main():
           f"on {args.procs} processes")
     t0 = time.perf_counter()
     res = minimize(problem, algorithm, ("n_gen", args.gen), seed=args.seed,
-                   verbose=True, save_history=False)
+                   callback=Live(hands()), verbose=True, save_history=False)
     dt = time.perf_counter() - t0
     pool.close()
 

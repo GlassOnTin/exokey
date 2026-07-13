@@ -35,47 +35,68 @@ LIVE = "out/live.json"
 
 
 def scene(h, x, gen: int = -1, note: str = "") -> dict:
-    """The DEVICE, as plain data. Small enough to write every generation."""
-    from design.vector import (BODY_PROX, PRESS_N, RESIDUAL_MAX, action_dirs, keys_on_reference,
-                               posture, tm_of, tp_of, well_radius)
-    from hand.myohand import FINGERS
-    from structure.frame import DIGIT_FLESH, build_body, clearance, solve
+    """THE DEVICE, as Plotly traces. Small enough to write every few generations.
 
-    keys, _ = keys_on_reference(h, x)
-    par = dict(sec_alu=(float(x["alu_w"]), float(x["alu_t"])),
-               palm_offset=float(x["palm_offset"]), body_half=float(x["body_half"]),
-               body_prox=BODY_PROX, body_dist=float(x["body_dist"]),
-               stem=float(x["stem"]), mat_frame=str(x["material"]))
-    exo = build_body(h, h.q_neutral, keys, par)
-    st = solve(exo, [(f, 0) for f in FINGERS], press_N=PRESS_N)
+    ⚠ THIS USED TO DRAW THE PALMAR BOX -- and it went on trying to for a whole 62-minute run,
+    failing every time with `KeyError: 'alu_w'`, because that variable was deleted along with the
+    architecture it shaped. The exception was caught so it could not kill the optimiser, and the
+    3D panel therefore sat empty for 40 generations while the front streamed happily beside it.
+    A render that fails silently is worse than no render: it looks like nothing is happening.
+
+    What it draws now is what the optimiser is actually deciding: the hand, the five wells, and
+    the GROWN GAUNTLET -- Wolff's law on a free-form lattice, coarse (the same growth the GA is
+    steering by), coloured by how hard each strut is working.
+    """
+    from design.params import DEFLECTION_MAX
+    from design.qwerty import best_action_map, used_actions
+    from design.vector import PRESS_N, evaluate, posture, tm_of, tp_of
+    from hand.myohand import FINGERS
+    from opt.problem import hands
+    from structure.lattice import grow
 
     per = {f: posture(h, f, tp_of(x, f), tm_of(x, f), x.get(f"ab_{f}", 0.0)) for f in FINGERS}
     q_on = h.compose(per)
 
-    wells = []
-    for f in FINGERS:
-        wf = h.well_frame(q_on, f)
-        wells.append(dict(
-            finger=f,
-            pos=[float(v) for v in wf["pos"]],
-            axis=[float(v) for v in wf["axis"]],
-            floor=[float(v) for v in wf["floor"]],
-            lateral=[float(v) for v in wf["lateral"]],
-            half=float(wf["half"]), radius=float(wf["radius"]),
-        ))
+    r = evaluate(x, hands())
+    wired = used_actions(r["action_map"])
+    nodes, bars, live, btn, cases, ak, an, hist, pc = grow(
+        h, q_on, wired=wired, gate=float(DEFLECTION_MAX), pitch=0.008, rate=0.20)
 
-    gaps = clearance(h, q_on, exo, offset=np.zeros(3), only=DIGIT_FLESH, bone=True)
+    seg = _bone_segments(h, q_on)
+    bx, by, bz = [], [], []
+    for k in range(0, len(seg), 2):
+        bx += [seg[k][0], seg[k + 1][0], None]
+        by += [seg[k][1], seg[k + 1][1], None]
+        bz += [seg[k][2], seg[k + 1][2], None]
+    traces = [dict(type="scatter3d", x=bx, y=by, z=bz, mode="lines",
+                   line=dict(color="#c8b8a8", width=9), hoverinfo="skip", name="hand")]
+
+    # the grown bone, as line segments (a tube mesh is too heavy to write every few generations)
+    sx, sy, sz = [], [], []
+    for e in live:
+        a, b = nodes[bars[e][0]], nodes[bars[e][1]]
+        sx += [float(a[0]), float(b[0]), None]
+        sy += [float(a[1]), float(b[1]), None]
+        sz += [float(a[2]), float(b[2]), None]
+    traces.append(dict(type="scatter3d", x=sx, y=sy, z=sz, mode="lines",
+                       line=dict(color="#12639b", width=5), hoverinfo="skip", name="gauntlet"))
+
+    P = np.array([nodes[btn[f]] for f in FINGERS])
+    traces.append(dict(type="scatter3d", x=[float(v) for v in P[:, 0]],
+                       y=[float(v) for v in P[:, 1]], z=[float(v) for v in P[:, 2]],
+                       mode="markers", marker=dict(size=5, color="#e8590c"),
+                       hoverinfo="skip", name="buttons"))
+
+    bone_g = hist[-1][2] * 1000.0
     return dict(
-        gen=int(gen), note=str(note),
-        bones=[[float(v) for v in p] for p in _bone_segments(h, q_on)],
-        wells=wells,
-        nodes={k: [float(v) for v in p] for k, p in exo.nodes.items()},
-        members=[dict(i=m.i, j=m.j, kind=m.kind) for m in exo.members],
-        mass=float(exo.mass() * 1000),
-        defl=float(st["max_deflection"] * 1000),
-        util=float(st["max_util"]),
-        clear=float(min(gaps.values()) * 1000),
-        curl=[float(x["tp_hand"]), float(x["tm_hand"])],
+        gen=int(gen),
+        note=(f"{note} — {len(live)} struts, {bone_g:.1f} g of bone, "
+              f"buttons {hist[-1][1]*1e6:.0f} µm, strap {hist[-1][3]:.2f} N"),
+        traces=traces,
+        layout=dict(scene=dict(aspectmode="data", xaxis_visible=False,
+                               yaxis_visible=False, zaxis_visible=False)),
+        bone_g=float(bone_g), struts=len(live),
+        button_um=float(hist[-1][1] * 1e6), strap_N=float(hist[-1][3]),
     )
 
 
