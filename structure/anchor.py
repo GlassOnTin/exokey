@@ -196,6 +196,15 @@ def bearing_surface(h, q, hug: float = 0.004, n_arc: int = 6, n_along: int = 3):
         lat = np.cross(dp, ax)
         t = t_map.get(bn, float(WRIST_TISSUE))
 
+        # THE PATCH BEARS ON SKIN, NOT ON A CAPSULE. `r` above is MyoHand's flesh capsule (or,
+        # for the carpus, a raw bone radius). What the gauntlet actually presses on is the skin:
+        # BONE + the MRI-measured tissue. The capsule understates it, so the patch was drawn
+        # ~2 mm inside the hand and its area -- hence its stiffness, k = E.dA/t -- with it.
+        if cap is not None:
+            r = _bone_radius(h, cap) + t
+        else:
+            r = r + t
+
         half_arc = np.pi / 3.0                 # bear on the dorsal 120 deg only
         for s_ in np.linspace(-half, half, n_along):
             for j in range(n_arc + 1):

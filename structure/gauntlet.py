@@ -49,12 +49,62 @@ CHAIN = {"thumb": ("firstmc", "proximal_thumb", "distal_thumb"),
 PALM = ("secondmc", "thirdmc", "fourthmc", "fifthmc")
 
 
-def _bone_rings(h, q, bone, dors_local, hug, n_arc, n_along=2, wrap=False):
-    """Rings of nodes standing off ONE bone's dorsal surface.
+HALF_ARC = np.pi / 2.2          # ~160 deg of dorsal wrap: open enough to get the finger in
 
-    The bone's own axis is authoritative; the dorsal direction is made perpendicular to IT.
-    (Doing it the other way round walked the rings off the bone and put the shell 6 mm inside
-    the finger -- see scripts/architecture_view.py.)
+
+def _skin_radii(W, dirs, cone=0.80):
+    """How far the SKIN reaches in each direction, from one ring centre.
+
+    `W` is the skin, already made relative to the centre and pre-filtered to a local ball/slab.
+    For each direction `u`, take the skin vertices lying within a cone about `u` and report how
+    far out they go.
+
+    ⚠ THIS REPLACES A 92nd-PERCENTILE OF THE *BONE MESH* PLUS A TISSUE CONSTANT. That instrument
+    was noisy in a way a shell cannot survive: ADJACENT ARC DIRECTIONS CAME OUT 25 mm APART,
+    because a percentile over a slab of bone vertices lurches whenever the slab clips a condyle.
+    Elements that long are not a mesh, they are a lie the solver will happily integrate.
+
+    The skin is a smooth closed surface and we now HAVE it, so ask it directly. It also deletes
+    the dorsal/palmar tissue interpolation: the skin already IS bone plus tissue.
+    """
+    d = np.linalg.norm(W, axis=1) + 1e-12
+    r = np.full(len(dirs), np.nan)
+    for j, u in enumerate(dirs):
+        proj = W @ u
+        # ⚠ ONLY A TIGHT CONE. A loose fallback (72 deg) admits vertices nearly PERPENDICULAR to
+        # `u` and reports their projection as a radius -- which is how the extreme arc directions,
+        # where a bone has little skin of its own to offer, came out 30 mm too far. Leave them
+        # NaN and let the interpolation below carry the value in from the directions that DO know.
+        sel = (proj / d) > cone
+        if sel.sum() >= 5:
+            r[j] = float(np.percentile(proj[sel], 90))
+    ok = ~np.isnan(r)
+    if not ok.any():
+        return np.full(len(dirs), 0.008)
+    r = np.interp(np.arange(len(dirs)), np.flatnonzero(ok), r[ok])
+    # smooth around the arc: the skin is smooth, so the shell that follows it must be too
+    return np.convolve(np.pad(r, 1, mode="edge"), [0.25, 0.5, 0.25], mode="valid")
+
+
+def _bone_rings(h, q, bone, dors_local, hug, n_arc, Vs, Ls, n_along=2, wrap=False):
+    """Rings of nodes standing off ONE bone's SKIN -- not off a circular capsule.
+
+    THE GAUNTLET FOLLOWS THE HAND, NOT A TUBE. It used to be built at `capsule_radius + hug`,
+    which makes every cross-section a CIRCLE. A hand is not circular: the metacarpals are FLAT
+    and the fingers are OVAL. A shell fitted to a tube either stands proud of the flats (bulk,
+    and it gets in the way) or bites into the sides (it does not fit).
+
+    So the radius is taken PER DIRECTION, straight off the skin surface:
+
+        shell(station, u) = skin_reach(station, u) + hug
+
+    The bone gives only the AXIS and the STATIONS; the skin gives the shape.
+
+    ⚠ ONLY THIS BONE'S OWN SKIN. A cross-section slab through a metacarpal cuts THE OTHER THREE
+    METACARPALS TOO, and a cone opened laterally then finds the NEIGHBOUR's skin and reports it
+    as this bone's radius -- 18 mm of standoff where 4 mm was asked for, and elements 69 mm long.
+    Neighbours are not this ring's business; keeping clear of them is `relax()`'s job, and it
+    does it against the whole assembled surface.
     """
     m = h.model
     bid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, bone)
@@ -62,33 +112,79 @@ def _bone_rings(h, q, bone, dors_local, hug, n_arc, n_along=2, wrap=False):
     dors = R @ dors_local[bone]
     dors /= np.linalg.norm(dors)
 
+    # the bone's axis: the capsule's if it has one, else its mesh's own long axis
+    ax = half = c = None
     for g in range(m.body_geomadr[bid], m.body_geomadr[bid] + m.body_geomnum[bid]):
-        if m.geom_type[g] != mujoco.mjtGeom.mjGEOM_CAPSULE:
-            continue
-        r = float(m.geom_size[g][0]) + hug
-        half = float(m.geom_size[g][1])
-        c = h.data.geom_xpos[g].copy()
-        ax = h.data.geom_xmat[g].reshape(3, 3)[:, 2]
-        dp = dors - (dors @ ax) * ax
-        dp /= np.linalg.norm(dp) + 1e-12
-        lat = np.cross(dp, ax)
+        if m.geom_type[g] == mujoco.mjtGeom.mjGEOM_CAPSULE:
+            c = h.data.geom_xpos[g].copy()
+            half = float(m.geom_size[g][1])
+            ax = h.data.geom_xmat[g].reshape(3, 3)[:, 2]
+            break
+    if ax is None:
+        V = []
+        for g in range(m.body_geomadr[bid], m.body_geomadr[bid] + m.body_geomnum[bid]):
+            if m.geom_type[g] != mujoco.mjtGeom.mjGEOM_MESH:
+                continue
+            mid = m.geom_dataid[g]
+            va, vn = m.mesh_vertadr[mid], m.mesh_vertnum[mid]
+            V.append(m.mesh_vert[va:va + vn] @ h.data.geom_xmat[g].reshape(3, 3).T
+                     + h.data.geom_xpos[g])
+        if not V:
+            return []
+        V = np.vstack(V)
+        c = V.mean(axis=0)
+        ax = np.linalg.svd(V - c, full_matrices=False)[2][0]
+        half = float(np.percentile(np.abs((V - c) @ ax), 90))
 
-        out = []
-        for t in np.linspace(-half, half, n_along):
-            out.append((c + t * ax, dp, lat, r))
-        if wrap:
-            # over the tip and back palmar, to carry the button. A CAP at constant radius from
-            # the capsule's distal endpoint -- a fingertip is a hemisphere.
-            tip = c + half * ax
-            for k in range(1, 6):
-                a = k * (np.pi * 0.75) / 5
-                dd = np.cos(a) * dp + np.sin(a) * ax
-                out.append((tip, dd / np.linalg.norm(dd), lat, r))
-        return out
-    return []
+    # ⚠ THE BONE AXIS MUST POINT DISTALLY, AND A CAPSULE'S LOCAL Z DOES NOT PROMISE THAT.
+    # On the fingers MuJoCo's capsule z runs distally; ON THE WHOLE THUMB IT RUNS PROXIMALLY.
+    # Taken as given, the thumb's rings came out backwards, so `firstmc`'s LAST ring was stitched
+    # to `proximal_thumb`'s FAR end -- a 43 mm leap across the hand, and 66 shell elements with
+    # edges up to 93 mm. It also capped the tip WRAP, which is what carries the button, on the
+    # WRONG END of the bone.
+    #
+    # Derive it instead from the model's own kinematic tree: a MuJoCo body's frame sits at its
+    # PROXIMAL joint, so the capsule's centre is always distal of the body origin. That fixes the
+    # sign for every bone, thumb included, without anyone needing to know which way z points.
+    if ax @ (c - h.data.xpos[bid]) < 0:
+        ax = -ax
+
+    Vb = Vs[Ls == bid]                  # the skin OVER THIS BONE. See the warning above.
+    if not len(Vb):
+        return []
+
+    dp = dors - (dors @ ax) * ax
+    dp /= np.linalg.norm(dp) + 1e-12
+    lat = np.cross(dp, ax)
+
+    angles = [-HALF_ARC + 2 * HALF_ARC * j / n_arc for j in range(n_arc + 1)]
+    band = half / max(1, n_along - 1)
+    out = []
+
+    for s_ in np.linspace(-half, half, n_along):
+        cc = c + s_ * ax
+        W = Vb - cc
+        near = (np.abs(W @ ax) < band) & (np.linalg.norm(W, axis=1) < 0.035)
+        dirs = [np.cos(a) * dp + np.sin(a) * lat for a in angles]
+        out.append((cc, dp, lat, _skin_radii(W[near], dirs) + hug))
+
+    if wrap:
+        # OVER THE TIP and back palmar, to carry the button. A fingertip is a hemisphere, so the
+        # cap rings share the capsule's distal endpoint as their centre and only the direction
+        # sweeps -- and each one asks the skin how far the pulp actually reaches that way.
+        tip = c + half * ax
+        W = Vb - tip
+        near = np.linalg.norm(W, axis=1) < 0.030
+        for k in range(1, 6):
+            a = k * (np.pi * 0.75) / 5
+            up = np.cos(a) * dp + np.sin(a) * ax
+            up /= np.linalg.norm(up)
+            dirs = [np.cos(b) * up + np.sin(b) * lat for b in angles]
+            out.append((tip, up, lat, _skin_radii(W[near], dirs) + hug))
+    return out
 
 
-def domain(h, q, hug: float = 0.004, n_arc: int = 6):
+def domain(h, q, hug: float = 0.004, n_arc: int = 12):
     """Every place the gauntlet is ALLOWED to be. The optimiser decides what it IS.
 
     Returns (nodes, quads, well_nodes, strap_nodes).
@@ -102,18 +198,26 @@ def domain(h, q, hug: float = 0.004, n_arc: int = 6):
         dl[bn] = h.data.xmat[bid].reshape(3, 3).T @ e_o0
     h.fk(q)
 
+    from hand.flesh import skin
+    Vs, _, Ls = skin(h, q, labels=True)   # the SKIN -- what the gauntlet stands off, not bone
+
     nodes: list[np.ndarray] = []
+    outward: list[np.ndarray] = []      # each node's own outward radial -- see relax()
     quads: list[tuple[int, int, int, int]] = []
 
     def strip(rings):
-        """A quad strip through a list of rings. Returns the node index grid."""
+        """A quad strip through a list of rings. Returns the node index grid.
+
+        `r` is now a LIST -- one radius per arc direction -- because the hand's cross-section is
+        not a circle. That is the whole change."""
         grid = []
         for (c, dp, lat, r) in rings:
             row = []
-            half_arc = np.pi / 2.2                     # ~160 deg: a dorsal half-shell
             for j in range(n_arc + 1):
-                s = -half_arc + 2 * half_arc * j / n_arc
-                nodes.append(c + r * (np.cos(s) * dp + np.sin(s) * lat))
+                s = -HALF_ARC + 2 * HALF_ARC * j / n_arc
+                u = np.cos(s) * dp + np.sin(s) * lat
+                nodes.append(c + r[j] * u)
+                outward.append(u)
                 row.append(len(nodes) - 1)
             grid.append(row)
         for i in range(len(grid) - 1):
@@ -121,10 +225,51 @@ def domain(h, q, hug: float = 0.004, n_arc: int = 6):
                 quads.append((grid[i][j], grid[i][j + 1], grid[i + 1][j + 1], grid[i + 1][j]))
         return grid
 
-    # THE DORSUM: a half-shell over each metacarpal. They are SEPARATE BONES and the shell is
+    def relax(nodes, hug, iters=60, cap=2.0):
+        """PUSH THE SHELL OUT UNTIL IT REALLY CLEARS THE SKIN -- BUT NOT FOREVER.
+
+        A per-bone ring cannot see a NEIGHBOURING digit. Between two knuckles a node placed a
+        clean 4 mm off ITS OWN metacarpal can still be 0.8 mm from the skin of the one next door,
+        and 0.8 mm is not a gap, it is a pinch. Only the ASSEMBLED skin knows that, so the
+        standoff is enforced against the surface itself.
+
+        ⚠ TWO WAYS THIS GOES WRONG, AND BOTH DID.
+
+        1. Push along the node's own OUTWARD RADIAL, not along (node - nearest skin vertex). In
+           the valley between two fingers those point OPPOSITE ways and the second drives the
+           node DEEPER INTO the hand -- which is why 8 nodes would not converge at any number of
+           iterations.
+
+        2. CAP THE PUSH. Where the outward radial is nearly TANGENT to the skin, each iteration
+           buys almost no clearance, so an uncapped loop just keeps going: nodes marched 30+ mm
+           out and dragged 36 shell elements up to 63 mm long behind them. Those elements are not
+           a mesh, they are a spike the solver integrates without complaint.
+
+        So the push is capped at `cap * hug`, and a node that STILL cannot make the standoff is
+        not pushed further -- it is reported. The honest reading of such a node is that THE SHELL
+        MAY NOT GO THERE, and the caller drops the elements that touch it.
+        """
+        from scipy.spatial import cKDTree
+
+        tree = cKDTree(Vs)
+        X, U = np.array(nodes), np.array(outward)
+        X0 = X.copy()
+        for _ in range(iters):
+            d, _i = tree.query(X)
+            bad = d < hug - 1e-5
+            if not bad.any():
+                break
+            X[bad] += U[bad] * (1.5 * (hug - d[bad]))[:, None]
+            over = np.linalg.norm(X - X0, axis=1) > cap * hug     # THE CAP
+            if over.any():
+                step = X[over] - X0[over]
+                X[over] = X0[over] + step / np.linalg.norm(step, axis=1, keepdims=True) * cap * hug
+        return X, tree.query(X)[0] < hug - 1e-5
+
+    # THE DORSUM:    # THE DORSUM: a half-shell over each metacarpal. They are SEPARATE BONES and the shell is
     # corrugated over them -- which is not a compromise, it is stiffer than a flat plate for the
     # same material, for exactly the reason a corrugated roof is.
-    palm_grids = [strip(_bone_rings(h, q, b, dl, hug, n_arc, n_along=3)) for b in PALM]
+    palm_grids = [strip(_bone_rings(h, q, b, dl, hug, n_arc, Vs, Ls, n_along=5)) for b in PALM]
 
     # THE FINGERS: a rail over each, wrapping the tip to carry the button.
     well_nodes = {}
@@ -132,8 +277,8 @@ def domain(h, q, hug: float = 0.004, n_arc: int = 6):
     for f, bones in CHAIN.items():
         rings = []
         for k, bn in enumerate(bones):
-            rings += _bone_rings(h, q, bn, dl, hug, n_arc,
-                                 n_along=2, wrap=(k == len(bones) - 1))
+            rings += _bone_rings(h, q, bn, dl, hug, n_arc, Vs, Ls,
+                                 n_along=4, wrap=(k == len(bones) - 1))
         g = strip(rings)
         fing_grids[f] = g
         well_nodes[f] = g[-1][n_arc // 2]      # the wrap's last ring: the button hangs here
@@ -150,18 +295,28 @@ def domain(h, q, hug: float = 0.004, n_arc: int = 6):
     # So: weld only truly coincident nodes, and stitch the finger roots to the knuckles
     # RING-TO-RING -- node j of the finger's first ring to node j of the metacarpal's last.
     # Both rings have the same arc ordering, so the quads come out clean by construction.
-    nodes_a = np.array(nodes)
+    nodes_a, pinched = relax(nodes, hug)
     for f, g in fing_grids.items():
+        # ⚠ STITCH TO THE NEAREST PALM RING, NOT TO THE KNUCKLE RING.
+        # The four fingers root AT a knuckle, so "the palm strip's last ring" was right for them.
+        # THE THUMB DOES NOT: its chain begins at `firstmc`, whose proximal end is back at the
+        # CARPUS. Sewing that to the index knuckle drew a 46 mm quad straight across the back of
+        # the hand -- the big flat sheet in the render, and 22 elements the solver was integrating
+        # as if they were shell.
         root = nodes_a[g[0]].mean(axis=0)
-        best, bg = 1e9, None
+        best, br = 1e9, None
         for pg in palm_grids:
-            d = float(np.linalg.norm(nodes_a[pg[-1]].mean(axis=0) - root))
-            if d < best:
-                best, bg = d, pg
+            for row in pg:
+                d = float(np.linalg.norm(nodes_a[row].mean(axis=0) - root))
+                if d < best:
+                    best, br = d, row
         for j in range(n_arc):
-            quads.append((bg[-1][j], bg[-1][j + 1], g[0][j + 1], g[0][j]))
+            quads.append((br[j], br[j + 1], g[0][j + 1], g[0][j]))
 
-    quads = [qd for qd in quads if len(set(qd)) == 4]
+    # A node that could not make the standoff means THE SHELL MAY NOT GO THERE. Drop its
+    # elements from the domain rather than let the optimiser build on a node inside the hand.
+    quads = [qd for qd in quads
+             if len(set(qd)) == 4 and not any(pinched[i] for i in qd)]
 
     # THE STRAP anchors: the proximal edge of the dorsum -- where the gauntlet is held on.
     strap = sorted({j for pg in palm_grids for j in pg[0]})

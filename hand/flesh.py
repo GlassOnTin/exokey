@@ -60,8 +60,9 @@ def _capsule_tissue(h, bid):
     return None
 
 
-def skin(h, q, subdiv: int = 1):
-    """The hand's SKIN, posed. Returns (vertices, faces).
+def skin(h, q, subdiv: int = 1, labels: bool = False):
+    """The hand's SKIN, posed. Returns (vertices, faces) -- or (vertices, faces, body_id) if
+    `labels`, so a caller can ask for the skin OVER ONE BONE.
 
     Each bone's own mesh, pushed out along its vertex normals by the tissue that covers it --
     and the tissue is DIRECTION-DEPENDENT, because a hand is not a sausage: the back of the hand
@@ -72,7 +73,7 @@ def skin(h, q, subdiv: int = 1):
     h.fk(q)
     _, _, _, e_o = hand_axes(h, q)
 
-    V_all, F_all = [], []
+    V_all, F_all, L_all = [], [], []
     for b in range(m.nbody):
         name = mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_BODY, b)
         if not name:
@@ -117,10 +118,13 @@ def skin(h, q, subdiv: int = 1):
             t = tp + (td - tp) * w
             V_all.append(Vw + N * t[:, None])
             F_all.append(Fl + sum(len(v) for v in V_all[:-1]))
+            L_all.append(np.full(len(Vw), b, int))
 
     if not V_all:
-        return np.zeros((0, 3)), np.zeros((0, 3), int)
-    return np.vstack(V_all), np.vstack(F_all)
+        z = (np.zeros((0, 3)), np.zeros((0, 3), int))
+        return (*z, np.zeros(0, int)) if labels else z
+    V, F = np.vstack(V_all), np.vstack(F_all)
+    return (V, F, np.concatenate(L_all)) if labels else (V, F)
 
 
 def clearance_to_skin(h, q, points) -> np.ndarray:

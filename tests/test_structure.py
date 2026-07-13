@@ -517,3 +517,110 @@ def test_the_flesh_model_is_measured_not_guessed():
         d = np.array([float(np.min(np.linalg.norm(V - p, axis=1))) for p in B])
         assert d.max() < 0.012, f"a metacarpal pokes {d.max()*1000:.0f} mm out of the skin"
         break
+
+
+def test_the_gauntlet_stands_off_the_SKIN_not_the_capsules():
+    """The gauntlet is fitted to the hand's SKIN. It had been fitted to MyoHand's flesh CAPSULES.
+
+    The user: "I think we need to find a flesh model to go with the bones."
+
+    A capsule is a CIRCULAR TUBE. A hand is not: the metacarpals are FLAT and the fingers OVAL.
+    A shell fitted to a tube either stands proud of the flats (bulk, and it gets in the way) or
+    bites into the sides (it does not fit). And a capsule is not skin -- the measured dorsal
+    tissue is 4.8-6.8 mm, roughly twice what MyoHand's capsules imply -- so the "4 mm standoff"
+    was really the shell sitting INSIDE the hand.
+
+    A skeleton is not what the device touches. This is the check that says so.
+    """
+    import numpy as np
+
+    from design.vector import posture, tm_of, tp_of
+    from hand.flesh import clearance_to_skin
+    from hand.myohand import FINGERS
+    from structure.gauntlet import domain
+
+    h = MyoHand()
+    hug = 0.004
+    q = h.compose({f: posture(h, f, 0.45, 0.45, 0.0) for f in FINGERS})
+    nodes, quads, _wells, _strap = domain(h, q, hug=hug)
+
+    used = sorted({i for qd in quads for i in qd})
+    gap = clearance_to_skin(h, q, np.asarray(nodes)[used])
+    assert gap.min() > hug - 1e-4, (
+        f"the gauntlet bites {(hug - gap.min())*1000:.1f} mm into the SKIN at its worst node. "
+        f"A per-bone ring cannot see the NEIGHBOURING digit -- only the assembled skin can.")
+
+
+def test_the_bone_axis_points_DISTALLY_even_on_the_thumb():
+    """A capsule's local z is not a promise about which way is distal -- and on the thumb it lies.
+
+    MuJoCo's capsule z runs distally on the fingers and PROXIMALLY on the whole thumb. Taken as
+    given, the thumb's shell rings came out reversed, so `firstmc`'s LAST ring was stitched to
+    `proximal_thumb`'s FAR end: a 43 mm leap across the hand, 66 shell elements with edges up to
+    93 mm, and the fingertip WRAP -- the thing that carries the button -- capped on the wrong end
+    of the bone. The solver integrated all of it without a murmur.
+
+    The direction is now derived from the model's own kinematic tree (a body's frame sits at its
+    PROXIMAL joint), so no one has to know which way z points.
+    """
+    import numpy as np
+
+    from design.vector import posture, tm_of, tp_of
+    from hand.flesh import skin
+    from hand.myohand import FINGERS
+    from structure.frame import hand_axes
+    from structure.gauntlet import CHAIN, PALM, _bone_rings
+    import mujoco
+
+    h = MyoHand()
+    q = h.compose({f: posture(h, f, 0.45, 0.45, 0.0) for f in FINGERS})
+    m = h.model
+    h.fk(np.zeros(m.nq))
+    _, _, _, e_o0 = hand_axes(h, np.zeros(m.nq))
+    dl = {}
+    for bn in list(PALM) + [b for bs in CHAIN.values() for b in bs]:
+        bid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, bn)
+        dl[bn] = h.data.xmat[bid].reshape(3, 3).T @ e_o0
+    h.fk(q)
+    Vs, _, Ls = skin(h, q, labels=True)
+
+    for f, bones in CHAIN.items():
+        for bn in bones:
+            bid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, bn)
+            rings = _bone_rings(h, q, bn, dl, 0.004, 6, Vs, Ls, n_along=4)
+            # the rings must march AWAY from the bone's own proximal joint, not toward it
+            joint = h.data.xpos[bid]
+            d0 = float(np.linalg.norm(rings[0][0] - joint))
+            d1 = float(np.linalg.norm(rings[-1][0] - joint))
+            assert d1 > d0, (
+                f"{f}/{bn}: the shell rings run PROXIMALLY ({d0*1000:.0f} -> {d1*1000:.0f} mm "
+                f"from the joint). The tip wrap, and the button on it, land on the wrong end.")
+
+
+def test_no_shell_element_leaps_across_the_hand():
+    """A 63 mm 'shell element' is not a mesh, it is a spike the solver integrates without complaint.
+
+    Three separate defects each produced one, and NOT ONE of them changed a number enough to
+    notice: the thumb's reversed rings (93 mm), an uncapped skin-clearance push that marched
+    nodes 30 mm out into space (63 mm), and a per-direction radius taken as a percentile over a
+    slab of BONE vertices, which lurched by 25 mm between ADJACENT arc directions whenever the
+    slab clipped a condyle.
+
+    They were caught by LOOKING at the render -- a black sheet stretched across the back of the
+    hand. This test is what should have caught them.
+    """
+    import numpy as np
+
+    from design.vector import posture
+    from hand.myohand import FINGERS
+    from structure.gauntlet import domain
+
+    h = MyoHand()
+    q = h.compose({f: posture(h, f, 0.45, 0.45, 0.0) for f in FINGERS})
+    nodes, quads, _w, _s = domain(h, q)
+    N = np.asarray(nodes)
+    edge = np.array([max(np.linalg.norm(N[qd[(i + 1) % 4]] - N[qd[i]]) for i in range(4))
+                     for qd in quads])
+    assert edge.max() < 0.030, (
+        f"a shell element spans {edge.max()*1000:.0f} mm. The domain's rings are ~7 mm apart, so "
+        f"anything near 30 mm is a strip stitched to the wrong place.")

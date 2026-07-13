@@ -55,14 +55,14 @@ def main():
     # THE SKIN, not the skeleton. Until now every render drew bones and capsules -- which is
     # why every geometry error had to be caught by a number instead of by eye.
     traces = []
-    sk = skin_trace(h, q, opacity=0.30)
+    sk = skin_trace(h, q, opacity=0.22)
     if sk is not None:
         traces.append(sk)
-    traces += _mesh_traces(h, q, opacity=0.06)      # the bones, faint, underneath
-    t = tri(nodes, quads, dead, "#cccccc", 0.10, "deleted (the domain)")
+    traces += _mesh_traces(h, q, opacity=0.045)      # the bones, faint, underneath
+    t = tri(nodes, quads, dead, "#b9c2c9", 0.05, "deleted (the domain)")
     if t is not None:
         traces.append(t)
-    t = tri(nodes, quads, sorted(live), "#1a6fa8", 0.95, "the gauntlet")
+    t = tri(nodes, quads, sorted(live), "#12639b", 1.0, "the gauntlet")
     if t is not None:
         traces.append(t)
     for i in d["wells"]:
@@ -83,7 +83,9 @@ def main():
               f"({100*(1-float(d['mass'])/float(d['mass0'])):.0f}% removed), "
               f"buttons steady at {float(d['defl'])*1e6:.0f} µm (gate 500 µm).  "
               f"Grey = what it was allowed to be; blue = what carries load.",
-        scene=dict(aspectmode="data", camera=dict(eye=dict(x=1.3, y=-1.5, z=1.0))),
+        scene=dict(aspectmode="data", xaxis_visible=False,
+                   yaxis_visible=False, zaxis_visible=False, camera=dict(eye=dict(x=-1.65, y=0.66, z=0.67), up=dict(x=-0.24, y=-0.06, z=0.97),
+                               center=dict(x=0, y=0, z=0))),
         margin=dict(l=0, r=0, t=60, b=0), template="plotly_white", showlegend=False)
     fig.write_html("out/gauntlet.html", include_plotlyjs="cdn")
     print(f"  solid {float(d['mass0'])*1000:.1f} g -> grown {float(d['mass'])*1000:.1f} g "
