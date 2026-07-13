@@ -106,9 +106,13 @@ def test_constraints_are_hard_not_penalties(hands):
     from opt.problem import CONSTRAINT_NAMES
     assert len(r["G"]) == len(CONSTRAINT_NAMES)
     assert r["feasible"] == all(v <= 0 for v in r["G"])
-    # and the objectives contain no penalty terms: mass and deflection are physical units
-    assert r["F"][1] > 0  # grams
-    assert r["F"][2] > 0  # mm
+    # and the objectives contain no penalty terms: they are physical units
+    assert r["F"][1] > 0  # grams of grown gauntlet + adjusters
+    # ⚠ THERE IS NO THIRD OBJECTIVE ANY MORE. Deflection traded against mass while the structure
+    # was a fixed palmar box. The gauntlet is GROWN TO THE GATE -- ESO deletes struts until the
+    # buttons are exactly as crisp as they are allowed to be -- so deflection is pinned by
+    # construction, and what is left to minimise is the GRAMS.
+    assert len(r["F"]) == 2
 
 
 def test_the_five_wells_must_physically_fit(hands):

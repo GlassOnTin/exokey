@@ -647,9 +647,9 @@ def test_a_singular_lattice_must_not_report_ZERO_deflection():
     anchor_k = {0: 1e6}
     anchor_n = {0: np.array([0.0, 0.0, 1.0])}
     buttons = {"index": 3}                     # a button ON the island: no load path at all
-    loads = {3: np.array([0.0, 0.0, -0.2])}
+    cases = [("index", "click", {3: np.array([0.0, 0.0, -0.2])})]
 
-    w, _se, _m, _t = solve(nodes, bars, [0, 1, 2], buttons, loads, anchor_k, anchor_n)
+    w, *_ = solve(nodes, bars, [0, 1, 2], buttons, cases, anchor_k, anchor_n)
     assert not np.isfinite(w), (
         f"a button with NO load path to the anchor reported {w*1e6:.1f} um. A singular solve must "
         f"come back as inf, never as a number -- least of all as zero.")
@@ -679,10 +679,12 @@ def test_flesh_cannot_PULL_the_gauntlet_back_onto_the_hand():
     anchor_n = {0: np.array([0.0, 0.0, 1.0])}  # outward = +z
     buttons = {"index": 2}
 
-    up, _, _, t_up = solve(nodes, bars, [0, 1], buttons, {2: np.array([0.0, 0.0, +0.2])},
-                           anchor_k, anchor_n)
-    dn, _, _, t_dn = solve(nodes, bars, [0, 1], buttons, {2: np.array([0.0, 0.0, -0.2])},
-                           anchor_k, anchor_n)
+    up, _s, _m, t_up, _p = solve(
+        nodes, bars, [0, 1], buttons,
+        [("index", "click", {2: np.array([0.0, 0.0, +0.2])})], anchor_k, anchor_n)
+    dn, _s, _m, t_dn, _p = solve(
+        nodes, bars, [0, 1], buttons,
+        [("index", "click", {2: np.array([0.0, 0.0, -0.2])})], anchor_k, anchor_n)
 
     assert up > dn, (
         f"pulling the anchor OFF the hand ({up*1e6:.0f} um) is no softer than pressing it IN "

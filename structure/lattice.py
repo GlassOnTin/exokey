@@ -37,13 +37,13 @@ survives is chosen by the stresses and by nothing else.
 from __future__ import annotations
 
 import numpy as np
-from Pynite import FEModel3D
 from scipy.spatial import cKDTree
 
 from design.params import P, Source
 from hand.flesh import CARPUS, METACARPALS, skin
 from hand.myohand import FINGERS
 from structure.anchor import bearing_surface
+from structure.fem import Frame
 from structure.frame import MATERIALS, hand_axes
 
 BAR_R = P("BAR_R", 0.0009, "m", Source.GUESS,
@@ -63,6 +63,13 @@ STRAP_K = P("STRAP_K", 3.3e5, "N/m", Source.DERIVED,
             "circumference of the hand at the palm, 0.20 m:  k = EA/L = 2e9 * 3.3e-5 / 0.20. "
             "It is 20x SOFTER than the tissue patch it works against, so it is the compliant "
             "element in the anchor and it dominates lift-off.")
+
+ALPHA = P("ALPHA", 3.7, "-", Source.DERIVED,
+          "How the gauntlet's button deflection scales with bar radius: w ~ r^-ALPHA. MEASURED on "
+          "the real lattice by halving r three times (x2.8, x12.7, x14.0 -> alpha = 3.6, 3.7, "
+          "3.8). A pure bending frame gives 4 and a pure truss gives 2, so this structure is "
+          "bending-dominated -- which is itself worth knowing. Used to estimate, from ONE solve of "
+          "the solid, how much material a layout needs to reach the deflection gate.")
 
 # The palm's palmar surface is not available: that is where the fingers work.
 PALMAR_CUTOFF = -0.35
@@ -232,30 +239,50 @@ def connected(bars, live, anchor_k, buttons, n_nodes):
     return keep, ok
 
 
-def solve(nodes, bars, live, buttons, loads, anchor_k, normals, r=None, mat="cf_pa12",
-          strap_k=None, iters=12):
-    """(worst button deflection, {bar: strain energy density}, mass, strap tension in N).
+def load_cases(h, q, buttons, press_N=0.196, wired=None):
+    """ONE CASE PER (DIGIT, DIRECTION), PRESSED ALONE. This is the load set; there was one before.
+
+    ⚠ A WELL IS A FIVE-DIRECTION JOYSTICK. The digit can push it down, forward, back, left or
+    right -- five different forces on the structure, of which the model saw one. And the structure
+    had been grown with ALL FIVE DIGITS PRESSING AT ONCE, which is not how anyone types. Re-solved
+    one digit at a time, the thumb alone deflected 522 um against a 500 um gate: ESO had optimised
+    a load case that never happens and failed the one that does.
+
+    `wired` (from design.qwerty.used_actions) restricts this to the directions a character is
+    actually assigned to -- 15 of the 25. Demanding all 25 would design for keys nobody presses.
+    """
+    from design.vector import action_dirs
+
+    cases = []
+    for f, i in buttons.items():
+        dirs = action_dirs(h, q, f)
+        acts = sorted(wired[f]) if (wired and f in wired) else sorted(dirs)
+        for a in acts:
+            if a in dirs:
+                cases.append((f, a, {i: np.asarray(dirs[a], float) * press_N}))
+    return cases
+
+
+def solve(nodes, bars, live, buttons, cases, anchor_k, anchor_n, r=None, mat="cf_pa12",
+          strap_k=None, iters=8):
+    """(worst button deflection over all cases, {bar: strain energy}, mass, strap tension N).
 
     ⚠ THE ANCHOR IS BILINEAR, AND GETTING THAT WRONG IS WHAT MAKES A GAUNTLET LOOK GOOD ON PAPER.
 
     Flesh can PUSH the gauntlet off the hand. It cannot PULL it back on. A keypress at a fingertip
-    ~120 mm from the wrist is a MOMENT, so it presses one end of the anchor patch INTO the hand and
-    lifts the other end OFF it -- and the lifting end is carried by the STRAP, not by the tissue.
+    ~120 mm from the wrist is a MOMENT: it presses one end of the anchor patch INTO the hand and
+    lifts the other end OFF it, and only the STRAP can carry the lifting end.
 
-    Modelled as bidirectional springs (which is what the shell gauntlet did, and declared), this
-    lattice grew a structure that reported 495 um at the buttons. Re-solved with the pulling
-    springs removed and no strap at all, THE SAME STRUCTURE deflects 9178 um -- 18x the gate. Two
-    fifths of its anchor reaction was tension that nothing in the world was supplying. The number
-    was not slightly optimistic; it was fiction.
-
-    So each anchor node now gets a spring whose stiffness depends on WHICH WAY IT IS MOVING along
-    its own outward normal:
+    Modelled as bidirectional springs, the free-form lattice grew a structure reporting 495 um at
+    the buttons, of which 40% of the anchor reaction was tension nothing was supplying. The same
+    structure, re-solved honestly, deflects 9178 um -- 18x the gate. So:
 
         moving IN  (pressing on the hand)  ->  k_tissue,  stiff  (E*dA/t, MRI-measured t)
         moving OUT (lifting off the hand)  ->  k_strap,   soft   (webbing, EA/L)
 
-    That is a nonlinear support, so it is iterated to a fixed active set. It converges in a few
-    passes because the sign of the motion at a node rarely flips twice.
+    That is nonlinear, so it is iterated to a fixed active set -- PER LOAD CASE, because different
+    digits lift different parts of the patch. Factorisations are cached by active set, and most
+    cases converge to the same one, so 15 cases cost far fewer than 15 factorisations.
     """
     strap_k = float(STRAP_K) if strap_k is None else strap_k
     r = float(BAR_R) if r is None else r
@@ -266,93 +293,72 @@ def solve(nodes, bars, live, buttons, loads, anchor_k, normals, r=None, mat="cf_
 
     live, reachable = connected(bars, live, anchor_k, buttons, len(nodes))
     if not reachable or not live:
-        return float("inf"), {}, 0.0, 0.0
-    used = {i for e in live for i in bars[e]}
-    anch = [i for i in anchor_k if i in used]
+        return float("inf"), {}, 0.0, 0.0, {}
+    lb = [bars[e] for e in live]
+    fr = Frame(nodes, lb, p["E"], p["E"] / 2.6, A, I, J)
+    anch = [i for i in anchor_k if i in fr.idx]
     if not anch:
-        return float("inf"), {}, 0.0, 0.0
-
+        return float("inf"), {}, 0.0, 0.0, {}
     ktot = sum(anchor_k[i] for i in anch)
-    k_strap = {i: strap_k * anchor_k[i] / ktot for i in anch}   # the strap's share of the patch
+    k_strap = {i: strap_k * anchor_k[i] / ktot for i in anch}
 
-    lifting = {i: False for i in anch}                  # start assuming everything bears
-    for _ in range(iters):
-        m = FEModel3D()
-        m.add_material(mat, p["E"], p["E"] / 2.6, 0.3, p["rho"])
-        m.add_section("bar", A, I, I, J)
-        for i in used:
-            m.add_node(f"N{i}", *nodes[i])
-        for e in live:
-            i, j = bars[e]
-            m.add_member(f"M{e}", f"N{i}", f"N{j}", mat, "bar")
-        for i in anch:
-            k = k_strap[i] if lifting[i] else anchor_k[i]
-            for d in "XYZ":
-                m.def_support_spring(f"N{i}", f"D{d}", k, None)
-        m.def_support(f"N{anch[0]}", support_RX=True, support_RY=True, support_RZ=True)
-        for i, fvec in loads.items():
-            if i in used:
-                for ax, comp in zip("XYZ", fvec):
-                    m.add_node_load(f"N{i}", f"F{ax}", float(comp))
-        try:
-            m.analyze_linear(check_statics=False)
-        except Exception:
-            return float("inf"), {}, 0.0, 0.0
+    def springs(lift):
+        return {i: (k_strap[i] if i in lift else anchor_k[i]) for i in anch}
 
-        # who is lifting OFF the hand?  (displacement along its own outward normal)
-        nxt, tension = {}, 0.0
-        for i in anch:
-            n = m.nodes[f"N{i}"]
-            D = np.array([n.DX["Combo 1"], n.DY["Combo 1"], n.DZ["Combo 1"]])
-            if not np.isfinite(D).all():
-                return float("inf"), {}, 0.0, 0.0
-            out = float(D @ normals[i])
-            nxt[i] = out > 0
-            if nxt[i]:
-                tension += k_strap[i] * float(np.linalg.norm(D))
-        if nxt == lifting:
-            break
-        lifting = nxt
+    # ⚠ ONE FACTORISATION, KEPT AND REUSED -- NOT ONE PER LOAD CASE.
+    # The anchor is nonlinear, so in principle every case needs its own stiffness matrix. In
+    # practice the active set hardly moves between digits (they all press one end of the patch in
+    # and lift the other), so carrying it from case to case means the factorisation is REBUILT
+    # only when the set actually changes -- typically once for the whole list.
+    #
+    # Caching one splu PER active set instead exhausted 28 GB and got the run OOM-killed: an splu
+    # of a 14k-DOF frame is hundreds of MB of fill-in, and 25 cases wanted 25 of them. The
+    # factorisation is cheap; HOARDING it is what is expensive.
+    lift: set = set()
+    fr.factorise(springs(lift))
 
-    w = 0.0
-    for f, i in buttons.items():
-        if i not in used:
-            return float("inf"), {}, 0.0, 0.0
-        n = m.nodes[f"N{i}"]
-        d = float(np.linalg.norm([n.DX["Combo 1"], n.DY["Combo 1"], n.DZ["Combo 1"]]))
-        # ⚠ NEVER `max(w, d)` ON A VALUE THAT MIGHT BE NaN. Python's max returns the FIRST
-        # argument when the comparison is False, and every comparison with NaN is False -- so a
-        # singular solve came back as 0.0 um and read as a triumph.
+    worst, tension, per_case = 0.0, 0.0, {}
+    U_all = []
+    for f, act, load in cases:
+        for _ in range(iters):
+            U = fr.solve([load])
+            nxt = {i for i in anch if float(fr.disp(U, i)[0] @ anchor_n[i]) > 0}
+            if nxt == lift:
+                break
+            lift = nxt
+            fr.factorise(springs(lift))
+        d = float(np.linalg.norm(fr.disp(U, buttons[f])[0]))
         if not np.isfinite(d):
-            return float("inf"), {}, 0.0, 0.0
-        w = max(w, d)
+            return float("inf"), {}, 0.0, 0.0, {}
+        per_case[(f, act)] = d
+        worst = max(worst, d)
+        tension = max(tension, sum(k_strap[i] * float(np.linalg.norm(fr.disp(U, i)[0]))
+                                   for i in lift))
+        U_all.append(U[0])
 
-    # STRAIN ENERGY PER UNIT VOLUME is the ESO criterion, not strain energy. A long bar stores more
-    # energy than a short one at the same stress, so ranking on raw energy would delete the short
-    # highly-stressed struts first -- exactly backwards.
-    se, mass = {}, 0.0
-    for e in live:
-        M = m.members[f"M{e}"]
-        d, fv = M.d("Combo 1"), M.f("Combo 1")
-        L = float(np.linalg.norm(nodes[bars[e][0]] - nodes[bars[e][1]]))
-        se[e] = float(abs(0.5 * (d.T @ fv)[0, 0])) / max(L, 1e-6)
-        mass += A * L * p["rho"]
-    return float(w), se, float(mass), float(tension)
+    se_arr = fr.strain_energy(np.array(U_all))
+    se = {e: float(se_arr[k]) for k, e in enumerate(live)}
+    mass = fr.mass(A, p["rho"])
+    return float(worst), se, float(mass), float(tension), per_case
 
 
 def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
-         press_N=0.196, on_step=None):
+         press_N=0.196, wired=None, on_step=None):
     """WOLFF'S LAW. Delete the bars that carry no load, until the buttons stop being crisp.
 
     Bone is not designed, it is grown: it lays down material where it is strained and resorbs it
     where it is not. This is the same rule -- remove the lowest strain-energy-density bars and
     re-solve -- and it is why the answer looks like an anatomy rather than like a bracket.
+
+    The gate is the WORST of the load cases, not their sum: a key that is mushy when you press it
+    is mushy, however crisp the other fourteen are.
     """
-    nodes, bars, btn, loads, ak, an = ground(h, q, hug=hug, pitch=pitch, press_N=press_N)
+    nodes, bars, btn, _loads, ak, an = ground(h, q, hug=hug, pitch=pitch, press_N=press_N)
+    cases = load_cases(h, q, btn, press_N=press_N, wired=wired)
     live, reachable = connected(bars, list(range(len(bars))), ak, btn, len(nodes))
     if not reachable:
         raise RuntimeError("a button has no load path to the anchor: the domain is disconnected")
-    w, se, mass, tens = solve(nodes, bars, live, btn, loads, ak, an, mat=mat)
+    w, se, mass, tens, pc = solve(nodes, bars, live, btn, cases, ak, an, mat=mat)
     hist = [(len(live), w, mass, tens)]
     if on_step:
         on_step(0, live, w, mass, tens)
@@ -363,12 +369,61 @@ def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
         order = sorted(live, key=lambda e: se.get(e, 0.0))
         drop = set(order[:max(1, int(cut * len(live)))])
         trial = [e for e in live if e not in drop]
-        w2, se2, mass2, tens2 = solve(nodes, bars, trial, btn, loads, ak, an, mat=mat)
+        w2, se2, mass2, tens2, pc2 = solve(nodes, bars, trial, btn, cases, ak, an, mat=mat)
         if w2 > gate or not np.isfinite(w2):
             cut *= 0.5                      # took too much: back off and try a smaller bite
             continue
-        live, w, se, mass, tens = trial, w2, se2, mass2, tens2
+        live, w, se, mass, tens, pc = trial, w2, se2, mass2, tens2, pc2
         hist.append((len(live), w, mass, tens))
         if on_step:
             on_step(step, live, w, mass, tens)
-    return nodes, bars, live, btn, loads, ak, an, hist
+    return nodes, bars, live, btn, cases, ak, an, hist, pc
+
+
+def cost(h, q, wired=None, press_N=0.196, pitch=0.008, gate=0.5e-3, mat="cf_pa12"):
+    """THE STRUCTURAL COST OF A LAYOUT, cheaply: how many grams of bone does it need?
+
+    This is the Tier-1 evaluator -- the one the GA calls ~5000 times. Growing the real structure
+    takes ~10 minutes, so what it does instead is solve the SOLID lattice ONCE (all wired load
+    cases) and estimate the mass needed to reach the gate by scaling the bar radius:
+
+        w ~ r^-ALPHA   and   m ~ r^2      =>      m_gate = m_solid * (w_solid / gate)^(2/ALPHA)
+
+    ALPHA = 3.7 is MEASURED on this structure, not assumed.
+
+    ⚠ IT IS AN UPPER BOUND AND IT IS A PROXY. Uniform scaling is the DUMBEST way to hit a
+    stiffness target -- ESO does far better by moving material to where it works -- so this
+    over-estimates the mass. What the optimiser needs is the RANKING, and whether the ranking
+    survives is not something to assume: it is checked against the real grown mass on a sample
+    (scripts/verify_surrogate.py), and the correlation is reported, not hoped for.
+
+    Returns dict(mass_g, solid_g, worst, util, feasible).
+    """
+    p = MATERIALS[mat]
+    r = float(BAR_R)
+    nodes, bars, btn, _loads, ak, an = ground(h, q, pitch=pitch, press_N=press_N)
+    cases = load_cases(h, q, btn, press_N=press_N, wired=wired)
+    live, reachable = connected(bars, list(range(len(bars))), ak, btn, len(nodes))
+    if not reachable or not live:
+        return dict(mass_g=float("inf"), solid_g=float("inf"), worst=float("inf"),
+                    util=float("inf"), feasible=False)
+    w, _se, m_solid, _t, _pc = solve(nodes, bars, live, btn, cases, ak, an, r=r, mat=mat)
+    if not np.isfinite(w) or w <= 0:
+        return dict(mass_g=float("inf"), solid_g=float("inf"), worst=float("inf"),
+                    util=float("inf"), feasible=False)
+
+    scale = (w / gate) ** (2.0 / float(ALPHA))          # < 1 whenever the solid beats the gate
+    m_gate = m_solid * min(scale, 1.0)
+
+    # THE STRESS, at the radius the mass estimate implies -- not at the solid's. A thinner rod is
+    # what the estimate is BUYING, so it is the thinner rod that has to survive.
+    r_gate = r * (w / gate) ** (1.0 / float(ALPHA))
+    A = np.pi * r_gate ** 2
+    I = np.pi * r_gate ** 4 / 4
+    J = 2 * I
+    fr = Frame(nodes, [bars[e] for e in live], p["E"], p["E"] / 2.6, A, I, J,
+               spring={i: k for i, k in ak.items()})
+    U = fr.solve([c[2] for c in cases])
+    util = float(fr.stress(U, r_gate).max() / (p["yield_"] / 2.0))    # SF = 2
+    return dict(mass_g=float(m_gate) * 1000.0, solid_g=float(m_solid) * 1000.0,
+                worst=float(w), util=util, feasible=bool(w <= gate))

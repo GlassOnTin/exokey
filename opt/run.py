@@ -39,14 +39,10 @@ def baseline() -> dict:
     x["tm_thumb"] = 0.60
     for f, sgn in zip(("index", "middle", "ring", "little"), (1.0, 0.33, -0.33, -1.0)):
         x[f"ab_{f}"] = 0.75 * sgn   # fan splay, or the wells collide
-    x["alu_w"] = 0.008
-    x["alu_t"] = 0.002
-    x["palm_offset"] = 0.020
-    x["stem"] = 0.008
     x["adjust"] = 0.012
-    x["body_half"] = 0.026
-    x["body_dist"] = 0.055
     x["material"] = "cf_pa12"
+    # (alu_w / alu_t / palm_offset / stem / body_half / body_dist are gone: they shaped the
+    #  palmar box, and the structure is the grown gauntlet now -- see design/vector.py)
     return x
 
 
@@ -68,8 +64,9 @@ def main():
     # ---- baseline, scored with the SAME evaluator --------------------------------------
     print("scoring the hand-built baseline (Twiddler-like)...")
     b = evaluate(baseline(), hands())
-    print(f"  keys {b['total_keys']} (1/finger x 3 actions)  effort/char {b['F'][0]:.3e}   "
-          f"mass {b['F'][1]:.1f} g   deflection {b['F'][2]:.3f} mm")
+    print(f"  keys {b['total_keys']} (1/finger x 5 directions)  effort/char {b['F'][0]:.3e}   "
+          f"gauntlet {b['F'][1]:.1f} g  (solid {b['gauntlet']['solid_g']:.0f} g, "
+          f"buttons {b['gauntlet']['worst']*1e6:.0f} um)")
     print(f"  feasible: {b['feasible']}")
     for n, v in zip(CONSTRAINT_NAMES, b["G"]):
         if v > 0:
@@ -111,9 +108,8 @@ def main():
         i for i, f in enumerate(F)
         if np.all(f <= bF) and np.any(f < bF)
     ]
-    print(f"{'':4s} {'keys':>5s} {OBJECTIVE_NAMES[0]:>12s} {OBJECTIVE_NAMES[1]:>10s} "
-          f"{OBJECTIVE_NAMES[2]:>15s}")
-    print(f"{'base':4s} {b['total_keys']:5d} {bF[0]:12.3e} {bF[1]:10.1f} {bF[2]:15.3f}"
+    print(f"{'':4s} {'keys':>5s} {OBJECTIVE_NAMES[0]:>12s} {OBJECTIVE_NAMES[1]:>18s}")
+    print(f"{'base':4s} {b['total_keys']:5d} {bF[0]:12.3e} {bF[1]:18.1f}"
           + ("" if b["feasible"] else "   (INFEASIBLE)"))
     print("-" * 52)
     order = np.argsort(F[:, 0])
@@ -121,7 +117,7 @@ def main():
         x = X[i]
         k = 5
         mark = " <-- dominates baseline" if i in dominates else ""
-        print(f"{'':4s} {k:5d} {F[i,0]:12.3e} {F[i,1]:10.1f} {F[i,2]:15.3f}{mark}")
+        print(f"{'':4s} {k:5d} {F[i,0]:12.3e} {F[i,1]:18.1f}{mark}")
 
     report_cornered(X)
 
@@ -177,16 +173,16 @@ def _plot(F, bF, X, b):
 
     keys = [5 for _ in X]
     fig = go.Figure()
-    fig.add_trace(go.Scatter3d(
-        x=F[:, 0], y=F[:, 1], z=F[:, 2], mode="markers",
+    fig.add_trace(go.Scatter(
+        x=F[:, 0], y=F[:, 1], mode="markers",
         marker=dict(size=6, color=keys, colorscale="Viridis", showscale=True,
                     colorbar=dict(title="total keys")),
-        text=[f"keys {k}<br>effort/char {a:.3e}<br>mass {m:.1f} g<br>defl {d:.3f} mm"
-              for k, a, m, d in zip(keys, F[:, 0], F[:, 1], F[:, 2])],
+        text=[f"keys {k}<br>effort/char {a:.3e}<br>gauntlet {m:.1f} g"
+              for k, a, m in zip(keys, F[:, 0], F[:, 1])],
         hoverinfo="text", name="Pareto front",
     ))
-    fig.add_trace(go.Scatter3d(
-        x=[bF[0]], y=[bF[1]], z=[bF[2]], mode="markers",
+    fig.add_trace(go.Scatter(
+        x=[bF[0]], y=[bF[1]], mode="markers",
         marker=dict(size=12, symbol="diamond", color="#e45756"),
         name=f"baseline ({'feasible' if b['feasible'] else 'INFEASIBLE'})",
     ))
@@ -194,8 +190,8 @@ def _plot(F, bF, X, b):
         title="ExoKey Stage 4 — Pareto front. Every point is a FEASIBLE device: all keys "
               "pressable by the 5th–95th percentile hand, no saturation, frame clears the "
               "flesh, within yield.",
-        scene=dict(xaxis_title="effort / character (Σa³)", yaxis_title="mass (g)",
-                   zaxis_title="worst key deflection (mm)"),
+        xaxis_title="effort / character (Σa³) — how tiring it is to type",
+        yaxis_title="grown gauntlet + adjusters (g) — what it costs to hold the buttons steady",
         template="plotly_white", margin=dict(l=0, r=0, t=60, b=0),
     )
     fig.write_html("out/pareto.html", include_plotlyjs="cdn")

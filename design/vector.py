@@ -23,13 +23,14 @@ import os
 
 import numpy as np
 
-from design.params import (COMMON_DRIVE as _CD, RESIDUAL_MAX as _RESID,
+from design.params import (COMMON_DRIVE as _CD, DEFLECTION_MAX, RESIDUAL_MAX as _RESID,
                            SVALBOARD, WELL_WALL as _WELL_WALL, check_coherent)
 from hand.cradle import solve as cradle_solve
 from hand.myohand import FINGERS, FLEXION_JOINTS, MyoHand
 
 check_coherent(SVALBOARD)  # force and travel must describe the SAME switch
 from structure.frame import DIGIT_FLESH, build_body, clearance, solve
+from structure.lattice import cost as gauntlet_cost
 
 # Switch travel and cap geometry. These describe a LOW-PROFILE wearable switch, and they
 # must be consistent with PRESS_N below -- they were not, and it cost us the 10-key designs.
@@ -152,18 +153,12 @@ for _f in ("index", "middle", "ring", "little"):
 # already in each digit's dof set, so the effort model charges for the splay automatically.
 for _f in ("index", "middle", "ring", "little"):
     REAL_BOUNDS[f"ab_{_f}"] = (-0.9, 0.9)  # fraction of the MCP abduction range
-REAL_BOUNDS["alu_w"] = (0.004, 0.012)
-REAL_BOUNDS["alu_t"] = (0.0008, 0.0030)
-REAL_BOUNDS["palm_offset"] = (0.014, 0.030)  # how far palmar the palm support bears
-# STAND-OFF of the well from the body face. Was (0.004, 0.014) and the optimiser PINNED it
-# to 0.014 in every design on the front -- `report_cornered` flagged it, which is what that
-# check exists for. A cornered variable means one of two things, and here it is the second:
-# either the variable is dead, or THE BOUND IS WRONG AND THE ANSWER IS AN ARTEFACT OF IT.
-# The geometry wants the wells further off the body than 14 mm, because that is how the body
-# stays clear of the finger BONES while the wells stay out at the fingertips. Widened.
-REAL_BOUNDS["stem"] = (0.004, 0.035)
-REAL_BOUNDS["body_half"] = (0.016, 0.030)  # body half-width: a ONE-SIZE body must fit the
-REAL_BOUNDS["body_dist"] = (0.040, 0.070)  # 5th percentile too, so its SIZE has to be free
+# ⚠ SIX VARIABLES DIED WITH THE PALMAR BOX: alu_w, alu_t, palm_offset, stem, body_half,
+# body_dist. They shaped a body bolted to the palm, and there is no such body -- the structure is
+# the GROWN GAUNTLET, whose shape is not parameterised at all: it is whatever Wolff's law leaves
+# behind on a free-form lattice. Leaving them in REAL_BOUNDS would have the GA spending its
+# population searching six dimensions that change nothing, which is not a harmless waste: in a
+# mixed-variable GA it dilutes the crossover and slows everything that DOES matter.
 
 # BODY_PROX is FIXED, not optimised. It pinned to its lower bound in all 200 designs of the
 # first front, because reaching further proximally is monotonically WORSE: it adds mass AND
@@ -567,22 +562,21 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
     o_ref, e_d, e_r, e_o = hand_axes(ref, ref.q_neutral)
     ref_local = {f: keys_ref[(f, 0)][0] - o_ref for f in FINGERS}
 
-    params = dict(
-        sec_alu=(float(x["alu_w"]), float(x["alu_t"])),
-        palm_offset=float(x["palm_offset"]),
-        body_half=float(x["body_half"]),
-        body_prox=BODY_PROX,
-        body_dist=float(x["body_dist"]),
-        stem=float(x["stem"]),
-        mat_frame=str(x["material"]),
-    )
-    exo = build_body(ref, ref.q_neutral, keys_ref, params)
-    st = solve(exo, [(f, 0) for f in FINGERS], press_N=press_N)
+    # ⚠ THE PALMAR BOX IS GONE, AND SO IS ITS CLEARANCE CONSTRAINT.
+    #
+    # `build_body` bolted a box to the palm, and "clearance" asked whether that box cut into the
+    # fingers. There is no box. The structure is the GAUNTLET, and its clearance is not a
+    # constraint the optimiser has to satisfy -- it is TRUE BY CONSTRUCTION, because
+    # structure.lattice.ground() checks every candidate strut against the skin and simply does not
+    # offer the ones that pass through flesh. A constraint the design space cannot violate does
+    # not belong in G; leaving it there failed every layout on the geometry of a dead architecture.
+    #
+    # Six design variables died with it (alu_w, alu_t, palm_offset, body_half, body_dist, stem):
+    # they shaped a body nothing now builds. The search space is 27-D no longer.
 
     worst_travel_deficit = -np.inf
     worst_saturation = -np.inf
     worst_residual = -np.inf   # CAN THE DIGIT ACTUALLY BALANCE THE KEY? see below
-    worst_clear = np.inf
     worst_swept = np.inf
     required_adjust = 0.0
     per_hand: list = []
@@ -645,10 +639,6 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
 
         per_hand.append((effort, sat, trav, resid))
 
-        q_on = h.compose({f: postures[(f, 0)] for f in FINGERS})
-        for q_chk in (q_on, h.q_neutral):
-            gaps = clearance(h, q_chk, exo, offset=shift, only=DIGIT_FLESH, bone=True)
-            worst_clear = min(worst_clear, min(gaps.values()))
         worst_swept = min(
             worst_swept, swept_path_clearance(h, keys_ref, curls, n_keys, shift)
         )
@@ -740,9 +730,24 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
     # ⚠ PLACEHOLDER: the adjuster mass model is a guess (a slide + lock per finger).
     adj_mass = 5.0 * (2.0 + 0.15 * adjust * 1000.0)  # g
 
+    # ---- THE STRUCTURE: the grown gauntlet, not the palmar box -------------------------------
+    #
+    # THE CO-DESIGN. The layout decides WHERE the buttons are and WHICH directions are wired; the
+    # gauntlet decides what it costs to hold them steady. Those two were never in the same loop
+    # before: the optimiser chose postures against a box bolted to the palm, and the bone
+    # structure was grown afterwards, against whatever it was handed.
+    #
+    # `used` is the load set. A well is a FIVE-DIRECTION JOYSTICK, so a digit can push it down,
+    # forward, back, left or right -- 25 (digit, direction) pairs, of which the layout wires 15,
+    # and a typist presses ONE AT A TIME. The old model loaded all five digits simultaneously
+    # along world -Z, which is a load case that never happens in a direction nobody presses.
+    q_ref = ref.compose({f: posture(ref, f, tp_of(x, f), tm_of(x, f),
+                                    float(x.get(f"ab_{f}", 0.0))) for f in FINGERS})
+    gc = gauntlet_cost(ref, q_ref, wired=used, press_N=press_N,
+                       gate=float(DEFLECTION_MAX), mat=str(x["material"]))
+
     f1 = float(np.mean(per_hand_char_effort))  # effort/char typing English QWERTY
-    f2 = exo.mass() * 1000.0 + adj_mass  # g
-    f3 = st["max_deflection"] * 1000.0  # mm
+    f2 = float(gc["mass_g"]) + adj_mass        # g of grown bone + the adjusters
 
     # Structurally <= COMMON_DRIVE now (see REAL_BOUNDS). Kept in G as a live
     # self-check: if anyone reintroduces independent curls, this fires.
@@ -757,9 +762,11 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
         worst_travel_deficit,       # every WIRED direction usable, on every hand
         worst_saturation,           # no muscle maxed out in any wired direction
         required_adjust - adjust,   # the wells must actually reach: STAGE 5, as a constraint
-        -worst_clear,               # body clears the finger BONES of every hand
-        st["max_util"] - 1.0,
-        f3 - 0.5,
+        gc["util"] - 1.0,           # the grown bone must not yield (SF 2) -- ON THE LATTICE now
+        gc["worst"] - float(DEFLECTION_MAX),   # THE DOMAIN MUST BE ABLE TO SUPPORT THIS LAYOUT:
+        #   if the SOLID lattice -- every candidate strut present -- already misses the gate, then
+        #   no amount of material in this design space can hold these buttons steady, and the
+        #   layout is infeasible however cheap it is to type on. ESO can only take material away.
         spread - float(COMMON_DRIVE),  # common drive: built in, and re-checked here
         sep_violation,              # the five wells must physically fit
         -worst_swept,
@@ -768,9 +775,9 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
     ]
 
     return dict(
-        F=[f1, f2, f3], G=g,
+        F=[f1, f2], G=g, gauntlet=gc,
         n_keys=n_keys, total_keys=5,
-        keys_ref=keys_ref, curls=curls, exo=exo, struct=st, press_N=press_N,
+        keys_ref=keys_ref, curls=curls, press_N=press_N,
         key_sep=sep_violation, key_sep_pair=sep_pair, swept=worst_swept,
         action_map=action_map, required_adjust=required_adjust, adjust=adjust,
         char_effort_by_hand=per_hand_char_effort,

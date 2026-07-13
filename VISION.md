@@ -905,6 +905,8 @@ These bound every conclusion above.
   | `COLUMN_SHIFT_COST` | 5e-6 | cost of translating the hand to the index's 2nd column |
   | `SHIFT_FREQ` | 4.0 /100 letters | left-shift usage. It **decides whether a pointer fits**: with shift on a well, the mouse costs one slot more than the hand has; move shift to a hold/chord and it fits. |
   | `WRIST_TISSUE` | 3.0 mm | soft tissue over the dorsal **carpus** — the gauntlet's main anchor. **NOT derivable:** MyoHand's carpals have no flesh geoms at all. Sets how stiff the anchor is. |
+  | `BAR_R` | 0.9 mm | radius of a lattice strut in the grown gauntlet. ⚠ **The bar section and the topology trade against each other and only the topology is being solved.** A thinner rod would grow a denser, finer skeleton at the same mass; a thicker one a sparser, chunkier one. Nothing has measured which is better, and nothing has printed one. |
+  | `LAYER` | 6 mm | depth of the lattice — the gap between its inner and outer node sheets. It **is the lever arm** that gives the gauntlet its bending stiffness, so it is the most load-bearing number in `structure/lattice.py`. Chosen to keep the total standoff under ~10 mm, which is a judgement about when a wearable starts to "get in the way", not a measurement. |
   | `RESIDUAL_MAX` | 0.05 | how much of the required joint torque a digit may FAIL to produce and still be said to "press" the key. ⚠ Ideally **zero**. It is a tolerance, and **the whole action set depends on where this line is drawn** — sensitivity must be reported. |
 
 - **`SOFT_TISSUE_K`** (25 N/mm) is literature, not measurement: the band is 10–50 N/mm and

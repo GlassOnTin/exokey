@@ -39,12 +39,17 @@ from pymoo.core.variable import Choice, Integer, Real
 from design.vector import INT_BOUNDS, MATERIAL_CHOICES, REAL_BOUNDS, evaluate
 
 CONSTRAINT_NAMES = [
-    "travel", "saturation", "adjust-range", "clearance", "yield", "mushy", "common-drive",
+    "travel", "saturation", "adjust-range", "yield", "supportable", "common-drive",
     "key-overlap", "swept-path", "well-finger", "performable",
 ]
 # "travel" and "saturation" now mean ALL THREE ACTIONS (push/lift/contort) on every hand:
 # a key that can be pushed but not lifted is a one-row key.
-OBJECTIVE_NAMES = ["effort/char", "mass (g)", "deflection (mm)"]
+OBJECTIVE_NAMES = ["effort/char", "gauntlet mass (g)"]
+# ⚠ DEFLECTION IS NO LONGER AN OBJECTIVE. It was one while the structure was a fixed palmar box,
+# where mass and crispness genuinely traded. The gauntlet is GROWN to the gate: ESO deletes struts
+# until the buttons are exactly as crisp as they are allowed to be, so deflection is pinned by
+# construction and the only question left is what that costs in GRAMS. Keeping it as an objective
+# would have the GA hunting a number the structural model has already fixed.
 
 # MuJoCo models are not picklable, so each worker process builds its own hands once and
 # caches them here. Building them in the Problem would make the Problem unpicklable.
@@ -72,7 +77,7 @@ class ExoKeyProblem(ElementwiseProblem):
         for name, (lo, hi) in INT_BOUNDS.items():
             vars[name] = Integer(bounds=(lo, hi))
         vars["material"] = Choice(options=MATERIAL_CHOICES)
-        super().__init__(vars=vars, n_obj=3, n_ieq_constr=len(CONSTRAINT_NAMES), **kw)
+        super().__init__(vars=vars, n_obj=2, n_ieq_constr=len(CONSTRAINT_NAMES), **kw)
 
     def _evaluate(self, x, out, *args, **kwargs):
         try:
@@ -82,5 +87,5 @@ class ExoKeyProblem(ElementwiseProblem):
         except Exception:
             # A frame can be geometrically degenerate (e.g. a singular FEA). Report it as
             # badly infeasible rather than crashing the run -- but NEVER as feasible.
-            out["F"] = [1e6, 1e6, 1e6]
+            out["F"] = [1e6, 1e6]
             out["G"] = [1e3] * len(CONSTRAINT_NAMES)
