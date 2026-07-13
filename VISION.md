@@ -66,16 +66,36 @@ So:
 **The five directions are genuinely distinct** — each recruits a different muscle group, which
 is the entire premise: a sensor could not tell them apart otherwise.
 
-**Their costs differ by 1.9 million×:**
+**But only three of the five are PERFORMABLE, and which three is not a free choice.** An action
+is performable only if the digit's muscles can actually balance the key reaction (§5 — this was
+never checked, and the omission invalidated everything that used to be written here). Effort is
+meaningless for an action that cannot be done; `—` marks those, with the irreducible torque
+residual in brackets.
 
 | finger | click | forward | back | left | right |
 |---|---|---|---|---|---|
-| middle | **1.4e-07** | 4.8e-06 | 2.4e-05 | 1.9e-04 | 2.5e-05 |
-| ring | 6.2e-07 | 1.6e-06 | 3.3e-04 | 9.7e-03 | 2.0e-03 |
-| index | 2.7e-06 | 1.6e-03 | 7.7e-04 | **2.7e-01** | 7.1e-06 |
+| **thumb** | — (26%) | — (44%) | — (27%) | — (29%) | — (33%) |
+| index | **1.1e-07** | 2.5e-06 | 2.0e-06 | 1.6e-05 | 1.2e-03 |
+| middle | **1.2e-08** | 3.9e-06 | 4.8e-06 | — (7%) | — (41%) |
+| ring | **3.8e-07** | 4.6e-05 | 1.8e-05 | — (37%) | — (63%) |
+| little | 4.5e-05 | 3.7e-06 | **1.9e-06** | — (24%) | 3.7e-04 |
 
-`index/left` is near muscle saturation — effectively impossible for anybody. **Click is
-cheapest, everywhere.** This asymmetry is the design's main lever.
+Read it in three parts, because each is a design decision:
+
+1. **The thumb can perform NOTHING.** It has no adductor (§5). **No characters go under it.**
+2. **`left`/`right` mostly fail** for middle, ring and little — the interossei are genuinely
+   weak. That is a *prediction* of the muscle model, not a tuned outcome.
+3. **What survives is exactly `click` / `forward` / `back` on four fingers = three rows each =
+   15 letters**, which is precisely what QWERTY's left half needs. The device is not
+   comfortably over-provisioned; it fits with nothing to spare.
+
+Among the actions that *can* be done, costs still differ by **~10⁵×**, and that spread is the
+design's main lever.
+
+> ⚠ **This table replaces one that claimed a 1.9-million× spread and "click is cheapest
+> everywhere".** Both were artifacts: an action a digit *cannot* perform produced a small
+> achievable torque, hence small activations, hence **low effort** — so impossible actions
+> looked **cheap**. See §5.
 
 **QWERTY's "home row" is a fiction** inherited from a mechanical typewriter. The real row
 frequencies (left hand):
@@ -87,7 +107,7 @@ frequencies (left hand):
 The *top* row is the most-used. So the cheapest direction belongs there — and **choosing the
 direction→row mapping is worth 5×**. It is firmware. It is free. It should be optimised.
 
-**The population needs ~12 mm of per-finger well travel** to span the 5th–95th percentile —
+**The population needs ~14 mm of per-finger well travel** to span the 5th–95th percentile —
 and it is essentially **two axes, not five**:
 
 | axis | range needed |
