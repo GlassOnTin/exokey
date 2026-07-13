@@ -17,7 +17,7 @@ import plotly.graph_objects as go
 from design.vector import posture, tm_of, tp_of
 from hand.myohand import FINGERS
 from opt.problem import hands
-from viz.scene import _mesh_traces
+from viz.scene import _mesh_traces, skin_trace
 
 
 def tri(nodes, quads, sel, colour, opacity, name):
@@ -52,7 +52,13 @@ def main():
     q = h.compose({f: posture(h, f, tp_of(x, f), tm_of(x, f), x.get(f"ab_{f}", 0.0))
                    for f in FINGERS})
 
-    traces = _mesh_traces(h, q, opacity=0.14)
+    # THE SKIN, not the skeleton. Until now every render drew bones and capsules -- which is
+    # why every geometry error had to be caught by a number instead of by eye.
+    traces = []
+    sk = skin_trace(h, q, opacity=0.30)
+    if sk is not None:
+        traces.append(sk)
+    traces += _mesh_traces(h, q, opacity=0.06)      # the bones, faint, underneath
     t = tri(nodes, quads, dead, "#cccccc", 0.10, "deleted (the domain)")
     if t is not None:
         traces.append(t)

@@ -271,3 +271,24 @@ def show(
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     fig.write_html(path, include_plotlyjs="cdn")
     return os.path.abspath(path)
+
+
+def skin_trace(h, q, opacity: float = 0.35, colour: str = "#e8c4a8"):
+    """The hand's SKIN, from the MRI-derived flesh model (hand/flesh.py).
+
+    Every render in this project until now drew BONES and CAPSULES. That is why every geometry
+    bug had to be caught by a NUMBER -- the shell 4.3 mm inside a finger, the wrap sweeping
+    through a fingertip, the wells overlapping -- when a picture of the actual hand would have
+    shown them at a glance. A skeleton is not what the device touches.
+    """
+    from hand.flesh import skin
+
+    V, F = skin(h, q)
+    if not len(V):
+        return None
+    return go.Mesh3d(
+        x=V[:, 0], y=V[:, 1], z=V[:, 2], i=F[:, 0], j=F[:, 1], k=F[:, 2],
+        color=colour, opacity=opacity, flatshading=False,
+        lighting=dict(ambient=0.55, diffuse=0.85, specular=0.12, roughness=0.9),
+        name="skin", hoverinfo="skip", showlegend=False,
+    )

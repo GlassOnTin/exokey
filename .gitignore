@@ -3,3 +3,6 @@ out/
 __pycache__/
 .pytest_cache/
 *.pyc
+
+# PIANO hand-MRI dataset (Apache-2.0) -- 769 MB, fetched by scripts/measure_tissue.py
+data/piano/

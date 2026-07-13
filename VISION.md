@@ -798,6 +798,72 @@ from this model. It is taken as 3 mm and declared.
 
 ---
 
+## 5f. A flesh model to go with the bones
+
+**The user: "I think we need to find a flesh model to go with the bones."** It was the
+load-bearing gap. MyoHand ships **bones** and crude flesh **capsules** — and over the **carpus**,
+exactly where a gauntlet anchors, **no flesh at all**. So `WRIST_TISSUE` was a **guess** (3 mm),
+and it set the stiffness of the whole structure's main anchor.
+
+### The source, and why not the obvious one
+
+| | licence | |
+|---|---|---|
+| **[PIANO hand-MRI dataset](https://github.com/reyuwei/PIANO_mri_data)** | **Apache-2.0** | 50 MRI volumes + bone masks + muscle masks. **Used.** |
+| [NIMBLE](https://github.com/reyuwei/NIMBLE_model) (parametric model built on it) | ⚠ **avoided** | code is MIT but `LICENSE.md` is the **unedited GitHub template**; the model weights sit on a **Google Drive with no licence**; and it emits `*_manov.xyz` — **MANO-topology** vertices. MANO is Max Planck's **non-commercial** licence, which this project rejected on day one as "a live landmine if this ever becomes a product". |
+
+We take the **source data**, not the MANO-registered model.
+
+### The method, and two ways of getting it wrong
+
+Segment the hand from the raw MRI (Otsu), take the bone surface from the mask, and **ray-cast
+from each bone-surface voxel along its OWN outward normal** until the ray leaves the hand. *That*
+is the tissue the gauntlet presses through.
+
+⚠ **Distance-to-air is the wrong metric.** It is the shortest way out in *any* direction — and
+for a palmar bone that is **sideways**, out of the side of the hand rather than through the pad.
+It read the finger **pulp as thinner than the nail bed**, which is anatomically impossible, and
+that is how it announced itself.
+
+⚠ **Cast only from the face you mean.** Ray-casting dorsally from *every* bone-surface voxel
+sends the ray from the palmar ones **straight through the bone** and out the far side. It read
+**7 mm of "skin" on the back of a hand** that is famously skin over bone.
+
+The dorsal/palmar **sign** is derived, not assumed: **the fingertip pulp is palmar, and it is the
+thicker side** — an anatomical fact the data can be asked to confirm.
+
+### What it changed
+
+| region | assumed | **measured (MRI)** |
+|---|---|---|
+| **dorsal carpus** (the anchor) | **3.0 mm** *(guess)* | **6.8 mm** |
+| dorsal metacarpals | 1.4–3.1 mm *(capsules)* | **4.8 mm** |
+| fingertip pulp (palmar) | — | 4.8 mm ✓ |
+
+**The tissue is ~2× thicker than assumed, so the anchor was ~2× too stiff.** The guess was
+flattering the design in the one place the whole structure hangs from.
+
+**⚠ And the design turned out not to care — which is the entire point of measuring.** With the
+anchor **2.75× softer** (4,485 kN/m against 12,359), the button deflection moved **361 → 376 µm**.
+Four percent. The **distributed-patch anchor** had already made the structure insensitive to the
+number it used to hang on. Before that fix, this guess would have decided everything.
+
+### And the renders finally show a hand
+
+`hand/flesh.py` gives MyoHand a **skin** — each bone offset by its *measured*, direction-dependent
+tissue. Every render until now drew **bones and capsules**, which is why every geometry bug in
+this project had to be caught by a **number** rather than by eye: the shell 4.3 mm inside a
+finger, the wrap sweeping through a fingertip, the wells overlapping. **A skeleton is not what the
+device touches.**
+
+⚠ **One MRI figure is thrown away, not used:** proximal-phalanx *palmar* tissue reads **1.0 mm**,
+which is not believable (flexor tendons and fat live there). Most likely the Otsu mask biting into
+the finger where the digits touch. The **phalanges keep MyoHand's capsules** — which agree with
+the MRI's *dorsal* figures — and only the **metacarpals and carpus** take MRI values, which is
+where MyoHand had nothing anyway.
+
+---
+
 ## 6. Model limitations — stated, not hidden
 
 These bound every conclusion above.

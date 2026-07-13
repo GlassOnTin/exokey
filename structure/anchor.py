@@ -32,16 +32,32 @@ WHAT THE GAUNTLET BEARS ON, AND HOW HARD
 
    Model them both ways round and the structure is being held on by a force that does not exist.
 
-4. TISSUE STIFFNESS IS NOT ONE NUMBER. k = E*A/t, and t is MEASURED from the model: the skin
-   over the metacarpals is only 2.1 mm thick (bone radius vs flesh capsule, perpendicular to
-   the bone axis). Thin tissue is a STIFF anchor. `SOFT_TISSUE_K` = 25 N/mm was derived for a
-   PALM patch -- a muscle pad ten times thicker -- and using it on the back of the hand
-   understates the anchor badly.
+4. TISSUE STIFFNESS IS NOT ONE NUMBER, AND IT IS NOW MEASURED FROM MRI.
 
-⚠ WHAT IS NOT DERIVABLE FROM THIS MODEL. MyoHand has NO FLESH over the carpus or the forearm --
-the carpals and the radius/ulna are bare bones. So the tissue thickness at the WRIST, which is
-exactly where a gauntlet wants to anchor, cannot be measured here. It is taken as 3 mm
-(anatomical: skin plus extensor tendons over the dorsal wrist) and it is declared a GUESS.
+   k = E*A/t, so the thickness matters directly -- and MyoHand could not supply it. Its
+   capsules are crude, and over the CARPUS, which is exactly where a gauntlet anchors, it has
+   NO FLESH AT ALL. So the wrist tissue was a GUESS (3 mm), and it set the stiffness of the
+   structure's main anchor.
+
+   The user: "I think we need to find a flesh model to go with the bones." So we did --
+   the PIANO hand-MRI dataset (Apache-2.0, 50 volumes with bone masks; scripts/measure_tissue.py).
+   Segment the skin from the raw MRI, take the bone surface from the mask, and RAY-CAST along
+   each bone's OWN outward normal until the ray leaves the hand. That distance IS the tissue
+   the gauntlet presses through.
+
+       region                     assumed                 MEASURED (MRI)
+       dorsal carpus (the anchor)   3.0 mm    (a GUESS)       6.8 mm
+       dorsal metacarpals           1.4-3.1 mm (capsules)     4.8 mm
+       fingertip pulp (palmar)      --                        4.8 mm  (thicker than the nail
+                                                                       bed -- sanity holds)
+
+   THE TISSUE IS ~2x THICKER THAN ASSUMED, so THE ANCHOR WAS ~2x TOO STIFF. The guess was
+   flattering the design in the one place the whole structure hangs from.
+
+   ⚠ AND THE DESIGN TURNED OUT NOT TO CARE, which is the point of measuring. With the anchor
+   2.75x softer (4,485 kN/m against 12,359), the button deflection moved 361 -> 376 um -- 4%.
+   The DISTRIBUTED PATCH made the structure insensitive to the very number it used to hang on.
+   Before the patch fix, that guess would have decided everything.
 """
 from __future__ import annotations
 
@@ -57,13 +73,40 @@ CARPUS = ("capitate", "hamate", "lunate", "scaphoid", "trapezoid", "triquetrum")
 METACARPALS = ("secondmc", "thirdmc", "fourthmc", "fifthmc")
 BEARING = CARPUS + METACARPALS
 
-# ⚠ GUESS. MyoHand has no flesh over the carpus at all, so this cannot be measured from the
-# model. Anatomically the dorsal wrist is skin + extensor tendons over bone: thin.
-WRIST_TISSUE = P("WRIST_TISSUE", 0.003, "m", Source.GUESS,
-                 "Soft-tissue thickness over the dorsal carpus. NOT derivable: MyoHand's "
-                 "carpals have no flesh geoms at all. Anatomically thin (skin + extensor "
-                 "tendons). It sets how stiff the gauntlet's main anchor is.",
+# MEASURED FROM MRI. Not a guess any more.
+#
+# It WAS a guess -- 3.0 mm -- because MyoHand has no flesh over the carpus at all, and the
+# guess set the stiffness of the gauntlet's MAIN ANCHOR. So we went and got a flesh model:
+# the PIANO hand-MRI dataset (Apache-2.0), 50 volumes with bone masks. Segment the skin from
+# the raw MRI, take the bone surface from the mask, and RAY-CAST along each bone's own outward
+# normal until the ray leaves the hand. That distance IS the tissue the gauntlet presses through.
+#
+#   region                    guessed / MyoHand      MEASURED (MRI)
+#   dorsal carpus (the anchor)   3.0 mm  (GUESS)         6.8 mm
+#   dorsal metacarpals           1.4-3.1 mm (capsules)   4.8 mm
+#   fingertip pulp (palmar)      --                      4.8 mm   (thicker than the nail bed:
+#                                                                  the sanity check holds)
+#
+# THE TISSUE IS ~2x THICKER THAN WE ASSUMED, and k = E*A/t, so THE ANCHOR WAS ~2x TOO STIFF.
+# The guess was flattering the design, in the one place the whole structure hangs from.
+#
+# ⚠ Two things wrong on the way here, both worth keeping:
+#   * DISTANCE-TO-AIR IS THE WRONG METRIC. It is the shortest way out in ANY direction, and for
+#     a palmar bone that is SIDEWAYS, not through the pad. It read the finger pulp as THINNER
+#     than the nail bed, which is anatomically impossible.
+#   * CAST ONLY FROM THE FACE YOU MEAN. Ray-casting dorsally from EVERY bone-surface voxel
+#     sends the ray from the palmar ones straight THROUGH the bone and out the far side --
+#     which read 7 mm of "skin" on the back of a hand that is famously skin over bone.
+WRIST_TISSUE = P("WRIST_TISSUE", 0.0068, "m", Source.DERIVED,
+                 "Dorsal carpus, MEASURED from the PIANO hand-MRI dataset (Apache-2.0): "
+                 "ray-cast from the bone surface along its outward normal to the skin. Was a "
+                 "3.0 mm GUESS, which made the gauntlet's main anchor twice as stiff as it is.",
                  describes="wrist anchor")
+
+METACARPAL_TISSUE = P("METACARPAL_TISSUE", 0.0048, "m", Source.DERIVED,
+                      "Dorsal metacarpals, MEASURED from the same MRI. MyoHand's crude "
+                      "capsules said 1.4-3.1 mm.",
+                      describes="dorsum anchor")
 
 # E for compressed soft tissue, BACK-DERIVED from the literature figure the beam model already
 # used: SOFT_TISSUE_K = 25 N/mm was quoted for a palm contact patch. Taking that patch as
@@ -82,13 +125,10 @@ def tissue_thickness(h) -> dict[str, float]:
     it does not."""
     m = h.model
     out = {}
+    # MEASURED (MRI), not MyoHand's capsules. Its capsules put the dorsum at 1.4-3.1 mm; the
+    # MRI says 4.8 mm, and the difference is a factor of two on the anchor's stiffness.
     for bn in METACARPALS:
-        bid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, bn)
-        for g in range(m.body_geomadr[bid], m.body_geomadr[bid] + m.body_geomnum[bid]):
-            if m.geom_type[g] != mujoco.mjtGeom.mjGEOM_CAPSULE:
-                continue
-            out[bn] = max(0.001, float(m.geom_size[g][0]) - _bone_radius(h, g))
-            break
+        out[bn] = float(METACARPAL_TISSUE)
     for bn in CARPUS:
         out[bn] = float(WRIST_TISSUE)      # ⚠ not measurable here. Declared.
     return out

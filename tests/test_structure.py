@@ -452,3 +452,68 @@ def test_the_anchor_must_be_a_PATCH_not_a_hinge():
         "budget, and no amount of shell thickness will fix it."
     )
     assert T.min() > 0.0005 and T.max() < 0.010, f"implausible tissue thickness: {T.min()}..{T.max()}"
+
+
+def test_the_flesh_model_is_measured_not_guessed():
+    """WE FOUND A FLESH MODEL TO GO WITH THE BONES.
+
+    The user: "I think we need to find a flesh model to go with the bones." It was the
+    load-bearing gap. MyoHand ships bones and crude flesh CAPSULES -- and over the CARPUS,
+    exactly where a gauntlet anchors, NO FLESH AT ALL. So `WRIST_TISSUE` was a GUESS (3 mm) and
+    it set the stiffness of the whole structure's main anchor.
+
+    Source: the PIANO hand-MRI dataset (Apache-2.0). We deliberately do NOT use NIMBLE, the
+    parametric model built on it: its LICENSE.md is the unedited GitHub template, its weights
+    sit on a Google Drive with no licence, and it emits MANO-topology vertices -- and MANO is
+    Max Planck's non-commercial licence, which this project rejected on day one.
+
+    MEASURED (ray-cast from each bone-surface voxel along its OWN outward normal):
+
+        region                DORSAL    PALMAR      vs what we had
+        wrist / carpus        6.8 mm    6.6 mm      3.0 mm  (a GUESS)
+        metacarpals           4.8 mm    3.8 mm      1.4-3.1 (capsules)
+        fingertips            2.8 mm    4.8 mm      -- pulp thicker than nail bed. Correct.
+
+    THE TISSUE IS ~2x THICKER THAN ASSUMED, so the anchor was ~2x TOO STIFF -- the guess was
+    flattering the design in the one place the structure hangs from.
+
+    AND THE DESIGN TURNED OUT NOT TO CARE, which is the whole point of measuring: with the
+    anchor 2.75x softer, the button moved 361 -> 376 um. 4%. The DISTRIBUTED PATCH had already
+    made the structure insensitive to the number it used to hang on.
+    """
+    import numpy as np
+
+    from design.vector import posture, tm_of, tp_of
+    from hand.flesh import TISSUE, skin
+    from hand.myohand import FINGERS
+    from opt.problem import hands
+    from opt.run import baseline
+
+    # the anatomical sanity check that caught TWO wrong metrics on the way here
+    assert TISSUE["carpus"][0] > TISSUE["metacarpal"][0], (
+        "the wrist should carry more tissue than the back of the hand"
+    )
+
+    h = hands()[50]
+    x = baseline()
+    q = h.compose({f: posture(h, f, tp_of(x, f), tm_of(x, f), x.get(f"ab_{f}", 0.0))
+                   for f in FINGERS})
+    V, F = skin(h, q)
+    assert len(V) > 10000 and len(F) > 10000, "the skin should be a real mesh"
+
+    # the skin must ENCLOSE the bones it is wrapped around
+    import mujoco
+
+    m = h.model
+    h.fk(q)
+    b = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, "thirdmc")
+    for g in range(m.body_geomadr[b], m.body_geomadr[b] + m.body_geomnum[b]):
+        if m.geom_type[g] != mujoco.mjtGeom.mjGEOM_MESH:
+            continue
+        mid = m.geom_dataid[g]
+        va, vn = m.mesh_vertadr[mid], m.mesh_vertnum[mid]
+        B = (m.mesh_vert[va:va + vn] @ h.data.geom_xmat[g].reshape(3, 3).T
+             + h.data.geom_xpos[g])[::11]
+        d = np.array([float(np.min(np.linalg.norm(V - p, axis=1))) for p in B])
+        assert d.max() < 0.012, f"a metacarpal pokes {d.max()*1000:.0f} mm out of the skin"
+        break
