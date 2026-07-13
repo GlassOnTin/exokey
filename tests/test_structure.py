@@ -18,6 +18,16 @@ from structure.frame import (
 )
 
 
+# ⚠ THE PALMAR BOX IS NO LONGER A DESIGN VECTOR. Six variables (alu_w, alu_t, palm_offset, stem,
+# body_half, body_dist) shaped a body bolted to the palm, and the structure is the grown gauntlet
+# now, so they were deleted from REAL_BOUNDS. The tests below still exercise structure/frame.py --
+# the shell-vs-beam lesson, the floor legs, where the compliance lives -- and those are still real
+# physics about a real module. They just have to state the box's dimensions themselves instead of
+# reading them out of a design vector that has stopped describing one.
+BOX = dict(alu_w=0.008, alu_t=0.002, palm_offset=0.020, stem=0.008,
+           body_half=0.026, body_dist=0.055, material="cf_pa12")
+
+
 @pytest.fixture(scope="module")
 def hand():
     return MyoHand()
@@ -218,9 +228,9 @@ def test_where_the_compliance_lives_DEPENDS_ON_THE_DESIGN():
     h = hands()[50]
     x = baseline()
     keys, _ = keys_on_reference(h, x)
-    par = dict(sec_alu=(float(x["alu_w"]), float(x["alu_t"])), palm_offset=float(x["palm_offset"]),
-               body_half=float(x["body_half"]), body_prox=BODY_PROX, body_dist=float(x["body_dist"]),
-               stem=float(x["stem"]), mat_frame=str(x["material"]))
+    par = dict(sec_alu=(float(BOX["alu_w"]), float(BOX["alu_t"])), palm_offset=float(BOX["palm_offset"]),
+               body_half=float(BOX["body_half"]), body_prox=BODY_PROX, body_dist=float(BOX["body_dist"]),
+               stem=float(BOX["stem"]), mat_frame=str(BOX["material"]))
     chords = [(f, 0) for f in FINGERS]
     base = solve(build_body(h, h.q_neutral, keys, par), chords, press_N=PRESS_N)["max_deflection"]
 
@@ -288,9 +298,9 @@ def test_the_beam_model_lied_about_the_arch_by_25x():
 
     h = hands()[50]
     x = baseline()
-    par = dict(alu_t=float(x["alu_t"]), body_half=float(x["body_half"]), body_prox=BODY_PROX,
-               body_dist=float(x["body_dist"]), palm_offset=float(x["palm_offset"]),
-               mat_frame=str(x["material"]), press_N=PRESS_N)
+    par = dict(alu_t=float(BOX["alu_t"]), body_half=float(BOX["body_half"]), body_prox=BODY_PROX,
+               body_dist=float(BOX["body_dist"]), palm_offset=float(BOX["palm_offset"]),
+               mat_frame=str(BOX["material"]), press_N=PRESS_N)
     w_flat, m_flat = palm_shell(h, h.q_neutral, par, shape="flat")
     w_arch, m_arch = palm_shell(h, h.q_neutral, par, shape="follow")
 
@@ -338,7 +348,7 @@ def test_a_hugging_frame_must_be_a_SHELL_not_sticks():
 
     h = hands()[50]
     x = baseline()
-    par = dict(alu_t=float(x["alu_t"]), mat_frame=str(x["material"]), press_N=PRESS_N)
+    par = dict(alu_t=float(BOX["alu_t"]), mat_frame=str(BOX["material"]), press_N=PRESS_N)
 
     w_flat, m_flat, _ = dorsal_rail(h, h.q_neutral, "index", par, curved=False)
     w_curv, m_curv, _ = dorsal_rail(h, h.q_neutral, "index", par, curved=True)
@@ -383,9 +393,9 @@ def test_the_floor_legs_must_reach_DISTINCT_feet():
     h = hands()[50]
     x = baseline()
     keys, _ = keys_on_reference(h, x)
-    par = dict(sec_alu=(float(x["alu_w"]), float(x["alu_t"])), palm_offset=float(x["palm_offset"]),
-               body_half=float(x["body_half"]), body_prox=BODY_PROX, body_dist=float(x["body_dist"]),
-               stem=float(x["stem"]), mat_frame=str(x["material"]))
+    par = dict(sec_alu=(float(BOX["alu_w"]), float(BOX["alu_t"])), palm_offset=float(BOX["palm_offset"]),
+               body_half=float(BOX["body_half"]), body_prox=BODY_PROX, body_dist=float(BOX["body_dist"]),
+               stem=float(BOX["stem"]), mat_frame=str(BOX["material"]))
     exo = build_body(h, h.q_neutral, keys, par)
     landed = {m.j for m in exo.members if m.name.startswith("floorleg")}
     assert len(landed) >= 3, (
