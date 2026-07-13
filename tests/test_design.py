@@ -12,6 +12,8 @@ from design.vector import (
     evaluate,
     keys_on_reference,
     posture,
+    tm_of,
+    tp_of,
 )
 from hand.myohand import FINGERS, FLEXION_JOINTS, MyoHand
 from hand.scaling import population
@@ -101,43 +103,43 @@ def test_constraints_are_hard_not_penalties(hands):
     an unreachable key. Here `evaluate` returns G separately from F, and a design is
     feasible only if EVERY g <= 0 -- there is no exchange rate between them."""
     r = evaluate(mid_design(), hands)
-    assert len(r["G"]) == 9
+    from opt.problem import CONSTRAINT_NAMES
+    assert len(r["G"]) == len(CONSTRAINT_NAMES)
     assert r["feasible"] == all(v <= 0 for v in r["G"])
     # and the objectives contain no penalty terms: mass and deflection are physical units
     assert r["F"][1] > 0  # grams
     assert r["F"][2] > 0  # mm
 
 
-def test_two_keycaps_cannot_occupy_the_same_space(hands):
-    """A keycap is a physical object. Nothing in the model said so, and EVERY design on the
-    first Pareto front violated it: curled fingertips converge, so with one key per finger
-    the middle and ring keys sat 8.5 mm apart -- inside a ~14 mm cap. The whole front was
-    geometrically unbuildable and no constraint noticed.
+def test_the_five_wells_must_physically_fit(hands):
+    """A well is a CAVITY THE FINGERTIP SITS IN, so its size is the fingertip's size --
+    DERIVED from the model (12-14 mm wide), not a constant.
 
-    Satisfying it needs SPLAY, which is why abduction is a design variable.
+    It was a constant: 12 mm, inherited from when these were KEYCAPS on stems. A keycap sits
+    ON a stem; a fingertip sits IN a well. That single stale number invalidated a whole
+    Pareto front, whose 200 "feasible" designs all had overlapping wells.
+
+    And the consequence is real: gripping a body CONVERGES the fingertips (to ~6-8 mm),
+    while wells need them SPREAD (~17 mm). The hand has to stay relatively OPEN.
     """
-    from design.vector import KEY_PITCH, key_separation, keys_on_reference
+    from design.vector import key_separation, keys_on_reference, well_radius
 
     ref = hands[50]
-    flat = mid_design()
+    # the well must be at least as wide as the fingertip that lives in it
     for f in FINGERS:
-        flat[f"n_{f}"] = 1  # one key each: this isolates LATERAL separation (the splay
-        #                     lever) from row spacing (the dc lever), which is a different
-        #                     constraint with a different fix.
-    for f in ("index", "middle", "ring", "little"):
-        flat[f"ab_{f}"] = 0.0  # no splay
-    keys, _ = keys_on_reference(ref, flat)
-    v_flat, _ = key_separation(keys)   # now a VIOLATION: required pitch - actual gap
-    assert v_flat > 0, "unsplayed fingers should NOT be able to fit keycaps"
+        assert 0.005 < well_radius(ref, f) < 0.010, f"{f}: implausible well radius"
 
-    fanned = dict(flat)
-    for f, s in zip(("index", "middle", "ring", "little"), (1.0, 0.33, -0.33, -1.0)):
-        fanned[f"ab_{f}"] = 0.7 * s
-    keys, _ = keys_on_reference(ref, fanned)
-    v_fan, _ = key_separation(keys)
-    assert v_fan <= 0, f"a 70% fan should separate the keys; still short by {v_fan*1000:.1f} mm"
-    assert v_fan < v_flat
+    curled = mid_design()          # gripping: fingertips converge
+    curled["tm_hand"] = 0.60
+    keys, _ = keys_on_reference(ref, curled)
+    v_curled, _ = key_separation(keys, ref)
+    assert v_curled > 0, "a gripping hand should NOT be able to fit five wells"
 
+    open_ = dict(curled)           # relaxed: fingertips spread
+    open_["tm_hand"] = 0.25
+    keys, _ = keys_on_reference(ref, open_)
+    v_open, _ = key_separation(keys, ref)
+    assert v_open < v_curled, "opening the hand must spread the wells apart"
 
 def test_switch_force_is_fixed_not_optimised():
     """press_N was a design variable over [0.30, 0.80] N and all 60 Pareto designs pinned
@@ -148,46 +150,6 @@ def test_switch_force_is_fixed_not_optimised():
     assert "press_N" not in REAL_BOUNDS
     # 20 gf = 0.196 N -- the Svalboard's magneto-optical key spec, not a guess
     assert PRESS_N == pytest.approx(0.196)
-
-
-def test_switch_travel_matches_the_switch_we_chose(hands):
-    """SWITCH_TRAVEL and PRESS_N must describe the SAME switch. They did not.
-
-    Travel was 3 mm ("a mechanical switch actuates at ~2 mm") -- a Cherry-MX-style
-    full-travel key, 0.45-0.60 N. But the actuation force is 0.30 N, which is a dome or
-    scissor switch, and a scissor switch travels ~1.5 mm. The two constants described
-    different hardware, and the 3 mm figure was strict enough to make 2-keys-per-finger
-    layouts infeasible -- layouts that Typeware actually ships.
-    """
-    from design.vector import CAP_HEIGHT, KEY_PITCH, PRESS_N, SWITCH_TRAVEL
-
-    assert SWITCH_TRAVEL <= 0.002, "a 20 gf magneto-optical key does not travel 3 mm"
-    assert PRESS_N <= 0.25
-    # and a cap is WIDE AND FLAT: its height (a clearance question) is not half its width
-    # (a packing question). Conflating them double-counted the obstacle in the swept check.
-    assert CAP_HEIGHT < KEY_PITCH / 2
-
-
-def test_a_finger_s_own_two_keys_are_a_TWIN_KEY_not_two_caps(hands):
-    """The trick the target device (typeware.tech) uses, and the one this model was missing.
-
-    Two switches on ONE stem, at two positions. Requiring a full keycap pitch between a
-    finger's own two keys treats them as independent colliding caps -- which they are not --
-    and it is a large part of why 2-keys-per-finger came out infeasible here while Typeware
-    actually ships it.
-    """
-    from design.vector import KEY_PITCH, TWIN_KEY_PITCH, key_separation
-
-    assert TWIN_KEY_PITCH < KEY_PITCH
-
-    # a pair on the SAME finger at 9 mm is fine (twin key); the same 9 mm across two
-    # fingers is a collision (two stems, two caps)
-    same = {("index", 0): (np.zeros(3), np.array([1.0, 0, 0])),
-            ("index", 1): (np.array([0.009, 0, 0]), np.array([1.0, 0, 0]))}
-    cross = {("index", 0): (np.zeros(3), np.array([1.0, 0, 0])),
-             ("middle", 0): (np.array([0.009, 0, 0]), np.array([1.0, 0, 0]))}
-    assert key_separation(same)[0] <= 0, "a twin key at 9 mm should be allowed"
-    assert key_separation(cross)[0] > 0, "two stems at 9 mm should collide"
 
 
 def test_five_joystick_directions_use_different_muscle_groups(hands):
@@ -271,3 +233,217 @@ def test_adjustable_wells_are_how_a_one_size_device_fits_a_population(hands):
     # and the constraint really is `built-in range must cover what the population needs`
     i = 2  # "adjust-range"
     assert r["G"][i] == pytest.approx(need - r["adjust"])
+
+
+def test_every_constant_declares_where_it_came_from():
+    """The tripwire for the disease that has cost this project the most time.
+
+    A constant with no provenance is indistinguishable from a fact, and that is how
+    KEY_PITCH (a KEYCAP pitch) survived into the WELL era and invalidated a whole Pareto
+    front, and how SWITCH_TRAVEL (3 mm, a Cherry MX) came to sit beside PRESS_N (0.30 N, a
+    dome switch) describing two different pieces of hardware.
+    """
+    from design.params import REGISTRY, Source, guesses
+
+    assert REGISTRY, "no parameters registered"
+    for p in REGISTRY:
+        assert p.why, f"{p.name} has no stated provenance"
+        assert p.source in Source
+
+    # every GUESS must be findable, because a guess nobody knows is a guess is a lie
+    g = {p.name for p in guesses()}
+    assert g, "no guesses declared — that would itself be suspicious"
+    vision = open("VISION.md").read()
+    missing = [n for n in g if n.lower().replace("_", " ") not in vision.lower()
+               and n not in vision]
+    assert not missing, (
+        f"these are GUESSES and are not disclosed in VISION.md's limitations: {missing}"
+    )
+
+
+def test_switch_force_and_travel_describe_the_same_switch():
+    """They did not. 3 mm of travel is a Cherry MX (0.45-0.60 N); 0.30 N is a dome switch.
+    Two constants, two different pieces of hardware, and the inconsistency alone made
+    2-keys-per-finger look infeasible."""
+    from design.params import SVALBOARD, check_coherent
+
+    check_coherent(SVALBOARD)
+    assert SVALBOARD.force.describes == SVALBOARD.travel.describes
+
+
+def test_a_well_must_face_the_pulp_it_cups(hands):
+    """A WELL IS A CUP, NOT A CAP, so its axis has to point at the pad that sits in it.
+
+    The user caught this by LOOKING at the render: "the thumb button isn't orthogonal to the
+    thumb pad". It was 63 deg off. A flat keycap can tolerate that (you angle the cap); a cup
+    cannot -- 63 deg off means the pulp never seats, it jams on the rim.
+
+    The cause was a workaround that outlived its bug. The axis had been set to the digit's
+    PUSH direction because a pad-normal thumb key once measured ZERO press travel -- but that
+    zero came from the thumb SIGN bug (mp/ip flex NEGATIVE), fixed afterwards. Nothing
+    re-tested the workaround once its reason was gone. This test is that re-test.
+    """
+    from design.vector import keys_on_reference
+
+    ref = hands[50]
+    x = mid_design()
+    keys, _ = keys_on_reference(ref, x)
+    for f in FINGERS:
+        q = posture(ref, f, tp_of(x, f), tm_of(x, f), x.get(f"ab_{f}", 0.0))
+        _, n_pad = ref.pad_pose(q, f)
+        axis = keys[(f, 0)][1]
+        obliq = np.degrees(np.arccos(np.clip(float(axis @ n_pad), -1.0, 1.0)))
+        assert obliq < 5.0, f"{f}: well axis is {obliq:.0f} deg off its own pad normal"
+
+
+def test_the_baseline_still_builds_and_evaluates(hands):
+    """Imports opt/run.py. Sounds trivial; it is not.
+
+    An edit left an empty `for` loop in `baseline()` -- a hard SyntaxError -- and the whole
+    57-test suite went green, because nothing in it imported that module. Two 35-minute
+    optimiser runs died on the import. A test suite that cannot see a file cannot defend it.
+    """
+    from opt.run import baseline
+
+    r = evaluate(baseline(), hands)
+    from opt.problem import CONSTRAINT_NAMES
+
+    assert len(r["G"]) == len(CONSTRAINT_NAMES) and np.isfinite(r["F"]).all()
+
+
+def test_the_fingertip_bone_sits_INSIDE_its_well(hands):
+    """A well is a CHANNEL THE DISTAL PHALANX SLIDES INTO -- not a disc the pad rests on.
+
+    The user, looking at the render: "The finger tip bone should fit into the well, not simply
+    rest the pad on its opening." That was a real geometric error, not a drawing one. A well on
+    the pad normal alone is a device you would have to lower your fingertip into vertically,
+    like a piston. The real thing (DataHand / Svalboard) is open proximally so the finger
+    slides in along its own bone axis, and open dorsally so it can lift out.
+
+    This test also pins the THUMB's bone-axis sign. MuJoCo capsules extend along local z, and
+    NOTHING says which end is distal: z runs distally on the four fingers and PROXIMALLY on the
+    thumb. Trusting it built the thumb's channel pointing away from the thumb (bone at +2..+24
+    mm along a channel spanning -22..+4). The axis is now aimed at the model's own TIP SITE.
+    """
+    import mujoco
+
+    from hand.myohand import PAD_BODIES
+
+    h = hands[50]
+    x = mid_design()
+    for f in FINGERS:
+        q = posture(h, f, tp_of(x, f), tm_of(x, f), x.get(f"ab_{f}", 0.0))
+        wf = h.well_frame(q, f)
+        h.fk(q)
+        bid = mujoco.mj_name2id(h.model, mujoco.mjtObj.mjOBJ_BODY, PAD_BODIES[f])
+        g = next(g for g in range(h.model.body_geomadr[bid],
+                                  h.model.body_geomadr[bid] + h.model.body_geomnum[bid])
+                 if h.model.geom_type[g] == mujoco.mjtGeom.mjGEOM_CAPSULE)
+        c, half = h.data.geom_xpos[g], float(h.model.geom_size[g][1])
+        cap_ax = h.data.geom_xmat[g].reshape(3, 3)[:, 2]
+        L, r = 2 * wf["half"], wf["radius"]
+        for end in (c - half * cap_ax, c + half * cap_ax):
+            d = end - wf["pos"]
+            along, side, depth = d @ wf["axis"], abs(d @ wf["lateral"]), d @ wf["floor"]
+            assert -L - 0.003 <= along <= 0.005, f"{f}: bone end {along*1000:+.1f}mm — channel points the wrong way"
+            assert side < r, f"{f}: bone is {side*1000:.1f}mm off-axis, outside a {r*1000:.1f}mm well"
+            assert depth < 0.002, f"{f}: bone is {depth*1000:+.1f}mm BELOW the well floor"
+
+
+def test_a_well_is_solid_and_no_other_finger_may_be_inside_it(hands):
+    """A WELL IS A SOLID OBJECT, and nothing checked it against the neighbouring FINGERS.
+
+    The user: "still need to add some collision avoidance for the buttons". They were right,
+    and the hole was bigger than it looked. We had:
+
+        key-overlap  well  vs well   (and only their two DISTAL channels)
+        clearance    body  vs bone
+        swept-path   finger flesh vs a neighbouring well, ON THE WAY IN
+
+    and nothing at all comparing a WELL against a NEIGHBOURING FINGER at rest. A well is a box
+    roughly 16 x 14 x 7 mm sitting out at a fingertip -- exactly where the next finger's MIDDLE
+    and PROXIMAL phalanges run past. Two wells can clear each other perfectly while one of them
+    sits *inside* the ring finger. Measured on 240 random designs: 97% had a well buried in a
+    neighbouring finger, by a MEDIAN of 9.6 mm.
+
+    Un-splayed fingers must trip it: with the digits closed, the wells overrun their
+    neighbours.
+    """
+    from design.vector import well_finger_clearance
+
+    h = hands[50]
+    closed = mid_design()
+    for f in ("index", "middle", "ring", "little"):
+        closed[f"ab_{f}"] = 0.0          # fingers together: wells overrun the neighbours
+    gap_closed, pair = well_finger_clearance(h, closed)
+    assert gap_closed < 0, f"closed fingers should collide with the wells, got {gap_closed*1000:+.1f}mm"
+
+    fanned = dict(closed)                 # fan them and it must improve
+    for f, sgn in zip(("index", "middle", "ring", "little"), (0.9, 0.3, -0.3, -0.9)):
+        fanned[f"ab_{f}"] = sgn
+    gap_fanned, _ = well_finger_clearance(h, fanned)
+    assert gap_fanned > gap_closed, "splaying the fingers must pull the wells off the neighbours"
+
+
+def test_the_cradle_resolves_the_pressing_vs_packing_tension(hands):
+    """THE TENSION, AND ITS RESOLUTION. This test replaces one that asserted the tension was
+    REAL. It was real only under a wrong model, and a test that pins an obsolete finding is
+    worse than no test at all.
+
+    THE TENSION (under the PIN model -- a point force at the pad):
+        open hand   -> five wells FIT, but the fingers CANNOT press (32-35% residual)
+        curled hand -> the fingers CAN press, but the wells OVERLAP by 7-9 mm
+    and no curl did both, so NSGA-II returned an EMPTY front.
+
+    THE RESOLUTION (the CRADLE -- hand/cradle.py):
+    The pin model demanded the digit's own muscles balance the entire joint torque from a
+    point force at the fingertip. That claim is contradicted by billions of people typing on
+    flat keyboards with semi-extended fingers every day. A WELL CRADLES the distal phalanx:
+    the reaction bears on the whole palmar surface, so the CENTRE OF PRESSURE can sit anywhere
+    along the bone, and a reaction near the DIP has a far smaller moment arm than the same
+    force at the tip. The finger is a STRUT (the user's word: piano technique).
+
+    With the cradle, all four fingers get their three directions AT THE OPEN HAND -- the very
+    posture where the wells fit. The tension evaporates.
+
+    THE CONTROL, and it is the important half: the cradle must NOT make everything possible.
+    The THUMB must still fail, because it still has no adductor and a cradle cannot lend a
+    digit a muscle it does not have. An earlier cradle let the finger lean on the floor, BOTH
+    walls and the end stop at once; those SELF-CANCEL, so it conjured a keypress from a
+    passive finger, and it duly reported that the thumb could press 4 of 5 directions. The
+    control caught it.
+    """
+    from hand.cradle import solve as cradle_solve
+    from design.vector import (PRESS_N, RESIDUAL_MAX, key_separation, keys_on_reference)
+    from design.qwerty import ACTIONS, ROWS
+
+    h = hands[50]
+    four = [f for f in FINGERS if f != "thumb"]
+    OPEN_TP, OPEN_TM = 0.35, 0.40
+
+    def n_performable(f):
+        q = posture(h, f, OPEN_TP, OPEN_TM, 0.0)
+        return sum(cradle_solve(h, q, f, a, PRESS_N)[2] <= RESIDUAL_MAX for a in ACTIONS)
+
+    # 1. at the OPEN hand, five wells fit
+    x = mid_design()
+    x["tp_hand"], x["tm_hand"] = OPEN_TP, OPEN_TM
+    for f in four:
+        x[f"dp_{f}"] = x[f"dm_{f}"] = 0.0
+    for f, sgn in zip(four, (0.9, 0.3, -0.3, -0.9)):
+        x[f"ab_{f}"] = sgn
+    keys, curls = keys_on_reference(h, x)
+    assert key_separation(keys, h, curls)[0] <= 0, "an open, splayed hand should fit five wells"
+
+    # 2. and WITH THE CRADLE every finger can press its three rows THERE
+    for f in four:
+        assert n_performable(f) >= len(ROWS), (
+            f"{f}: only {n_performable(f)}/5 directions performable at the open hand -- "
+            "the cradle should have resolved this"
+        )
+
+    # 3. THE CONTROL: the thumb still cannot. The cradle lends no muscle.
+    assert n_performable("thumb") < len(ROWS), (
+        "the thumb became pressable -- the cradle is too permissive. It has no adductor; a "
+        "cradle cannot lend it one. Check for self-cancelling contacts."
+    )

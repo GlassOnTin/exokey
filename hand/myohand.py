@@ -138,7 +138,8 @@ class Posture:
 
 
 class MyoHand:
-    def __init__(self, xml: str = HAND_XML, gravity: bool = False, scale: float = 1.0):
+    def __init__(self, xml: str = HAND_XML, gravity: bool = False, scale: float = 1.0,
+                 thenar: bool = True, adp_force: float | None = None):
         """`gravity=False` (default) is a deliberate modelling choice, not an oversight.
 
         A hand-mounted keyboard is used with the hand in every orientation -- typing while
@@ -160,7 +161,22 @@ class MyoHand:
         Turning it off removes all three. Set gravity=True to measure the sensitivity --
         scripts/stage1_view.py reports how far the effort ranking actually moves.
         """
-        self.model = mujoco.MjModel.from_xml_path(os.path.normpath(xml))
+        # THENAR: add the muscles MyoHand is missing, chiefly ADDUCTOR POLLICIS.
+        #
+        # Measured before this existed: the thumb could exert 0.0 N at its pad at EVERY
+        # posture, and perform 0 of its 5 well directions ANYWHERE. Not a weak thumb -- a
+        # thumb with no adductor, which cannot push AGAINST anything, which is what pressing
+        # a key is. See hand/thenar.py for what is derived and what is not.
+        #
+        # Default ON, because a thumb that cannot press is not a conservative approximation
+        # of a thumb, it is a wrong one. Pass thenar=False to reproduce the old behaviour.
+        if thenar:
+            from hand.thenar import build_spec
+
+            self.model = build_spec(os.path.normpath(xml), peak_force=adp_force).compile()
+        else:
+            self.model = mujoco.MjModel.from_xml_path(os.path.normpath(xml))
+        self.thenar = bool(thenar)
         self.scale = float(scale)
         if self.scale != 1.0:
             from hand.scaling import scale_model
@@ -462,10 +478,18 @@ class MyoHand:
 
         return np.clip(q, self.lo, self.hi)  # respect the model's own limits
 
-    def _pad_frame(self, finger: str) -> tuple[int, np.ndarray, np.ndarray]:
-        """Locate the finger PULP from the model's own anatomy.
+    def _pad_frame(self, finger: str) -> tuple:
+        """Locate the finger PULP, and the BONE it sits on, from the model's own anatomy.
 
-        Returns (body id, pad point in body coords, palmar unit vector in body coords).
+        Returns (body id, pad point, palmar unit vector, bone axis, half-length, flesh radius),
+        all in BODY coords.
+
+        The bone axis and length are what make a WELL a WELL. A well is not a disc at the pad:
+        it is a U-CHANNEL that the DISTAL PHALANX SLIDES INTO along its own axis (open
+        proximally, so the finger can enter, and open dorsally, so it can lift out). The pad
+        rests on the palmar FLOOR -- that is `click` -- and the side walls give left/right.
+        Model it as a disc and you have a device you would have to lower your fingertip into
+        vertically, like a piston.
 
         Recipe, all of it read out of the model rather than assumed:
           bone axis  <- the flesh capsule's local z (MuJoCo capsules extend along z)
@@ -502,7 +526,25 @@ class MyoHand:
         palmar = v / np.linalg.norm(v)
 
         pad = site(TIP_SITES[finger]) + r_flesh * palmar
-        return bid, pad, palmar
+        half = float(m.geom_size[g][1])  # capsule half-length: how long the channel must be
+
+        # ORIENT THE BONE AXIS BY ANATOMY, NOT BY THE CAPSULE'S SIGN.
+        #
+        # A MuJoCo capsule extends along its local z, but NOTHING says which end is distal --
+        # and in MyoHand it differs per digit: z points distally on the four fingers and
+        # PROXIMALLY on the thumb. Trust the sign and the thumb's well channel is built
+        # pointing out into space, away from the thumb it is supposed to hold (measured: the
+        # bone sat at +2..+24 mm along a channel spanning -22..+4).
+        #
+        # The model states the answer unambiguously: the TIP SITE is distal by definition. So
+        # point the axis at it. Same species as the thumb's flexion signs, and the same fix --
+        # derive it, do not assume it.
+        tip_local = site(TIP_SITES[finger])
+        cap_c = m.geom_pos[g]
+        if (tip_local - cap_c) @ bone < 0.0:
+            bone = -bone
+
+        return bid, pad, palmar, bone, half, r_flesh
 
     # ---- kinematics -------------------------------------------------------
 
@@ -515,15 +557,44 @@ class MyoHand:
     def pad_pose(self, q: np.ndarray, finger: str) -> tuple[np.ndarray, np.ndarray]:
         """Fingertip pulp centre (m) and outward (palmar) pad normal (unit), in world."""
         self.fk(q)
-        bid, pad_l, palmar_l = self.pad[finger]
+        bid, pad_l, palmar_l = self.pad[finger][:3]
         R = self.data.xmat[bid].reshape(3, 3)
         pos = self.data.xpos[bid] + R @ pad_l
         n = R @ palmar_l
         return pos, n / np.linalg.norm(n)
 
+    def well_frame(self, q: np.ndarray, finger: str) -> dict:
+        """The U-CHANNEL the fingertip sits in, in world coords.
+
+        The fingertip BONE goes INTO the well; the pad does not merely rest on its opening.
+        So the well has three axes, not one:
+
+            axis    -- the DISTAL PHALANX's own axis, pointing DISTALLY. The finger enters
+                       the channel along this, from the proximal (open) end.
+            floor   -- the palmar pad normal. `click` presses into this.
+            lateral -- floor x axis. The side walls; `left`/`right` push against these.
+
+        `half` is the phalanx half-length (how long the channel must be to hold the bone) and
+        `radius` the flesh radius (how wide).
+        """
+        self.fk(q)
+        bid, pad_l, palmar_l, bone_l, half, r = self.pad[finger]
+        R = self.data.xmat[bid].reshape(3, 3)
+        pos = self.data.xpos[bid] + R @ pad_l
+        floor = R @ palmar_l
+        floor = floor / np.linalg.norm(floor)
+        axis = R @ bone_l
+        axis = axis / np.linalg.norm(axis)
+        axis = axis - (axis @ floor) * floor          # orthogonalise: a channel, not a cone
+        axis = axis / (np.linalg.norm(axis) + 1e-12)
+        lateral = np.cross(floor, axis)
+        return dict(pos=pos, axis=axis, floor=floor,
+                    lateral=lateral / (np.linalg.norm(lateral) + 1e-12),
+                    half=float(half), radius=float(r))
+
     def pad_jacobian(self, finger: str) -> np.ndarray:
         """(3, nv) translational Jacobian of the pulp point. Call after fk()."""
-        bid, pad_l, _ = self.pad[finger]
+        bid, pad_l = self.pad[finger][0], self.pad[finger][1]
         R = self.data.xmat[bid].reshape(3, 3)
         point = self.data.xpos[bid] + R @ pad_l
         jacp = np.zeros((3, self.model.nv))
@@ -696,7 +767,7 @@ class MyoHand:
         # Same shape as solve_activations: satisfy the hard thing first, optimise within it.
         bnds = list(zip(lo_d, hi_d))  # HARD joint limits
         dofs = self.digit_dofs[finger]  # nq == nv (all hinges), so these pair with `adr`
-        bid, pad_l, palmar_l = self.pad[finger]
+        bid, pad_l, palmar_l = self.pad[finger][:3]
 
         def _state(qd):
             """Pad pose AND its Jacobians, from one forward pass."""

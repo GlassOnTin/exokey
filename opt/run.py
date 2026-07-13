@@ -30,20 +30,21 @@ def baseline() -> dict:
     """A hand-built Typeware-like layout: 2 keys per finger on a strap-mounted body,
     fingers at a common grip curl, a plain CF-PA12 body. Not optimised."""
     x = {}
-    for f in FINGERS:
-        x[f"tp_{f}"] = 0.40
-        x[f"tm_{f}"] = 0.55
+    x["tp_hand"] = 0.40
+    x["tm_hand"] = 0.30          # LOW CURL: wells need SPREAD fingertips, not converged ones
+    for f in ("index", "middle", "ring", "little"):
+        x[f"dp_{f}"] = 0.0
+        x[f"dm_{f}"] = 0.0
     x["tp_thumb"] = 0.55
     x["tm_thumb"] = 0.60
     for f, sgn in zip(("index", "middle", "ring", "little"), (1.0, 0.33, -0.33, -1.0)):
-        x[f"ab_{f}"] = 0.75 * sgn   # fan splay, or the keycaps collide
+        x[f"ab_{f}"] = 0.75 * sgn   # fan splay, or the wells collide
     x["alu_w"] = 0.008
     x["alu_t"] = 0.002
     x["palm_offset"] = 0.020
     x["stem"] = 0.008
     x["adjust"] = 0.012
     x["body_half"] = 0.026
-    x["body_prox"] = 0.014
     x["body_dist"] = 0.055
     x["material"] = "cf_pa12"
     return x
@@ -100,7 +101,8 @@ def main():
     X = [res.X] if isinstance(res.X, dict) else list(res.X)
     print(f"Pareto front: {len(F)} non-dominated feasible designs\n")
 
-    with open("out/pareto.pkl", "wb") as fh:
+    out_pkl = os.environ.get("EXOKEY_OUT", "out/pareto.pkl")
+    with open(out_pkl, "wb") as fh:
         pickle.dump({"F": F, "X": X, "baseline": b["F"], "baseline_feasible": b["feasible"]}, fh)
 
     # ---- does the front dominate the baseline? -----------------------------------------
@@ -121,6 +123,8 @@ def main():
         mark = " <-- dominates baseline" if i in dominates else ""
         print(f"{'':4s} {k:5d} {F[i,0]:12.3e} {F[i,1]:10.1f} {F[i,2]:15.3f}{mark}")
 
+    report_cornered(X)
+
     print()
     if b["feasible"]:
         print(f"designs strictly dominating the baseline: {len(dominates)}/{len(F)}")
@@ -131,6 +135,41 @@ def main():
         print("the meaningful result is that the optimiser found feasible designs at all.")
 
     _plot(F, bF, X, b)
+
+
+def report_cornered(X: list) -> None:
+    """A variable pinned to a bound is NOT a decision. Say so, every run, automatically.
+
+    Two different diseases, and they need opposite fixes:
+
+      * DEAD   -- the variable is dominated everywhere, so the optimiser always slams it to
+                  one end. It should be a CONSTANT. (press_N and body_prox were both this;
+                  each spent a whole run pretending to be a decision.)
+      * BOUND-LIMITED -- the optimiser WANTS to go further and the bound is stopping it. The
+                  answer is then an artefact of a number I typed, not of the physics, and
+                  the bound is wrong.
+
+    Telling them apart needs judgement, but NOTICING them does not — so notice them here
+    rather than leaving it to whether somebody happens to eyeball the design vectors.
+    """
+    from design.vector import REAL_BOUNDS
+
+    print("\ncornered variables (pinned to a bound => not a decision):")
+    any_ = False
+    for k, (lo, hi) in REAL_BOUNDS.items():
+        v = np.array([x[k] for x in X])
+        span = (hi - lo)
+        at_lo = (v.mean() - lo) / span < 0.03
+        at_hi = (hi - v.mean()) / span < 0.03
+        if at_lo or at_hi:
+            any_ = True
+            end = "LOWER" if at_lo else "UPPER"
+            print(f"  {k:14s} pinned at its {end} bound ({v.min():.4g}..{v.max():.4g} "
+                  f"of [{lo:g}, {hi:g}])")
+            print(f"                 -> either make it a CONSTANT, or the bound is too tight "
+                  f"and the answer is an artefact of it")
+    if not any_:
+        print("  none — every variable is doing work")
 
 
 def _plot(F, bF, X, b):

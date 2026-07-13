@@ -171,6 +171,286 @@ penalty, via nothing but a units mismatch. Now lexicographic: reach first, comfo
 hand three ways (−6.5 mm across the palm, −7.3 mm through the thenar, −5.5 mm through the
 fingers). The third proves it is *topological*, not a routing mistake.
 
+**A keycap pitch that outlived the keycaps — and it invalidated a whole Pareto front.**
+`KEY_PITCH = 12 mm` was correct when the fingers pressed *caps on stems*. It survived the
+switch to *wells*, and a well is not a cap: it is a **cavity the fingertip sits inside**, so
+its size is the **fingertip's** size, which the model knows (12–14 mm across). All 200
+designs on the first front had physically overlapping wells. Nothing failed — the number was
+plausible, the constraint was checked, and it was answering a question about a device that no
+longer existed. Well radius is now **derived from each finger's own flesh capsule**.
+
+The same constant had a twin, and finding one led straight to the other: the swept-path check
+modelled a neighbouring well as a **keycap standing 3 mm proud of a plate** (`CAP_HEIGHT`).
+A well is not a cap, it is a **cup** — and a cup that holds a fingertip *and can be nudged
+sideways by it* must wrap that fingertip to about its equator, so its rim stands proud by
+roughly the fingertip's own **radius** (6–7 mm, not 3). The device was being modelled as half
+as obstructive as it is. Now derived from `well_radius`, and it tightened the constraint from
+93% to 97% of random designs violated. **Two of the constraints were quietly still
+describing keycaps.**
+
+**And that fix decided the architecture.** Wells need the fingertips **spread** (~17 mm
+apart); **gripping converges them** (~6 mm at high curl). Even at maximum splay *and*
+maximum stagger, a gripping hand cannot fit five wells — middle and ring overlap by 2.1 mm.
+So the hand does **not** grip the body. It rests **open and splayed** on it. That is not a
+style choice; it is forced by the fingertip's own width, and it fell out of a bug fix.
+
+**A constraint the search had to keep rediscovering.** `common-drive` (the four fingers must
+curl together, since MyoHand has no enslavement) was a *constraint* on four independently
+drawn curls — but four independent draws over [0.10, 0.80] have an expected spread of ~0.42
+against a limit of 0.15, so **98% of designs were born violating it** and the GA burned its
+budget rediscovering it. It is now built into the **parameterisation** (one shared hand curl
++ bounded per-finger deviations), so it cannot be represented, let alone violated: 98% → 0%,
+and randomly drawn feasible designs went 0/240 → 1/240. ⚠ Note what this means: a **guess**
+(`COMMON_DRIVE = 0.15`) is now *structural*. That makes it more load-bearing, not less.
+
+**THE WELL IS A CRADLE, AND I MODELLED IT AS A PIN. This overturns the negative result below.**
+
+Every effort and feasibility number applied the key reaction as a **single point force at the
+pad**, and demanded the digit's own muscles balance the entire resulting joint torque. On that
+model an **open hand cannot press** — a 32–35% irreducible torque residual — and that finding
+drove everything: it forced a curled hand, which converges the fingertips, which broke the well
+packing, which produced an empty Pareto front.
+
+**It is contradicted by billions of people typing on flat keyboards with semi-extended fingers
+every day.** When a model says something impossible that people do hourly, the model is wrong,
+and I should have caught that before writing "the fingers cannot press" into this document.
+
+The user named the missing physics: **piano technique.** A pianist does not *generate* force
+with the finger — the finger is a **strut that transmits** it, braced, while the arm supplies the
+weight. And a well does exactly that bracing. It is a U-channel that **cradles the distal
+phalanx**: floor, two flanks, an end stop. The reaction bears on the **whole palmar surface**, so
+the **centre of pressure is free to sit anywhere along the bone** — and a reaction near the DIP
+has a far smaller moment arm about it than the same force at the fingertip.
+
+**That is the only thing a cradle contributes, and it is enough.** At the OPEN hand — the very
+posture where the wells fit — all four fingers now get their three directions:
+
+| digit | click | forward | back | left | right | performable |
+|---|---|---|---|---|---|---|
+| **thumb** | 18% | 36% | 31% | 45% | 35% | **0/5 — the control** |
+| index | 0% | 0% | 0% | 0% | 0% | 5/5 |
+| middle | **0%** | **0%** | **0%** | 14% | 50% | **3/5** |
+| ring | **0%** | **0%** | **0%** | 40% | 76% | **3/5** |
+| little | **0%** | **0%** | **0%** | 29% | 11% | **3/5** |
+
+The pattern is a *prediction*, not a fudge: `click` (into the floor), `forward` (against the end
+stop) and `back` (the deep flexor's own pull) work, while `left`/`right` stay hard for
+middle/ring/little because the interossei are genuinely weak.
+
+⚠ **THE CONTROL IS THE IMPORTANT HALF.** The **thumb still cannot press** — a cradle lends no
+muscle, and the thumb still has no adductor. An earlier version of the cradle let the finger lean
+on the floor, **both** walls and the end stop at once; those forces **self-cancel**, so it
+conjured a keypress out of a completely passive finger and duly reported that the thumb could
+press 4 of 5 directions. **That is how a too-permissive model announces itself, and it is why the
+control exists.** The fix: only the *sensed* surface is loaded, and its contacts sum to the switch
+force. The freedom is the centre of pressure — nothing else.
+
+⚠ **This is CONSERVATIVE in one respect and optimistic in another.** Frictionless (friction could
+only help), so a "cannot press" verdict still stands. But the contact forces are limited only by
+muscle capacity, so a "can press" verdict is the optimistic end of the band.
+
+**AND SO THE NEGATIVE RESULT BELOW IS WITHDRAWN.** It is kept, in full, because it is the most
+instructive failure in the project: a wrong contact model produced a *coherent, well-evidenced,
+completely wrong* conclusion — that the product could not exist — and it took an outside
+observation (piano) to break it. Everything below the line was true of the pin model and false of
+a well.
+
+---
+
+**~~THE OPTIMISER NOW FINDS NO FEASIBLE DESIGN — AND THAT IS THE RESULT.~~ (WITHDRAWN — see above)**
+
+With equilibrium enforced (the digit must actually be able to perform the action), NSGA-II
+returns **nothing**. Not a worse front: an empty one. That is not a failure of the search, and
+it is not a bug. It is a measurement, and it says something specific.
+
+**Two requirements pull in opposite directions, and they do not overlap.**
+
+| shared curl | can the fingers press? (3rd direction, need ≤5%) | do the wells fit? (need ≤0) |
+|---|---|---|
+| 0.20 | 31.6% ✗ | **−3.2 mm ✓** |
+| 0.35 | 35.0% ✗ | **−0.4 mm ✓** |
+| 0.50 | 19.0% ✗ | +1.7 mm ✗ |
+| 0.65 | 7.2% ✗ | +8.8 mm ✗ |
+| 0.80 | **4.0% ✓** | +7.5 mm ✗ |
+| 0.90 | **3.8% ✓** | +7.7 mm ✗ |
+
+An **open** hand fits five wells but **cannot press three directions**. A **curled** hand can
+press but its **wells overlap by 7–9 mm** — because curling *converges* the fingertips and a
+well is a cavity that needs them *spread*. There is no curl that does both.
+
+**AND THE THING THAT DECIDES IT IS THE GUESS.**
+
+Each finger CAN press three directions — at a curl of its own choosing:
+
+| finger | best 3rd-direction residual | at curl |
+|---|---|---|
+| index | **0.0%** | tp 0.23, tm 0.82 |
+| middle | **3.7%** | tp 0.90, tm 0.32 |
+| ring | **0.0%** | tp 0.90, tm 0.40 |
+| little | **0.0%** | tp 0.15, tm 0.90 |
+
+Those curls are spread by **0.75** in MCP flexion. `COMMON_DRIVE` allows **0.15**. And with
+enslavement removed entirely — every finger at its own curl, near-full splay — **the wells fit
+(−1.6 mm) AND all four fingers press.** Put the shared curl back and the wells clash (+3.1 mm)
+at *any* splay.
+
+> **The feasibility of this entire device is decided by finger ENSLAVEMENT — the one thing
+> MyoHand does not model at all (its FDP2–FDP5 are strictly independent), and the one number
+> we made up (`COMMON_DRIVE = 0.15`).**
+
+This has been flagged in these limitations from the start as "a guess that is currently the
+binding constraint on the well layout". It is worse than that: it is the binding constraint on
+whether the product can exist.
+
+⚠ **And a real hand almost certainly cannot do it.** The design needs a 0.75 spread in MCP
+flexion across the four fingers — five times what we allowed — and the ring and little fingers
+are the *least* independent digits in the hand. So the honest reading is that **the device as
+specified (one well per finger, three QWERTY rows per well) is probably infeasible**, and the
+model cannot yet tell us for certain because it does not contain the physics that decides it.
+
+**THE NEXT MEASUREMENT IS NOT A SIMULATION.** What is needed is the enslavement matrix of a
+real hand — how much a finger's MCP can individuate while its neighbours hold a different
+flexion — and that is measurable on a person in an afternoon. It would either kill this design
+or unlock it, and no amount of further optimisation can substitute for it.
+
+**Escape routes, not yet explored** (they change the product, so they are decisions, not fixes):
+- **Fewer rows per finger.** Three directions per well is what forces the curl. Two rows per
+  finger plus more index/thumb columns would relax it.
+- **Let the finger move between actions.** All three directions are currently required to be
+  performable at ONE resting posture. A real finger in a well shifts as it tilts the stick.
+- **Give up on QWERTY.** The three-row requirement is QWERTY's, not the hand's.
+
+**THE EQUILIBRIUM RESIDUAL WAS NEVER CHECKED. This is the worst bug in the project.**
+
+`solve_activations` does not enforce equilibrium. It least-squares-fits the required joint
+torque, pins the demand to the closest **achievable** torque `tau* = A·a_ls`, and returns the
+shortfall as `residual`. **No caller had ever read it.** Its own docstring says *"feasibility
+is then a real, reportable quantity"* — and then nothing reported it.
+
+Measured on the shipped design, the muscles failed to balance the load by **14% to 62%**. The
+index was at **0.0%** (it genuinely can press); the thumb at 48%, the ring at 62%. Every
+effort number, every Pareto front and two headline results were computed for presses the hand
+**cannot perform**.
+
+**And the error was self-reinforcing.** An action a digit cannot perform yields a small
+*achievable* torque, hence small activations, hence **LOW EFFORT**. Impossible actions look
+**cheap** — so `best_action_map`, which picks the three cheapest directions, was *systematically
+drawn to the impossible ones*. The cheapest number in the entire model (middle/`click`,
+4e-08) was an unbalanced press, while the index's honest `click` cost 1e-06. **The optimiser
+preferred the actions the hand cannot do.**
+
+This is v1's disease one level deeper. v1 let the optimiser **buy its way out** of a soft
+constraint. Here the constraint **was never checked at all**. Equilibrium is now hard, and an
+unperformable action is **unavailable, not expensive**.
+
+Retracted as a result: *"the five directions differ by 1.9 million×"* and *"click is the
+cheapest action everywhere"*. Both were artifacts of unbalanced presses.
+
+**THE THUMB CANNOT PRESS, AND IT IS NOT A CALIBRATION ERROR — IT IS A MISSING MUSCLE.**
+
+Two independent instruments agree. A max-force LP: the thumb exerts **0.0 N** at its pad, at
+every posture, along **all 600 directions sampled** (the index manages 194/600, within 5° of
+its pad normal). And the residual: **45.6%**, irreducible, at every posture.
+
+The muscle list says why. MyoHand's thumb has FPL (flexes), EPL/EPB (extend), APL (abducts),
+OP (opposes). **Nothing ADDUCTS.** Pressing a key is pushing *against* something, and adductor
+pollicis is the muscle that does it. MyoSuite ships no alternative — every XML in `myo_sim`,
+hand and arm, has the same five.
+
+So we **add adductor pollicis** (`hand/thenar.py`), via MuJoCo's `MjSpec`, leaving the pinned
+submodule untouched. Attachments derived from the model's own anatomy (its own tendons state
+which way is palmar, radial and distal on each bone); peak force anchored to FPL by PCSA ratio.
+
+| | stock (39 muscles) | + ADP (40) |
+|---|---|---|
+| **thumb** | **45.6%** | **11.9%** |
+| index / ring / little | 0.0% | 0.0% |
+| middle | 0.6% | 0.6% |
+
+Validated three ways, none of them "it ran": the moment arms have the right **signs** (adducts
+the CMC like OP, flexes the MP like FPL, **exactly zero** at the IP because it does not cross
+it); the four fingers are **bit-for-bit unchanged** (the control — without it, a global shift
+could pass for a fix); and it is **insensitive to the peak-force guess**, 11.9% from 100 N to
+400 N, because a residual is a *direction* problem and scaling a muscle does not rotate its
+column.
+
+**FPB and APB were attempted and thrown away.** They came out *extending* the MP joint that
+FPB exists to *flex*, and moved the thumb residual by nothing. Fixing them meant sliding
+attachment points until the moment arms came out how I wanted. One muscle that is right beats
+three that flatter the result.
+
+⚠ **A bug the gate caught, not me:** the first ADP insertion sat on the straight line from the
+MP joint centre to the origin, so the tendon passed **through** the joint and its `mp_flexion`
+moment arm was **exactly 0.0000** — anatomically placed and mechanically inert. A zero that
+reads like a rounding error and is a modelling one.
+
+**THE DESIGN DECISION THAT FALLS OUT: no characters under the thumb.**
+
+Fingers **≤0.6%**, thumb **11.9%** — a **20× gap**. Any tolerance in [1%, 11%] gives the same
+verdict, so it does **not** rest on `RESIDUAL_MAX`, which is a guess. That is what makes it
+reportable rather than an artifact of a number we chose.
+
+And QWERTY's left half never needed the thumb: **15 letters**, and four fingers × three rows
+plus the index's second column is **exactly 15**. The thumb takes space and modifiers, where a
+12% torque shortfall is survivable.
+
+**The well was a disc, and a well is a CHANNEL — caught by the user looking at the render.**
+*"The finger tip bone should fit into the well, not simply rest the pad on its opening."*
+Exactly right, and it was a geometric error, not a drawing one. The well had been modelled as
+a **disc at the pad, on the pad normal** — which describes a device you would have to lower
+your fingertip into **vertically, like a piston**. A DataHand/Svalboard well is a **U-channel**:
+open **proximally** so the finger slides in along its own bone axis, open **dorsally** so it can
+lift out, a palmar **floor** under the pad (that is `click`), and side **walls** for left/right.
+The user's own first description of this device, months earlier, was "a U-shaped cavity".
+
+Three consequences, all of which the disc model hid:
+
+- **A well has three axes, not one.** Channel axis = the distal phalanx; floor normal = the pad
+  normal (so the *press* direction was right); lateral = the walls. All three are needed.
+- **Well separation is a SEGMENT-SEGMENT test.** Point-to-point between two pads assumes a
+  disc. Two channels can sit comfortably apart at the fingertips and still **cross further back**,
+  where the fingers converge toward the knuckles — a point test cannot see that collision at all.
+  It tightened the binding margin from −8.9 mm to −5.1 mm.
+- ⚠ **The thumb's channel pointed backwards, away from the thumb.** A MuJoCo capsule extends
+  along its local **z**, and nothing says which end is distal: z runs **distally** on the four
+  fingers and **PROXIMALLY on the thumb**. Measured, the thumb bone sat at **+2…+24 mm** along a
+  channel spanning **−22…+4**. The axis is now aimed at the model's own tip site. **This is the
+  same species as the thumb's flexion-sign bug — I trusted a sign convention again, in the same
+  digit, having already been burned by exactly that.**
+
+Now gated: the bone must lie inside its channel, laterally within the well radius, above the
+floor, for every digit.
+
+**A workaround that outlived its bug — caught by the user looking at the render.**
+*"The thumb button isn't orthogonal to the thumb pad."* It was **63° off**. Every key had been
+oriented to the direction the digit can **push**, not the way its pad **faces**, because a
+pad-normal thumb key had once measured **exactly zero press travel**. But that zero was an
+artefact of the thumb **sign** bug (`mp_flexion`/`ip_flexion` flex *negative*) — which was
+found and fixed **afterwards**, and nothing re-tested the workaround once its reason was gone.
+
+Re-measured: the thumb gets **+35.0 mm** of travel along its pad normal against **+9.8 mm**
+along the flexor push — 3.6× *more*, not zero. And the error mattered more than it used to,
+because **a well is a cup, not a cap**: 63° of obliquity on a flat cap is a contoured keycap;
+63° on a *cup* means the pulp never seats, it jams on the rim. Wells now face their pads (0°
+by construction) and every digit — thumb included — has 31–39 mm of click travel.
+
+**This retires a "limitation" that was never real.** VISION.md carried "the thumb's pad meets
+its key at ~80° of obliquity, a real build needs an angled thumb cap" as a *consequence of the
+missing thenar muscles*. It was not. It was a consequence of my own stale workaround. **A
+false limitation is as dishonest as a hidden one**, and it was load-bearing: it had been
+offered as evidence for how badly the missing adductor pollicis distorts the thumb.
+
+**The enslavement constraint was watching the wrong joint.** `common-drive` bounded the spread
+of `tm` (the PIP) and left `tp` (the MCP) completely free — so the optimiser individuated the
+fingers at the MCP instead: **spread 0.37 against a 0.15 limit**, ring nearly straight (0.12)
+while the index was half-curled (0.49). That is precisely the hand-nobody-can-make the
+constraint exists to forbid; it had simply moved to the joint that was not being watched. A
+constraint on one joint of a two-joint chain is not a constraint.
+
+**A `SyntaxError` that 57 passing tests could not see.** An edit left an empty `for` loop in
+`opt/run.py`; the suite went green and two 35-minute optimiser runs died on the import. **A
+test suite that never imports a file cannot defend it.** Now imported by a test.
+
 **A constraint that punishes intended contact.** Four separate bugs, one species: the thenar
 counted as a "finger"; the body face counted as an obstacle; "clearance" applied to a device
 the hand *grips*; a body whose size was hardcoded so it could not shrink to fit. An
@@ -183,12 +463,21 @@ exoskeleton stands off the hand, so "don't touch" was nearly right. **A gripped 
 
 These bound every conclusion above.
 
-- ⚠ **MyoHand's thumb has no thenar intrinsics.** No adductor pollicis, no FPB, no APB —
-  the muscles you actually press with. Thumb effort is systematically overstated (~1000× the
-  index at one point). **Thumb numbers rank thumb options against each other at best.**
+- ⚠ **The thumb still cannot press, even with ADP added.** Stock MyoHand has no adductor at
+  all and the thumb exerts **0.0 N**; we add adductor pollicis (`hand/thenar.py`) and the
+  irreducible torque residual falls 45.6% → **11.9%**, against **≤0.6%** for every finger.
+  **FPB and APB are still missing** — attempted, wrong moment arms, discarded rather than
+  tuned. Consequence: **no characters are placed under the thumb** (§5). Thumb numbers rank
+  thumb options against each other at best; they must not be compared with the fingers'.
+- ⚠ **ADP's peak force is a PCSA ratio (ADP ≈ 1.25 × FPL) that was RECALLED, NOT READ.** The
+  conclusions are shown not to depend on it (11.9% from 100 N to 400 N), but the number itself
+  is unverified.
 - ⚠ **MyoHand has no enslavement.** FDP2–FDP5 moment arms are strictly diagonal — four
   independent actuators. Curling the ring alone is *free* in this model and impossible in a
-  hand. Mitigated by an externally imposed common-drive constraint; not solved.
+  hand. Mitigated by an externally imposed common-drive constraint on **both** the MCP and
+  PIP joints (it originally covered only the PIP, and the optimiser went straight through the
+  gap — see §5); not solved. `COMMON_DRIVE = 0.15` is a **guess**, and it is now built into
+  the parameterisation, which makes it *more* load-bearing, not less.
 - ⚠ **ANSUR II percentiles are recalled, not read from the dataset.** The 95th/5th ratio
   (~1.24) is load-bearing. **Verify before publishing.**
 - **Σaᵢ³ is a hypothesis** about what humans minimise, not ground truth. Field-standard, but
@@ -199,7 +488,20 @@ These bound every conclusion above.
   from "the finger is sunk into it".
 - **No typing-SPEED model.** We optimise muscle effort. Speed (Fitts' law, travel time) is a
   different objective and may disagree — this is likely where the twin key's real value lies.
-- **Placeholder numbers**: adjuster mass, column-shift cost.
+- **Every number we made up is now tagged and enumerated** (`design/params.py`, and
+  `test_every_constant_declares_where_it_came_from` fails if one is not disclosed here):
+
+  | GUESS | value | what it decides |
+  |---|---|---|
+  | `COMMON_DRIVE` | 0.15 | how differently neighbouring fingers may curl — a stand-in for **enslavement**, which MyoHand does not model at all. ⚠ **This guess is currently the binding constraint on the well layout.** A made-up number is deciding the design. |
+  | `WELL_WALL` | 1.5 mm | wall between adjacent wells; never checked against a print |
+  | `DEFLECTION_MAX` | 0.5 mm | above this a key "feels mushy" — a judgement, not a measurement |
+  | `ADJUSTER_MASS` | 0.15 g/mm | mass of a per-finger slide; not from any real mechanism |
+  | `COLUMN_SHIFT_COST` | 5e-6 | cost of translating the hand to the index's 2nd column |
+  | `RESIDUAL_MAX` | 0.05 | how much of the required joint torque a digit may FAIL to produce and still be said to "press" the key. ⚠ Ideally **zero**. It is a tolerance, and **the whole action set depends on where this line is drawn** — sensitivity must be reported. |
+
+- **`SOFT_TISSUE_K`** (25 N/mm) is literature, not measurement: the band is 10–50 N/mm and
+  the deflection answer moves **1.40×** across it.
 - **Comfort ≠ minimum activation.** A device can be metabolically cheap and still feel bad.
   Only §4's last gate settles that.
 

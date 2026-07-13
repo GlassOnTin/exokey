@@ -24,7 +24,7 @@ from structure.frame import (
     clearance,
     solve,
 )
-from viz.scene import _mesh_traces, _pad_traces, keycap_traces
+from viz.scene import _mesh_traces, _pad_traces, well_traces
 
 KIND_STYLE = {"alu": 9, "nylon": 6, "strap": 4, "clip": 5}
 
@@ -105,16 +105,38 @@ def main():
         x=S[:, 0], y=S[:, 1], z=S[:, 2], mode="markers",
         marker=dict(size=7, symbol="x", color="#b03060"),
         name="soft-tissue supports", text=exo.supports, hoverinfo="text"))
-    traces += keycap_traces([
-        dict(pos=keys[f][0], normal=keys[f][1], finger=f, label=f) for f in FINGERS
+    traces += well_traces([
+        dict(**h.well_frame(q, f), finger=f, label=f) for f in FINGERS
     ])
+
+    # HONESTY IN THE TITLE. These keys come from STAGE 2, which optimises each finger
+    # INDEPENDENTLY -- it places the index's well knowing nothing about the middle finger. So
+    # overlapping wells are its EXPECTED output, not a bug, and resolving them is precisely
+    # what Stage 4's constraints exist to do. But the render did not SAY so, and a
+    # known-infeasible layout read as a proposal. It says it now.
+    from design.vector import WELL_WALL, _seg_seg_dist, well_channel
+
+    ch = {f: well_channel(h, q, f) for f in FINGERS}
+    worst_ov, worst_pair = -np.inf, None
+    for a in range(len(FINGERS)):
+        for b in range(a + 1, len(FINGERS)):
+            fa, fb = FINGERS[a], FINGERS[b]
+            da, pa, ra = ch[fa]
+            db, pb, rb = ch[fb]
+            ov = (ra + rb + 2 * WELL_WALL) - _seg_seg_dist(da, pa, db, pb)
+            if ov > worst_ov:
+                worst_ov, worst_pair = ov, (fa, fb)
+    warn = (f"<br><b>WELLS OVERLAP by {worst_ov*1000:.1f} mm "
+            f"({worst_pair[0]}/{worst_pair[1]}) — EXPECTED.</b> Stage 2 places each finger's "
+            f"well INDEPENDENTLY of the others; Stage 4 is what resolves it."
+            if worst_ov > 0 else "<br>wells clear.")
 
     fig = go.Figure(traces)
     fig.update_layout(
-        title=f"ExoKey Stage 3 — exoskeleton on the optimal keys. "
+        title=f"ExoKey Stage 3 — structure on the STAGE-2 keys. "
               f"{exo.mass()*1000:.0f} g, max util {full['max_util']:.2f}, "
               f"max key deflection {full['max_deflection']*1000:.2f} mm "
-              f"(all five pressing @ {press} N). Members coloured by stress utilisation.",
+              f"(all five pressing @ {press} N). Members coloured by stress utilisation." + warn,
         scene=dict(aspectmode="data", xaxis_title="x (m)", yaxis_title="y (m)",
                    zaxis_title="z (m)"),
         margin=dict(l=0, r=0, t=60, b=0), template="plotly_white",

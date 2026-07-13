@@ -56,6 +56,10 @@ import itertools
 # This is why the twin key is not needed at all: the extra states come from SENSING MORE
 # MUSCLE GROUPS, not from more hardware. No second stem, no second row to pack, and the
 # key-overlap constraint that dominated the previous model evaporates -- there are 5 keys.
+class Infeasible(Exception):
+    """A finger has fewer than 3 performable directions: it cannot carry three rows."""
+
+
 ACTIONS = ("click", "forward", "back", "left", "right")
 ROWS = ("top", "home", "bottom")
 
@@ -96,7 +100,8 @@ def row_frequencies() -> dict[str, float]:
     return out
 
 
-def best_action_map(effort: dict[tuple[str, str], float]) -> tuple[dict, float]:
+def best_action_map(effort: dict[tuple[str, str], float],
+                    available: dict[tuple[str, str], bool] | None = None) -> tuple[dict, float]:
     """Choose WHICH 3 of the 5 joystick directions each finger uses, and which QWERTY ROW
     each one means, to minimise the frequency-weighted effort of typing English.
 
@@ -109,8 +114,21 @@ def best_action_map(effort: dict[tuple[str, str], float]) -> tuple[dict, float]:
     Requiring all five to be usable would drag the whole design down to the cost of the worst
     one.
 
-    Exact, not heuristic: choose 3 of 5 (10 ways) x assign to 3 rows (6 ways) = 60 per
-    finger, and the fingers decouple, so each is solved by exhaustion.
+    ⚠ AN UNPERFORMABLE ACTION IS UNAVAILABLE, NOT EXPENSIVE. `available` filters the
+    candidates, and it is not optional in practice.
+
+    Without it this function was actively DRAWN to actions the digit cannot perform. The
+    reason is a nasty one: solve_activations least-squares-fits the required joint torque and
+    settles for the closest ACHIEVABLE one, so an action the muscles cannot balance produces
+    a SMALL achievable torque, hence SMALL activations, hence LOW effort. Impossible actions
+    look CHEAP. Measured: middle/click scored 4e-08 -- the cheapest number in the whole model
+    -- at a 10% torque residual, while index/click scored 1e-06 at 0%. Choosing by effort
+    alone picked the impossible one every time.
+
+    Exact, not heuristic: choose 3 of the AVAILABLE actions x assign to 3 rows, and the
+    fingers decouple, so each is solved by exhaustion. A finger with fewer than 3 available
+    actions cannot carry three QWERTY rows at all -- it raises Infeasible, and the caller
+    turns that into a constraint violation rather than a silently-cheap design.
     """
     slots: dict[str, list[tuple[str, str]]] = {}
     for (slot, row), ch in QWERTY_LEFT.items():
@@ -120,8 +138,12 @@ def best_action_map(effort: dict[tuple[str, str], float]) -> tuple[dict, float]:
     for slot, entries in slots.items():
         f = FINGER_OF[slot]
         extra = COLUMN_SHIFT_COST if slot.endswith("2") else 0.0
+        acts = [a for a in ACTIONS if available is None or available.get((f, a), True)]
+        if len(acts) < len(ROWS):
+            raise Infeasible(f"{f}: only {len(acts)} of 5 directions are performable, "
+                             f"needs {len(ROWS)} for the QWERTY rows")
         best, best_cost = None, float("inf")
-        for chosen in itertools.combinations(ACTIONS, len(ROWS)):
+        for chosen in itertools.combinations(acts, len(ROWS)):
             for perm in itertools.permutations(chosen):
                 row_to_action = dict(zip(ROWS, perm))
                 c = sum(

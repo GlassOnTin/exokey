@@ -14,11 +14,11 @@ import pickle
 import numpy as np
 import plotly.graph_objects as go
 
-from design.vector import evaluate, keys_on_reference
+from design.vector import evaluate, keys_on_reference, posture
 from hand.myohand import FINGERS, MyoHand
 from hand.scaling import population
 from opt.problem import CONSTRAINT_NAMES, OBJECTIVE_NAMES
-from viz.scene import FINGER_COLOR, _mesh_traces, keycap_traces
+from viz.scene import FINGER_COLOR, _mesh_traces, well_traces
 
 KIND_STYLE = {"alu": 9, "nylon": 6, "strap": 4, "clip": 5}
 
@@ -65,10 +65,23 @@ def main():
     print(f"\n  effort/char by hand (5th, 50th, 95th): "
           + ", ".join(f"{v:.3e}" for v in r["char_effort_by_hand"]))
 
-    # ---- render: hand at rest, the device on it, keys coloured by finger ---------------
+    # ---- render: THE HAND IN THE POSTURE THE DESIGN IS FOR, wearing the device ---------
+    #
+    # It drew the hand at `q_neutral` -- AT REST -- while placing the wells at the DESIGN
+    # posture. So the picture showed wells hanging in space off a hand that was not the hand
+    # the design is for, and every "is that well on that fingertip?" question it was supposed
+    # to answer, it answered about the wrong hand.
+    #
+    # The wells and the hand are now BOTH drawn from one COMPOSED posture -- all five digits
+    # in their wells at once, which is what wearing it means, and what the well-vs-finger
+    # collision check assumes.
+    from design.vector import action_dirs, tm_of, tp_of
+
     exo, keys = r["exo"], r["keys_ref"]
     st = r["struct"]
-    traces = _mesh_traces(ref, ref.q_neutral, opacity=0.16)
+    per = {f: posture(ref, f, tp_of(x, f), tm_of(x, f), x.get(f"ab_{f}", 0.0)) for f in FINGERS}
+    q_on = ref.compose(per)
+    traces = _mesh_traces(ref, q_on, opacity=0.16)
 
     u = st["util"]
     umax = max(u.values())
@@ -83,30 +96,39 @@ def main():
             text=[f"{m.name}<br>{m.material}<br>util {u[m.name]:.3f}"] * 2,
             hoverinfo="text", showlegend=False))
 
-    # Real low-profile keycaps, not markers: the cap's top face is the surface the pad
-    # lands on, so obliquity is visible instead of hidden.
-    caps = [
-        dict(pos=keys[(f, k)][0], normal=keys[(f, k)][1], finger=f,
-             label=f"{f} row {k}")
-        for f in FINGERS for k in range(r["n_keys"][f])
-    ]
-    traces += keycap_traces(caps)
+    # WELLS, drawn as the U-CHANNELS they are, with their five joystick directions -- in the
+    # SAME composed posture as the hand, so a well sitting inside a neighbouring finger is
+    # visible rather than hidden by a posture mismatch.
+    cups = [dict(**ref.well_frame(q_on, f), finger=f, label=f"{f} well",
+                 dirs=action_dirs(ref, q_on, f))
+            for f in FINGERS]
+    traces += well_traces(cups)
     for f in FINGERS:  # legend entries only
         traces.append(go.Scatter3d(
             x=[keys[(f, 0)][0][0]], y=[keys[(f, 0)][0][1]], z=[keys[(f, 0)][0][2]],
             mode="markers", marker=dict(size=0.1, color=FINGER_COLOR[f]),
             name=f"{f} ({r['n_keys'][f]} keys)"))
 
-    # How squarely does each pad meet its cap? For the thumb this is ~80 deg -- a direct,
-    # visible consequence of MyoHand having no adductor pollicis.
-    print("\n  pad-to-cap obliquity (0 deg = pad flat on the cap):")
+    # CAN THE DIGIT ACTUALLY PUSH ALONG ITS WELL'S CLICK AXIS?
+    #
+    # "Pad-to-cap obliquity" is now a meaningless question -- the well faces the pad BY
+    # CONSTRUCTION, so it is 0 by definition. (The old line computed it against the previous
+    # `-press` convention and, after the axis was flipped to the pad normal, reported 175-180
+    # deg for every digit and advised an "angled cap" on all five. A stale diagnostic is worse
+    # than none: it invents a finding.)
+    #
+    # The question that still matters is different, and it is the real thumb caveat: `click`
+    # presses along the pad normal, but a digit can only push where its MUSCLES let it. The
+    # gap between the two is wasted as shear -- and for the thumb it is large, because
+    # MyoHand has no adductor pollicis.
+    print("\n  click axis vs the direction the digit can actually PUSH:")
     for f in FINGERS:
-        pos, nrm = keys[(f, 0)]
-        post = ref.press(f, pos, nrm, press_N=r["press_N"], q0=ref.q_neutral)
-        _, pn = ref.pad_pose(post.q, f)
-        ang = np.rad2deg(np.arccos(np.clip(-(pn @ nrm), -1, 1)))
-        print(f"    {f:8s} {ang:5.0f} deg" + ("   <-- oblique: needs an angled cap"
-                                              if ang > 45 else ""))
+        q_f = per[f]
+        _, pn = ref.pad_pose(q_f, f)
+        push = ref.press_dir_flexor(q_f, f)
+        ang = np.rad2deg(np.arccos(np.clip(float(push @ pn), -1.0, 1.0)))
+        note = "   <-- much of the press is shear, not click" if ang > 45 else ""
+        print(f"    {f:8s} {ang:5.0f} deg{note}")
 
     S = np.array([exo.nodes[n] for n in exo.supports])
     traces.append(go.Scatter3d(

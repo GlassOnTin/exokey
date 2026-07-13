@@ -40,7 +40,7 @@ from design.vector import INT_BOUNDS, MATERIAL_CHOICES, REAL_BOUNDS, evaluate
 
 CONSTRAINT_NAMES = [
     "travel", "saturation", "adjust-range", "clearance", "yield", "mushy", "common-drive",
-    "key-overlap", "swept-path",
+    "key-overlap", "swept-path", "well-finger", "performable",
 ]
 # "travel" and "saturation" now mean ALL THREE ACTIONS (push/lift/contort) on every hand:
 # a key that can be pushed but not lifted is a one-row key.

@@ -45,6 +45,12 @@ api() { # api METHOD PATH [json]
 }
 server_json() { api GET "/servers?name=$NAME" | jq '.servers[0] // empty'; }
 server_ip()   { server_json | jq -r '.public_net.ipv4.ip // empty'; }
+# Hetzner RECYCLES IPs. A new box on an old IP presents a new host key, and
+# StrictHostKeyChecking=accept-new accepts NEW keys but (rightly) REFUSES CHANGED ones -- so
+# `waiting for ssh` spins until the timeout while the box sits there billing. Drop the stale
+# key first. This is not a security relaxation: the key genuinely did change, because it is
+# genuinely a different machine.
+ssh_forget()  { ssh-keygen -R "$(server_ip)" >/dev/null 2>&1 || true; }
 ssh_run()     { ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "root@$(server_ip)" "$@"; }
 
 cmd_price() {
@@ -90,6 +96,7 @@ cmd_up() {
   fi
   echo "created id $(jq -r '.server.id' <<<"$resp")"
 
+  ssh_forget                      # Hetzner recycles IPs; a stale host key hangs this loop
   echo -n "waiting for ssh"
   for _ in $(seq 60); do
     if ssh_run true 2>/dev/null; then echo " — up at $(server_ip)"; break; fi
@@ -114,11 +121,19 @@ cmd_up() {
 cmd_run() {
   local n; n=$(ssh_run nproc)
   local procs=$(( n > 2 ? n - 1 : 1 ))   # dedicated box, nothing else on it
-  echo "running on $n vCPU (--procs $procs)"
+  # Multi-start: independent seeds explore different basins, and if two seeds disagree about
+  # what is on the front then NEITHER has converged. One box, both seeds, one teardown.
+  local seeds=${EXOKEY_SEEDS:-1}
+  echo "running on $n vCPU (--procs $procs), seeds: $seeds"
   # OMP_NUM_THREADS=1 is not optional: N workers x N BLAS threads oversubscribes the box
   # and the "parallel" run comes out slower than serial.
-  ssh_run "cd /opt/exokey && mkdir -p out && PYTHONPATH=. OMP_NUM_THREADS=1 \
-           .venv/bin/python -u -m opt.run --procs $procs $* 2>&1 | tee out/nsga.log"
+  for sd in $seeds; do
+    echo "--- seed $sd ---"
+    ssh_run "cd /opt/exokey && mkdir -p out && PYTHONPATH=. OMP_NUM_THREADS=1 \
+             EXOKEY_OUT=out/pareto_seed${sd}.pkl \
+             .venv/bin/python -u -m opt.run --procs $procs --seed $sd $* 2>&1 \
+             | tee out/nsga_seed${sd}.log"
+  done
 }
 
 cmd_fetch() { rsync -az "root@$(server_ip):/opt/exokey/out/" "$REPO_DIR/out/"; echo "pulled -> out/"; }

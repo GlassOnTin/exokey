@@ -6,9 +6,19 @@ hand *together* against a musculoskeletal model.
 
 DataHand / Svalboard geometry, made wearable — you can stand up and walk away with it on.
 
-> **Status: research. Nothing has been built.** Everything here is simulation, and its
-> limitations are stated plainly in [VISION.md §6](VISION.md#6-model-limitations--stated-not-hidden).
-> The single most valuable next step is to *print one and measure it*.
+> **Status: research. Nothing has been built.** Everything here is simulation.
+>
+> The current model says the device is **feasible**, but only after a correction that
+> overturned an earlier negative result. We had modelled the finger well as a **pin** — a point
+> force at the pad, with the finger's own muscles required to balance the whole joint torque —
+> and concluded that an open hand *cannot press*. That is contradicted by everyone who types on
+> a flat keyboard. A well is a **cradle**: it supports the distal phalanx along its length, so
+> the finger acts as a **strut** (piano technique names this exactly). Fixing it dissolved the
+> contradiction. See [VISION.md §5](VISION.md#5-what-we-already-learned-by-failing).
+>
+> The **thumb still cannot press** — it has no adductor, and a cradle lends no muscle. That
+> finding survived the correction, and it is a design decision: **no characters under the
+> thumb**.
 
 ---
 
@@ -19,7 +29,7 @@ co-designs a wearable keyboard by multi-objective optimisation:
 
 - **Effort** = muscle activation, Σaᵢ³ (Crowninshield–Brand). A physical quantity, not a
   geometric proxy.
-- **Feasibility** = hard constraints (9 of them). NSGA-II's constrained tournament means the
+- **Feasibility** = hard constraints (11 of them, including *"the digit must actually be able to perform the action"*). NSGA-II's constrained tournament means the
   optimiser cannot *buy* an unreachable key by paying a penalty.
 - **Objectives** = effort per character, device mass, key deflection. They genuinely conflict.
 - **Population** = the 5th–95th percentile hand, with the finger wells *adjusting* to fit.
@@ -28,12 +38,33 @@ co-designs a wearable keyboard by multi-objective optimisation:
 
 | | |
 |---|---|
-| The five finger directions differ in muscle cost by | **1.9 million×** |
-| `click` (press into the well) is the cheapest | everywhere, on every finger |
+| **MyoHand's thumb cannot press a key.** Not "weakly" — **at all** | **0.0 N**, at every posture, in all 600 directions sampled |
+| ...because it has **no adductor**. FPL flexes, EPL/EPB extend, APL abducts, OP opposes | pressing a key is pushing *against* something |
+| We add **adductor pollicis** ([`hand/thenar.py`](hand/thenar.py)) and it is still not enough | irreducible torque residual **45.6% → 11.9%** |
+| The four fingers, by contrast, can press **exactly** | **≤0.6%** residual — a **20× gap**, and it is what the design rests on |
+| So: **no characters under the thumb.** QWERTY's left half never needed it | 15 letters; 4 fingers × 3 rows + the index's 2nd column = exactly 15 |
+| A well is a **cup**, not a cap: the fingertip *bone* slides in along its own axis | so the wells need a **spread, open** hand — gripping converges the fingertips |
 | QWERTY's *top* row is the most-used, not "home" | 30.2% vs 23.0% |
-| Choosing which direction means which row is worth | **5×** — and it's firmware, so it's free |
-| Per-finger adjustment needed to span 5th–95th | **~12 mm**, and essentially **2 axes**, not Svalboard's 5 |
 | A palm-strapped body vs an articulated exoskeleton | **3× stiffer, 35% lighter** |
+
+### And some things it got wrong, and had to retract
+
+Two headline numbers that used to be in this table are **withdrawn**. They were artifacts.
+
+> ~~The five finger directions differ in muscle cost by **1.9 million×**~~
+> ~~`click` is the cheapest, everywhere, on every finger~~
+
+`solve_activations` never enforced equilibrium: it least-squares-fitted the required joint
+torque, settled for the closest **achievable** one, and returned the shortfall as `residual`
+— **which no caller ever read**. So an action a digit *cannot perform* produces a small
+achievable torque, hence small activations, hence **low effort**. Impossible actions looked
+*cheap*, and the optimiser was systematically drawn to them. The cheapest number in the whole
+model (middle/`click`, 4e-08) was an **unbalanced press**.
+
+That is [v1's disease](#a-note-on-how-this-was-built) one level deeper: v1 let the optimiser
+*buy its way out* of a soft constraint; here the constraint **was never checked at all**.
+Equilibrium is now a hard constraint, and an unperformable action is **unavailable**, not
+expensive.
 
 Full numbers, gates and caveats: **[VISION.md](VISION.md)**.
 
@@ -47,7 +78,7 @@ cd exokey
 python3 -m venv .venv
 .venv/bin/pip install mujoco numpy scipy pymoo PyNiteFEA plotly pytest
 
-# the gates. 57 of them. each one caught a real bug.
+# the gates. 64 of them. each one caught a real bug.
 PYTHONPATH=. OMP_NUM_THREADS=1 .venv/bin/python -m pytest tests/ -q
 
 # the effort landscape over a finger's reachable workspace -> out/stage2_field.html

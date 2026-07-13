@@ -38,7 +38,7 @@ def test_pad_is_palmar_not_dorsal(h):
     """
     m = h.model
     for f in FINGERS:
-        bid, pad_l, palmar_l = h.pad[f]
+        bid, pad_l, palmar_l = h.pad[f][:3]
         nail = [
             g
             for g in range(m.body_geomadr[bid], m.body_geomadr[bid] + m.body_geomnum[bid])
@@ -246,25 +246,30 @@ def test_passive_tension_only_at_extreme_postures(h):
     assert a[edc] > 0.05, "the extensor should be the one resisting stretched flexors"
 
 
-def test_thumb_thenar_intrinsics_are_missing(h):
-    """Pin a MODEL limitation so no thumb result is ever quietly trusted.
+def test_which_thenar_intrinsics_are_missing(h):
+    """Pin exactly WHICH thumb muscles exist, so no thumb result is quietly trusted.
 
-    MyoHand gives the thumb five actuators: APL, EPB, EPL, FPL, OP. The thenar intrinsics
-    -- adductor pollicis (ADP), flexor pollicis brevis (FPB), abductor pollicis brevis
-    (APB) -- are absent. ADP is *the* thumb press/pinch muscle. Without it the thumb must
-    press using FPL and OP alone, against EPL/EPB/APL as antagonists, so MyoHand
-    systematically OVERSTATES the cost of a thumb keypress (measured here: ~1000x the
-    index for the same 0.5 N at the resting pad, which is not believable).
+    This test used to assert that ADP, FPB and APB were ALL absent, and it FAILED the moment
+    we added ADP -- which is the test doing its job. It pinned a limitation, and part of the
+    limitation is now gone. Rewritten to say what is true, not what was.
 
-    A chording keyboard puts prime real estate under the thumb, so this is not a corner
-    case. Thumb effort from this model ranks thumb keys against each other at best; it
-    must NOT be compared against the fingers'. Cross-check needs a model that has the
-    thenar group (the plan's OpenSim ARMS, 43 muscles).
+    Stock MyoHand gives the thumb five actuators: APL, EPB, EPL, FPL, OP.
+      FPL flexes.  EPL, EPB extend.  APL abducts.  OP opposes.  NOTHING ADDUCTS.
+    And pressing a key is pushing AGAINST something, so the stock thumb cannot press at all:
+    measured, 0.0 N at every posture, and a 45.6% irreducible torque residual.
 
-    If this test ever fails, MyoHand gained the thenar muscles -- delete the caveat.
+    We ADD adductor pollicis (hand/thenar.py), which cuts that to 11.9%. Still not enough --
+    see test_the_thumb_cannot_press_and_the_fingers_can, which is where the design decision
+    lives. FPB and APB remain missing: they were attempted, came out with the WRONG moment
+    arms (extending the MP joint that FPB exists to flex), and were thrown away rather than
+    tuned until they agreed.
     """
     have = {h.model.actuator(i).name for i in range(h.nu)}
-    assert not ({"ADP", "FPB", "APB"} & have), "MyoHand gained thenar intrinsics"
+    assert "ADP" in have, "adductor pollicis should be added by hand/thenar.py"
+    assert not ({"FPB", "APB"} & have), (
+        "FPB/APB are still missing. If they were added, they must be VALIDATED (moment-arm "
+        "signs, and a measured drop in the thumb residual) -- not just present."
+    )
     assert {"FPL", "OP", "APL", "EPL", "EPB"} <= have
 
 
@@ -346,3 +351,100 @@ def test_a_hand_can_reach_a_key_at_its_own_fingertip(h, finger):
             f"{finger} @ curl {t_p:.2f}/{t_m:.2f}: cannot reach a key at its own "
             f"fingertip -- off by {post.pos_err*1000:.2f} mm"
         )
+
+
+def test_adductor_pollicis_has_the_moment_arms_of_an_adductor():
+    """ADP is ADDED to MyoHand (hand/thenar.py). Assert it does what an adductor does.
+
+    Anatomy states three things unambiguously, and all three are checkable:
+      * it ADDUCTS the CMC  -> same sign as OP (the opponens), which also draws the thumb in
+      * it FLEXES the MP    -> same sign as FPL (the flexor), which defines flexion here
+      * it does NOT cross the IP -> its ip_flexion moment arm must be ZERO
+
+    The third one caught a real bug: a first placement put the insertion on the straight line
+    from the MP joint centre to the origin, so the tendon passed THROUGH the joint and its
+    mp_flexion arm came out EXACTLY 0.0000 -- anatomically placed, mechanically inert.
+    """
+    import mujoco
+
+    h = MyoHand(thenar=True)
+    m = h.model
+    A, _ = h.muscle_affine(np.zeros(m.nq))
+
+    def arm(act, jnt):
+        ai = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_ACTUATOR, act)
+        ji = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_JOINT, jnt)
+        return float(A[m.jnt_dofadr[ji], ai])
+
+    assert np.sign(arm("ADP", "cmc_abduction")) == np.sign(arm("OP", "cmc_abduction")), \
+        "ADP must adduct the CMC, like the opponens"
+    assert np.sign(arm("ADP", "mp_flexion")) == np.sign(arm("FPL", "mp_flexion")), \
+        "ADP must FLEX the MP, like the flexor"
+    assert abs(arm("ADP", "ip_flexion")) < 1e-6, \
+        "ADP inserts on the PROXIMAL phalanx: it cannot have an IP moment arm"
+
+
+def test_adding_adp_does_not_touch_the_fingers():
+    """A thumb muscle must change the THUMB and nothing else. This is the control.
+
+    Without it, any improvement in the thumb could be a global shift dressed up as a fix.
+    """
+    import mujoco
+
+    stock, full = MyoHand(thenar=False), MyoHand(thenar=True)
+    for act in ("FDP2", "FDS3", "EDC4", "RI2", "LU_RB5"):
+        for hh, mm in ((stock, stock.model), (full, full.model)):
+            pass
+        A0, _ = stock.muscle_affine(np.zeros(stock.model.nq))
+        A1, _ = full.muscle_affine(np.zeros(full.model.nq))
+        i0 = mujoco.mj_name2id(stock.model, mujoco.mjtObj.mjOBJ_ACTUATOR, act)
+        i1 = mujoco.mj_name2id(full.model, mujoco.mjtObj.mjOBJ_ACTUATOR, act)
+        assert np.allclose(A0[:, i0], A1[:, i1], atol=1e-9), f"{act} changed when ADP was added"
+
+
+def test_the_thumb_cannot_press_and_the_fingers_can():
+    """THE FINDING, pinned. And it is a DESIGN decision, not a curiosity.
+
+    The equilibrium residual -- how much of the required joint torque the muscles CANNOT
+    produce -- separates the thumb from every finger by 20x:
+
+        index 0.0%   ring 0.0%   little 0.0%   middle 0.6%   ||   THUMB 11.9%
+
+    Stock MyoHand puts the thumb at 45.6% (it has no adductor at all: FPL flexes, EPL/EPB
+    extend, APL abducts, OP opposes -- nothing ADDUCTS, and pressing a key is pushing
+    AGAINST something). Adding ADP cuts that to 11.9%. It is not enough.
+
+    The gap is what matters, and it is why the verdict does NOT rest on RESIDUAL_MAX (a
+    guess): ANY threshold in [1%, 11%] says the same thing. It is also insensitive to ADP's
+    peak force -- 11.9% from 100 N to 400 N -- because a residual is a DIRECTION problem, and
+    scaling a muscle does not rotate its column.
+
+    CONSEQUENCE: do not put characters under the thumb. QWERTY's left half needs 15 letters
+    and the four fingers supply exactly 15 (4 fingers x 3 rows, + the index's second column).
+    The thumb is for space and modifiers, where a 12% torque shortfall is survivable.
+    """
+    from scipy.optimize import lsq_linear
+
+    from design.vector import posture
+
+    def irreducible(h, f):
+        best = 1.0
+        for tp in np.linspace(0.1, 0.9, 5):
+            for tm in np.linspace(0.1, 0.9, 5):
+                q = posture(h, f, float(tp), float(tm), 0.0)
+                h.fk(q)
+                A, _ = h.muscle_affine(q)
+                dofs = h.digit_dofs[f]
+                Ad = A[np.ix_(dofs, np.arange(A.shape[1]))]
+                g = h.pad_jacobian(f)[:, dofs].T @ h.pad_pose(q, f)[1]
+                a = np.clip(lsq_linear(Ad, g, bounds=(0.0, 1.0)).x, 0.0, 1.0)
+                best = min(best, float(np.linalg.norm(Ad @ a - g) / (np.linalg.norm(g) + 1e-12)))
+        return best
+
+    h = MyoHand(thenar=True)
+    thumb = irreducible(h, "thumb")
+    fingers = {f: irreducible(h, f) for f in FINGERS if f != "thumb"}
+
+    assert max(fingers.values()) < 0.02, f"a finger cannot press: {fingers}"
+    assert thumb > 0.05, "if the thumb became pressable, this finding is stale -- re-derive it"
+    assert thumb > 5 * max(fingers.values()), "the thumb/finger gap is what the design rests on"

@@ -142,62 +142,71 @@ def _basis(n: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return u, np.cross(n, u)
 
 
-def keycap_traces(
-    keys: list[dict],
-    top: float = 0.0125,
-    base: float = 0.0145,
-    height: float = 0.0032,
-    stem: float = 0.0028,
-) -> list:
-    """Keys drawn as real low-profile keycaps (Kailh-Choc-ish: ~13 mm cap, ~3 mm tall),
-    not as abstract markers.
+def well_traces(keys: list[dict]) -> list:
+    """Wells drawn as the U-CHANNELS they are, with their five joystick directions.
 
-    Each key is a tapered cap whose TOP FACE is the surface the pad actually lands on, and
-    whose axis is the key's switch axis. That makes the geometry legible: you can see at a
-    glance whether a cap is presented squarely to the finger or edge-on -- which matters
-    here, because the thumb's cap sits at ~80 deg of obliquity to its pad and a square
-    marker hides that completely.
+    THE FINGERTIP BONE GOES INTO THE WELL. It does not rest its pad on the well's opening --
+    that was the bug, and it was a real geometric error, not just a drawing one. A well drawn
+    as a disc on the pad normal is a device you would have to lower your fingertip into
+    vertically, like a piston. A DataHand/Svalboard well is a channel the distal phalanx
+    SLIDES INTO along its own axis:
 
-    `keys` items: {pos, normal, finger?, label?}. `normal` points OUT of the cap, at the digit.
+        floor    palmar, under the pad          -> `click` presses into it
+        walls    lateral, either side           -> `left` / `right` push against them
+        open     proximally (the finger enters) and dorsally (the finger lifts out)
+
+    So the channel's long axis is the DISTAL PHALANX AXIS, and the floor normal is the PAD
+    NORMAL. They are perpendicular, and both are needed. `keys` items:
+      {pos, axis, floor, lateral, half, radius, finger?, label?, dirs?{name: vec}}
     """
     traces = []
     for k in keys:
         p = np.asarray(k["pos"], float)
-        n = np.asarray(k["normal"], float)
-        n = n / (np.linalg.norm(n) + 1e-12)
-        u, v = _basis(n)
+        ax = np.asarray(k["axis"], float)
+        fl = np.asarray(k["floor"], float)
+        lat = np.asarray(k["lateral"], float)
+        r = float(k["radius"])
+        L = 2.0 * float(k["half"])          # the channel must hold the whole phalanx
         col = FINGER_COLOR.get(k.get("finger", ""), "#444")
+        w = r + 0.0015                      # half-width incl. wall
 
-        def box(c0, c1, s0, s1):
-            """Tapered box between face centres c0 (size s0) and c1 (size s1)."""
-            corners = [(1, 1), (1, -1), (-1, -1), (-1, 1)]
-            A = [c0 + a * s0 / 2 * u + b * s0 / 2 * v for a, b in corners]
-            B = [c1 + a * s1 / 2 * u + b * s1 / 2 * v for a, b in corners]
-            V = np.array(A + B)
-            F = [(0, 1, 2), (0, 2, 3), (4, 6, 5), (4, 7, 6)]
-            for i in range(4):
-                j = (i + 1) % 4
-                F += [(i, j, 4 + j), (i, 4 + j, 4 + i)]
-            return V, np.array(F)
+        # the channel runs from the pad (distal) back along the bone (proximal)
+        d0 = p + 0.004 * ax                 # a little past the fingertip: the end stop
+        d1 = p - L * ax                     # open, proximal end
 
-        cap_top, cap_base = p, p - height * n
-        V, F = box(cap_top, cap_base, top, base)
-        traces.append(go.Mesh3d(
-            x=V[:, 0], y=V[:, 1], z=V[:, 2], i=F[:, 0], j=F[:, 1], k=F[:, 2],
-            color=col, opacity=1.0, flatshading=True,
-            lighting=dict(ambient=0.45, diffuse=0.85, specular=0.3),
-            name=k.get("label", "key"), hoverinfo="name", showlegend=False,
-        ))
+        def quad(a, b, c, d, color, opacity):
+            V = np.array([a, b, c, d])
+            F = np.array([(0, 1, 2), (0, 2, 3)])
+            return go.Mesh3d(
+                x=V[:, 0], y=V[:, 1], z=V[:, 2], i=F[:, 0], j=F[:, 1], k=F[:, 2],
+                color=color, opacity=opacity, flatshading=True,
+                lighting=dict(ambient=0.5, diffuse=0.8),
+                name=k.get("label", "well"), hoverinfo="name", showlegend=False)
 
-        # the switch body under the cap, so the travel direction reads at a glance
-        V, F = box(cap_base, cap_base - stem * n, base * 0.55, base * 0.55)
-        traces.append(go.Mesh3d(
-            x=V[:, 0], y=V[:, 1], z=V[:, 2], i=F[:, 0], j=F[:, 1], k=F[:, 2],
-            color="#2b2b2b", opacity=1.0, flatshading=True,
-            hoverinfo="skip", showlegend=False,
-        ))
+        f0 = p + 0.0015 * fl                # floor sits just palmar of the pad
+        # FLOOR (what `click` presses into)
+        traces.append(quad(d0 + 0.0015 * fl - w * lat, d0 + 0.0015 * fl + w * lat,
+                           d1 + 0.0015 * fl + w * lat, d1 + 0.0015 * fl - w * lat, col, 1.0))
+        # SIDE WALLS, rising dorsally to about the bone's equator -- that wrap is what lets a
+        # sideways nudge register at all, and it is why the rim is ~one flesh-radius tall
+        for sgn in (+1.0, -1.0):
+            a = d0 + 0.0015 * fl + sgn * w * lat
+            b = d1 + 0.0015 * fl + sgn * w * lat
+            traces.append(quad(a, b, b - r * fl, a - r * fl, col, 0.40))
+        # DISTAL END STOP
+        traces.append(quad(d0 + 0.0015 * fl - w * lat, d0 + 0.0015 * fl + w * lat,
+                           d0 - r * fl + w * lat, d0 - r * fl - w * lat, col, 0.40))
+
+        for name, dvec in (k.get("dirs") or {}).items():
+            dv = np.asarray(dvec, float)
+            dv = dv / (np.linalg.norm(dv) + 1e-12)
+            a = f0
+            b = a + 0.010 * dv
+            traces.append(go.Scatter3d(
+                x=[a[0], b[0]], y=[a[1], b[1]], z=[a[2], b[2]], mode="lines",
+                line=dict(color="#111", width=4),
+                name=f"{k.get('finger','')}:{name}", hoverinfo="name", showlegend=False))
     return traces
-
 
 def frame_traces(nodes: dict[str, np.ndarray], members: list[tuple[str, str, str]]) -> list:
     """Exoskeleton frame: nodes + members. `members` is (i_node, j_node, kind)."""
