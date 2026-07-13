@@ -739,6 +739,65 @@ took the user's ergonomic intuition to force the re-examination.
 
 ---
 
+## 5e. The gauntlet — anchor points and boundary conditions FIRST
+
+**The user, and it is the correct order of work:**
+
+> *"The rigid support can still extend over the fingers if needed, but that's what we'll find out
+> from the optimisation. What we need is the anchor points and boundary conditions first."*
+
+Every mistake in this project has been a boundary condition or an objective. Never a search.
+And getting these right was worth more than every optimisation run put together.
+
+### Three boundary-condition errors, each of which flattered the answer
+
+**1. It is not bolted to a wall.** The first gauntlet used **rigid** supports. Rigid anchors
+absorb the keypress for free. With honest soft-tissue anchors the button deflection was **7×
+worse** and the design **failed the gate at every thickness** — including 2 mm and **70 g**.
+
+**2. The anchor was a hinge.** The supports were the proximal *ring* of the metacarpal shells —
+**a line of nodes, with zero extent along the lever**. A keypress at a fingertip **121 mm** away
+is a **moment**, and *a line cannot carry a moment*. **55% of the button's movement was the
+gauntlet rocking**, and thickening the shell did nothing, because I was stiffening a beam that
+pivoted on a pin. **The fix was not material. It was EXTENT.**
+
+| anchor | extent along the lever | rocking at the button |
+|---|---|---|
+| line at the knuckles | **~0 mm** | **~387 µm** |
+| **patch + carpus** | **92 mm** | **0.2 µm** |
+
+**3. The contact is one-way.** Soft tissue can **push** the gauntlet off the hand but cannot
+**pull** it back. A keypress drives the button palmar, which *lifts* the proximal end — and
+nothing in the tissue resists that. **Only the strap does.** The springs are bidirectional in the
+model, and that **bundles the strap's hold-down into the tissue's stiffness** — declared, not
+hidden.
+
+### And tissue stiffness is not one number
+
+`k = E·A/t`, and **t is measured**: the skin over the metacarpals is only **1.4–3.1 mm** (bone
+radius vs flesh capsule, taken *perpendicular to the bone axis* — measuring it from the centroid
+gives half the bone's *length* and negative tissue, which is how the first attempt read).
+
+**Thin skin over bone is a STIFF anchor.** `SOFT_TISSUE_K = 25 N/mm` was quoted for a **palm**
+patch — a muscle pad ten times thicker — and I had been applying it to the back of the hand.
+
+### The result
+
+| | mass | button deflection |
+|---|---|---|
+| solid gauntlet (1.2 mm CF-PA12) | 42.1 g | 183 µm |
+| **grown** (ESO, minimise mass, gate 500 µm) | **25.2 g** | 221 µm |
+| *the palmar body it replaces* | *36.9 g* | *38 µm, and 27 mm of standoff* |
+
+**40% of the mass deleted**, and it hugs. It stops on **connectivity**, not stiffness — a finer
+mesh would carve further.
+
+⚠ **`WRIST_TISSUE` is a guess and it is load-bearing.** MyoHand's carpals have **no flesh geoms
+at all**, so the tissue over the dorsal wrist — the gauntlet's *main anchor* — cannot be measured
+from this model. It is taken as 3 mm and declared.
+
+---
+
 ## 6. Model limitations — stated, not hidden
 
 These bound every conclusion above.
@@ -779,6 +838,7 @@ These bound every conclusion above.
   | `ADJUSTER_MASS` | 0.15 g/mm | mass of a per-finger slide; not from any real mechanism |
   | `COLUMN_SHIFT_COST` | 5e-6 | cost of translating the hand to the index's 2nd column |
   | `SHIFT_FREQ` | 4.0 /100 letters | left-shift usage. It **decides whether a pointer fits**: with shift on a well, the mouse costs one slot more than the hand has; move shift to a hold/chord and it fits. |
+  | `WRIST_TISSUE` | 3.0 mm | soft tissue over the dorsal **carpus** — the gauntlet's main anchor. **NOT derivable:** MyoHand's carpals have no flesh geoms at all. Sets how stiff the anchor is. |
   | `RESIDUAL_MAX` | 0.05 | how much of the required joint torque a digit may FAIL to produce and still be said to "press" the key. ⚠ Ideally **zero**. It is a tolerance, and **the whole action set depends on where this line is drawn** — sensitivity must be reported. |
 
 - **`SOFT_TISSUE_K`** (25 N/mm) is literature, not measurement: the band is 10–50 N/mm and

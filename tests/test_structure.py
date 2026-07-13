@@ -392,3 +392,63 @@ def test_the_floor_legs_must_reach_DISTINCT_feet():
         f"the floor legs land on only {len(landed)} foot(feet): {landed}. The whole device is "
         "hanging off one node."
     )
+
+
+def test_the_anchor_must_be_a_PATCH_not_a_hinge():
+    """THE BOUNDARY CONDITION THAT DECIDED EVERYTHING.
+
+    The user: "Don't forget that the gauntlet still has to carry the force to the static wrist
+    / palms" and then "What we need is the anchor points and boundary conditions first."
+
+    Both were right, and both caught a mistake:
+
+      1. The first gauntlet used RIGID supports -- a clamp. Rigid anchors absorb the keypress
+         for free and flatter every number downstream. With honest soft-tissue anchors the
+         deflection was 7x worse and it FAILED the gate at every thickness, up to 2 mm and 70 g.
+
+      2. Worse, the anchors were the proximal RING of the metacarpal shells -- A LINE of nodes
+         with ZERO extent along the lever. A keypress 121 mm away is a MOMENT, and A LINE
+         CANNOT CARRY A MOMENT. 55% of the button's movement was the gauntlet ROCKING, and
+         thickening the shell did nothing about it, because I was stiffening a beam that pivoted
+         on a pin.
+
+    The fix was not material. It was EXTENT: bear on the CARPUS as well as the metacarpals.
+
+        anchor              extent   rocking at the button
+        line at knuckles     ~0 mm            ~387 um
+        patch + carpus       92 mm              0.2 um
+
+    And the stiffness follows the MEASURED tissue: k = E*A/t, with t = 1.4-3.1 mm over the
+    metacarpals (bone radius vs flesh capsule). Thin skin over bone is a STIFF anchor.
+    SOFT_TISSUE_K = 25 N/mm was quoted for a PALM patch -- a muscle pad ten times thicker.
+    """
+    import numpy as np
+
+    from design.vector import posture, tm_of, tp_of
+    from hand.myohand import FINGERS
+    from opt.problem import hands
+    from opt.run import baseline
+    from structure.anchor import bearing_surface
+    from structure.frame import hand_axes
+
+    h = hands()[50]
+    x = baseline()
+    q = h.compose({f: posture(h, f, tp_of(x, f), tm_of(x, f), x.get(f"ab_{f}", 0.0))
+                   for f in FINGERS})
+    P, N, K, T = bearing_surface(h, q)
+    o, e_d, _, _ = hand_axes(h, q)
+    d = (P - o) @ e_d
+
+    assert (d.max() - d.min()) > 0.060, (
+        f"the anchor has only {(d.max()-d.min())*1000:.0f} mm of extent along the lever. "
+        "A hinge cannot carry a moment."
+    )
+    # the moment a keypress makes at the furthest button, against the patch's rotational stiffness
+    r = d - d.mean()
+    k_rot = float(np.sum(K * r**2))
+    rock = (0.196 * 0.121) / k_rot * 0.121          # button movement from ROCKING alone
+    assert rock < 50e-6, (
+        f"the gauntlet rocks {rock*1e6:.0f} um on its anchor. That is most of the 500 um "
+        "budget, and no amount of shell thickness will fix it."
+    )
+    assert T.min() > 0.0005 and T.max() < 0.010, f"implausible tissue thickness: {T.min()}..{T.max()}"

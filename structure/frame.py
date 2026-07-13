@@ -966,20 +966,56 @@ def build_dorsal(h: MyoHand, q: np.ndarray, keys: dict, p: dict | None = None) -
 
     hug = float(p.get("hug", 0.004))   # how far the rail stands off the skin. HUGGING.
 
-    def dorsal_of(body: str) -> np.ndarray:
-        """A point just DORSAL of a bone's flesh -- derived from its own capsule, not guessed."""
+    CHAIN_ALL = {
+        "thumb": ("firstmc", "proximal_thumb", "distal_thumb"),
+        "index": ("proxph2", "midph2", "distph2"),
+        "middle": ("proxph3", "midph3", "distph3"),
+        "ring": ("proxph4", "midph4", "distph4"),
+        "little": ("proxph5", "midph5", "distph5"),
+    }
+
+    # EACH BONE HAS ITS OWN DORSAL SIDE, and using the hand's GLOBAL dorsal axis for all of
+    # them is wrong -- a finger's phalanges are ROTATED relative to the palm, more so the more
+    # it curls. Doing that put the rail 4.3 mm INSIDE the finger it was supposed to hug: not a
+    # shell on top of the finger, a shell through it.
+    #
+    # Derive it: at the STRAIGHT hand every bone's dorsal side IS the hand's dorsal axis, so
+    # take `dorsal` in each bone's OWN local frame there, and then transport it with the bone.
+    # A direction fixed in the bone stays on the bone, whatever the finger does.
+    q0 = np.zeros(h.model.nq)
+    h.fk(q0)
+    o0, _, _, e_o0 = hand_axes(h, q0)
+    dors_local = {}
+    _all = [b for bs in CHAIN_ALL.values() for b in bs] + \
+           ["secondmc", "thirdmc", "fourthmc", "fifthmc"]
+    for _bones in (_all,):
+        for bn in _bones:
+            bid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, bn)
+            R0 = h.data.xmat[bid].reshape(3, 3)
+            dors_local[bn] = R0.T @ e_o0
+    h.fk(q)
+
+    def bone_frame(body: str):
+        """(centre, dorsal unit, bone axis, flesh radius) of a phalanx, in world."""
         bid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, body)
-        best = None
+        R = h.data.xmat[bid].reshape(3, 3)
+        dors = R @ dors_local[body]
+        dors /= np.linalg.norm(dors) + 1e-12
         for g in range(m.body_geomadr[bid], m.body_geomadr[bid] + m.body_geomnum[bid]):
             if m.geom_type[g] != mujoco.mjtGeom.mjGEOM_CAPSULE:
                 continue
             r = float(m.geom_size[g][0])
-            c = h.data.geom_xpos[g]
-            best = c + (r + hug) * e_o
-        if best is None:
-            bid_pos = h.data.xpos[bid]
-            best = bid_pos + 0.010 * e_o
-        return best
+            c = h.data.geom_xpos[g].copy()
+            ax = h.data.geom_xmat[g].reshape(3, 3)[:, 2]
+            ax = ax - (ax @ dors) * dors
+            ax /= np.linalg.norm(ax) + 1e-12
+            return c, dors, ax, r
+        return h.data.xpos[bid].copy(), dors, e_d, 0.008
+
+    def dorsal_of(body: str) -> np.ndarray:
+        """A point just above the bone's OWN dorsal surface. ON TOP of the finger."""
+        c, dors, _, r = bone_frame(body)
+        return c + (r + hug) * dors
 
     # --- the DORSAL SPINE: a bar across the knuckles, and one across the wrist -------------
     for i, mc in enumerate(("secondmc", "thirdmc", "fourthmc", "fifthmc")):
@@ -988,13 +1024,7 @@ def build_dorsal(h: MyoHand, q: np.ndarray, keys: dict, p: dict | None = None) -
         strut(f"spine{i}", f"knuck{i}", f"knuck{i+1}")
 
     # --- a RAIL dorsal of each finger, out to the fingertip, then AROUND it ----------------
-    CHAIN = {
-        "thumb": ("firstmc", "proximal_thumb", "distal_thumb"),
-        "index": ("proxph2", "midph2", "distph2"),
-        "middle": ("proxph3", "midph3", "distph3"),
-        "ring": ("proxph4", "midph4", "distph4"),
-        "little": ("proxph5", "midph5", "distph5"),
-    }
+    CHAIN = CHAIN_ALL
     anchor = {"thumb": "knuck0", "index": "knuck0", "middle": "knuck1",
               "ring": "knuck2", "little": "knuck3"}
 
