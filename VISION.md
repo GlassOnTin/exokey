@@ -633,9 +633,48 @@ is largely a **beam-model artifact** (10 discrete beams where a plate is 4; a **
 following the palm costs nothing extra — the same shell, curved). Settling this properly needs
 **shell elements, not beams** — the same caveat already on `BODY_PROX`.
 
-`build_arch` is implemented and clears bone in both postures. It is **not wired into the
-optimiser**, because on a beam model it is 3× the mass for no measurable stiffness, and that
-would be optimising an artifact.
+### 5c. Shell elements — and what they actually settled
+
+`structure/shell.py`. MITC4 shells (PyNite `add_quad`), which carry **membrane** action —
+which is precisely what an arch uses and what a stick figure of beams **does not have**.
+
+**The gate first** (same discipline as the beam model's closed-form cantilever): a
+simply-supported square plate, `w = 0.00406·q·a⁴/D` (Timoshenko). It converges — **2.3% → 1.9%
+→ 1.0% → 0.7%** as the mesh refines. A shell that cannot reproduce a textbook plate has no
+business being asked about an arch.
+
+**What it settled — the beam model was wrong by 25×:**
+
+| | beam model | shell model |
+|---|---|---|
+| arch mass penalty | **+212%** | **+8.4%** |
+| arch stiffness | 1.00× | **1.12×** |
+
+A curved shell has the same area and thickness as a flat one, so the arch costs only its extra
+**arc length**. The beam model billed 10 discrete struts where a plate is 4. **That was never a
+finding about arches; it was an artifact of idealising a shell as sticks.**
+
+**What it did NOT settle, and I will not pretend otherwise:**
+
+- ⚠ **The arch is still not clearly worth having.** 1.12× on a component carrying only ~10% of
+  the compliance is **~1% overall**. The shell corrects the *artifact* without vindicating the
+  *arch*. Those are different claims and only the first is established.
+- ⚠ **A linear shell cannot distinguish "follow the palm" from "invert".** They give
+  *identical* deflections. My argument that the cup must be **inverted** — because a keypress
+  pushes the body dorsally, so a dorsally-bulging shell is pushed *into its own convexity*
+  (tension and snap-through) rather than compressed — is **real physics that this model cannot
+  see**. It would appear as a *buckling* margin, and buckling does not bind at ~1 N. So the
+  sign is free, and **"follow the palm" wins on fit at equal stiffness.**
+- ⚠ **The key face — 44% of the compliance — is still unresolved.** Meshing its *bounding
+  rectangle* gives a solid slab that is 3× heavier than the beam model's sparse chain, but
+  that compares **two different parts**, not two idealisations of the same one. Settling it
+  needs the face's real **footprint** (a shaped web following the fingertip arc), which is a
+  design task, not a meshing one.
+
+`build_arch` is implemented and clears bone in both postures. It is **still not wired into the
+optimiser** — not because of the beam artifact (now disproved), but because **~1% is not worth
+a new architecture**, and the component that *would* be worth it (the key face) has not been
+modelled honestly yet.
 
 ---
 

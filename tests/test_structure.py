@@ -241,3 +241,61 @@ def test_where_the_compliance_lives_DEPENDS_ON_THE_DESIGN():
         "one group carries almost everything -- if that is real, say WHICH, and note it is "
         "design-dependent. It inverts between the baseline and the optimiser's designs."
     )
+
+
+def test_the_shell_model_reproduces_a_textbook_plate():
+    """THE SHELL GATE, and it is the same discipline that validated the beam model against a
+    closed-form cantilever: a simply-supported square plate under uniform load has a closed
+    form, w = 0.00406 q a^4 / D (Timoshenko).
+
+    A shell model that cannot reproduce a textbook plate has no business being asked about an
+    arch. Measured, and it CONVERGES: 2.3% at 4x4, 1.9% at 8x8, 1.0% at 12x12, 0.7% at 16x16.
+    """
+    from structure.shell import simply_supported_plate
+
+    errs = []
+    for n in (4, 8, 12):
+        fe, ct = simply_supported_plate(a=0.20, t=0.002, q=1000.0, n=n)
+        errs.append(abs(fe - ct) / ct)
+    assert errs[-1] < 0.02, f"shell is {errs[-1]:.1%} off the closed form -- do not trust it"
+    assert errs[-1] < errs[0], f"it must CONVERGE with mesh refinement, got {errs}"
+
+
+def test_the_beam_model_lied_about_the_arch_by_25x():
+    """WHY A SHELL MODEL WAS NEEDED AT ALL.
+
+    An arch carries load as MEMBRANE action -- compression in its own mid-surface -- and a
+    stick figure of beams HAS NO MEMBRANE. Worse, the beam model CHARGES for the arch: it is
+    10 discrete struts where a plate is 4, so PyNite billed +212% mass for a shape that,
+    moulded, is the same shell merely curved.
+
+        beam model:   arch is +212% mass, 1.00x stiffness   -> "not worth it"
+        shell model:  arch is  +8.4% mass, 1.12x stiffness
+
+    The mass penalty was wrong by a factor of 25. That is not a finding about arches; it is an
+    artifact of idealising a shell as sticks.
+
+    ⚠ AND THE ARCH IS STILL NOT CLEARLY WORTH IT. 1.12x on a component that carries only ~10%
+    of the compliance is ~1% overall. The shell corrects the ARTIFACT without vindicating the
+    ARCH -- those are different claims, and only the first is established.
+    """
+    import pickle
+
+    from design.vector import BODY_PROX, PRESS_N
+    from opt.problem import hands
+    from opt.run import baseline
+    from structure.shell import palm_shell
+
+    h = hands()[50]
+    x = baseline()
+    par = dict(alu_t=float(x["alu_t"]), body_half=float(x["body_half"]), body_prox=BODY_PROX,
+               body_dist=float(x["body_dist"]), palm_offset=float(x["palm_offset"]),
+               mat_frame=str(x["material"]), press_N=PRESS_N)
+    w_flat, m_flat = palm_shell(h, h.q_neutral, par, shape="flat")
+    w_arch, m_arch = palm_shell(h, h.q_neutral, par, shape="follow")
+
+    assert m_arch / m_flat < 1.3, (
+        f"a curved shell should cost only its extra ARC LENGTH ({m_arch/m_flat:.2f}x). The "
+        "beam model charged 3.1x, which is what made the arch look not worth having."
+    )
+    assert w_arch < w_flat, "an arch should be stiffer than a flat plate of the same thickness"
