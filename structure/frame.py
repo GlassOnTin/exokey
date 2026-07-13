@@ -170,6 +170,215 @@ BODY_DEFAULTS = dict(
 )
 
 
+def palmar_arch(h: MyoHand, q: np.ndarray, dist: float, n: int = 5) -> list[tuple[float, float]]:
+    """The hand's OWN transverse metacarpal arch, at distal station `dist`.
+
+    Returns [(radial, dorsal)] following the PALMAR SURFACE of the 2nd-5th metacarpals --
+    measured from the model's meshes, not assumed.
+
+    THE PALM IS A CUP, and it is 6.4 mm deep. Measured, at the metacarpals' palmar-most
+    surface:
+
+        2nd MC (radial)  r=+16.6mm   z=-8.9mm   \
+        3rd MC           r= +4.0mm   z=-5.1mm    | the EDGES protrude palmar
+        4th MC           r= -8.5mm   z=-3.1mm    | the MIDDLE is HOLLOW
+        5th MC (ulnar)   r=-19.8mm   z=-9.5mm   /
+
+    A body resting in the palm bears on the two EMINENCES and BRIDGES the hollow. It does not
+    sit on a flat plate -- and `build_body` bolted four corners of a RECTANGLE across it at a
+    single depth, so the corners either float off the eminences or dig into the hollow.
+
+    ⚠ The THUMB METACARPAL is excluded on purpose. It swings across the palm (measured -33 mm
+    palmar at +27 mm radial in the rest pose) and would swamp the profile -- but it is a
+    DIGIT, not a bearing surface, and it moves.
+    """
+    import mujoco
+
+    m = h.model
+    h.fk(q)
+    o, e_d, e_r, e_o = hand_axes(h, q)
+
+    pts = []
+    for bn in ("secondmc", "thirdmc", "fourthmc", "fifthmc"):
+        bid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, bn)
+        for g in range(m.body_geomadr[bid], m.body_geomadr[bid] + m.body_geomnum[bid]):
+            if m.geom_type[g] != mujoco.mjtGeom.mjGEOM_MESH:
+                continue
+            mid = m.geom_dataid[g]
+            va, vn = m.mesh_vertadr[mid], m.mesh_vertnum[mid]
+            V = m.mesh_vert[va:va + vn] @ h.data.geom_xmat[g].reshape(3, 3).T + h.data.geom_xpos[g]
+            pts.append(V)
+    P = np.vstack(pts)
+    r = (P - o) @ e_r
+    z = (P - o) @ e_o
+
+    lo, hi = float(r.min()), float(r.max())
+    out = []
+    for rr in np.linspace(lo, hi, n):
+        w = np.abs(r - rr) < 0.005
+        if not w.any():
+            w = np.abs(r - rr) < 0.010
+        out.append((float(rr), float(np.percentile(z[w], 2))))  # the palmar SURFACE
+    return out
+
+
+def build_arch(h: MyoHand, q: np.ndarray, keys: dict, p: dict | None = None) -> Frame:
+    """THE PALM END AS AN ARCH THAT FOLLOWS THE HAND -- not a flat plate on a cantilever.
+
+    (The user: "invert the support structure -- it doesn't follow the natural shape of the
+    hand.")
+
+    WHAT CHANGED, AND WHAT DELIBERATELY DID NOT.
+
+    CHANGED -- the palm support. `build_body` bolted FOUR CORNERS OF A FLAT RECTANGLE across
+    the palm at a single depth. The palm is not flat: it is a CUP 6.4 mm deep (measured off
+    the metacarpal meshes -- `palmar_arch`), with the radial and ulnar edges PROTRUDING palmar
+    and the middle HOLLOW. So the corners either float off the eminences or dig into the
+    hollow.
+
+    And a keypress pushes the body DORSALLY, INTO the palm. An arch that is CONVEX TOWARD THE
+    PALM carries that in pure COMPRESSION, straight into the two eminences the hand actually
+    presents. The flat plate carried it in BENDING. Bending is where the mass goes.
+
+    NOT CHANGED -- the distal routing, and this is the honest part. I tried four times to run
+    the load straight from the arch out to the wells and it cut the fingers every time
+    (-6.5 mm into the middle phalanx; then -3.9; then -5.3; then -5.9). It is the SAME
+    topological trap that killed the exoskeleton: YOU CANNOT DRAW A STRAIGHT LINE FROM THE
+    PALM TO A FINGERTIP WITHOUT CROSSING THE FINGER, because the finger is what lies between
+    them. The box's "ugly" floor ring was solving a real problem, and solving it correctly:
+    drop PALMAR into open air first, THEN run distally at the key face's depth. Both legs are
+    then outside the hand by construction.
+
+    So the arch replaces the plate and inherits the routing. That is the whole change.
+
+    ⚠ AND IT BUYS NO STIFFNESS. I claimed 3.8x, and I was wrong. Measured, by stiffening each
+    group 100x and seeing what the key actually feels:
+
+        key face      44% of the compliance
+        floor legs    27%
+        PALM SUPPORT  10%   <-- the arch can only ever touch this
+        walls          9%
+        floor ring     9%
+        stems          0%
+
+    The palm end is NOT where the structure is soft. The compliance is in the KEY FACE and the
+    long FLOOR LEGS -- the cantilever out to the fingertips. My earlier "3.8x stiffer arch" was
+    an ARTIFACT: that version skipped the floor routing altogether (and cut straight through
+    the fingers). The gain came from DELETING THE CANTILEVER, not from the arch. I was excited
+    by a number produced by a broken geometry.
+
+    SO WHAT IS THE ARCH FOR? FIT AND PRESSURE, not stiffness. A flat plate across a 6.4 mm cup
+    bears on whatever it happens to touch; an arch bears on the two eminences the hand actually
+    presents and BRIDGES the hollow. That is a comfort and load-distribution argument -- and
+    THIS MODEL CANNOT SCORE COMFORT, so it cannot make the case for its own change.
+
+    ⚠ Its 3x mass penalty is largely a BEAM-MODEL ARTIFACT: an arch is 10 discrete beams where
+    a plate is 4 corners, and PyNite charges for every one. A MOULDED SHELL following the palm
+    costs nothing extra -- it is the same shell, curved. The same caveat already applies to
+    BODY_PROX. Deciding this properly needs shell elements, not beams.
+    """
+    p = {**BODY_DEFAULTS, **(p or {})}
+    keys = {(k if isinstance(k, tuple) else (k, 0)): v for k, v in keys.items()}
+    o, e_d, e_r, e_o = hand_axes(h, q)
+
+    def P(dist, rad, dors):
+        return o + dist * e_d + rad * e_r + dors * e_o
+
+    nodes: dict[str, np.ndarray] = {}
+    members: list[Member] = []
+    ab, ad = p["sec_alu"]
+    nb, nd = p["sec_nylon"]
+    sb, sd = p["sec_strap"]
+    cb, cd = p["sec_clip"]
+
+    def strut(name, i, j, kind="alu"):
+        mat = {"alu": p["mat_frame"], "nylon": p["mat_stalk"],
+               "strap": "webbing", "clip": "spring_steel"}[kind]
+        bd = {"alu": (ab, ad), "nylon": (nb, nd), "strap": (sb, sd), "clip": (cb, cd)}[kind]
+        members.append(Member(name, i, j, mat, bd[0], bd[1], kind))
+
+    # --- the KEY FACE: unchanged ---------------------------------------------------------
+    feet = []
+    for (f, row), (kp, kn) in keys.items():
+        kp, kn = np.asarray(kp, float), np.asarray(kn, float)
+        kk, ft = f"key_{f}{row}", f"foot_{f}{row}"
+        nodes[kk] = kp
+        nodes[ft] = kp - p["stem"] * kn
+        strut(f"stem_{f}{row}", ft, kk, kind="nylon")
+        feet.append((float((nodes[ft] - o) @ e_r), float((nodes[ft] - o) @ e_d), ft))
+    for key_idx, second in ((0, 1), (1, 0)):
+        order = sorted(feet, key=lambda t: (t[key_idx], t[second]))
+        for a, b in zip(order, order[1:]):
+            if a[2] != b[2]:
+                strut(f"face{key_idx}_{a[2]}_{b[2]}", a[2], b[2])
+
+    # --- THE ARCH: the palm support, following the hand's own transverse arch -------------
+    gap = p["palm_offset"]
+    dp, dd = p["body_prox"], p["body_dist"]
+    # THE ARCH SPANS THE BODY'S OWN WIDTH, NOT THE HAND'S.
+    #
+    # I first spanned it across the FULL radial extent of the metacarpals (-27 to +29 mm) and
+    # it was a disaster: 109 g (it is a big arch) and its radial node sat inside the THUMB.
+    # `body_half` is a DESIGN VARIABLE -- the optimiser sizes the body to the hand -- and I
+    # overrode it with the hand's own anatomy. The arch follows the palm's SHAPE; the body
+    # decides its WIDTH.
+    hw = p["body_half"]
+    full = palmar_arch(h, q, dd, n=9)
+    arch_pts = []
+    for i in range(5):
+        rad = -hw + 2.0 * hw * i / 4.0
+        near = min(full, key=lambda t: abs(t[0] - rad))
+        arch_pts.append((rad, near[1]))
+
+    ribs = []
+    for station, dist in (("p", dp), ("d", dd)):
+        ring = []
+        for i, (rad, dors) in enumerate(arch_pts):
+            nm = f"arch_{station}{i}"
+            nodes[nm] = P(dist, rad, dors - gap)
+            ring.append(nm)
+        for a, b in zip(ring, ring[1:]):
+            strut(f"rib_{station}{a[-1]}{b[-1]}", a, b)   # the arch: works in COMPRESSION
+        ribs.append(ring)
+    for i in range(len(arch_pts)):                        # longitudinal, so the ribs cannot scissor
+        strut(f"spine_{i}", ribs[0][i], ribs[1][i])
+
+    # --- WALLS + FLOOR: the box's routing, kept because it is RIGHT (see docstring) -------
+    face_o = float(np.mean([(nodes[t[2]] - o) @ e_o for t in feet]))
+    corners = [(0, ribs[0][0]), (len(arch_pts) - 1, ribs[0][-1]),
+               (0, ribs[1][0]), (len(arch_pts) - 1, ribs[1][-1])]
+    floors = []
+    for k, (ai, corner) in enumerate(corners):
+        c = nodes[corner] - o
+        cr, cd = float(c @ e_r), float(c @ e_d)
+        fl = f"floor{k}"
+        nodes[fl] = P(cd, cr, face_o)          # straight PALMAR, into open air
+        strut(f"wall{k}", corner, fl)
+        nearest = min(feet, key=lambda t: (t[0] - cr) ** 2 + (t[1] - cd) ** 2)
+        strut(f"floorleg{k}", fl, nearest[2])  # then distally, palmar of everything
+        floors.append(fl)
+    for a, b in zip(floors, floors[1:] + floors[:1]):
+        strut(f"floorring_{a}_{b}", a, b)
+
+    # --- STRAP over the dorsum, pre-tensioned by a spring-steel clip ----------------------
+    nodes["dorsum"] = P(0.5 * (dp + dd), 0.0, 0.026)
+    nodes["clip_r"] = P(dd, arch_pts[-1][0] + 0.008, arch_pts[-1][1] - gap + 0.010)
+    nodes["clip_u"] = P(dd, arch_pts[0][0] - 0.008, arch_pts[0][1] - gap + 0.010)
+    strut("clip_radial", ribs[1][-1], "clip_r", kind="clip")
+    strut("clip_ulnar", ribs[1][0], "clip_u", kind="clip")
+    strut("strap_radial", "clip_r", "dorsum", kind="strap")
+    strut("strap_ulnar", "clip_u", "dorsum", kind="strap")
+
+    # ONLY the eminences bear. The crown of the arch BRIDGES the hollow and touches nothing.
+    return Frame(
+        nodes=nodes,
+        members=members,
+        supports=[ribs[0][0], ribs[0][-1], ribs[1][0], ribs[1][-1], "dorsum"],
+        keys={(f, r): f"key_{f}{r}" for (f, r) in keys},
+        key_normal={(f, r): np.asarray(v[1], float) for (f, r), v in keys.items()},
+    )
+
+
 def build_body(h: MyoHand, q: np.ndarray, keys: dict, p: dict | None = None) -> Frame:
     """STRAP-MOUNTED BODY -- the architecture the target device (typeware.tech) actually uses.
 

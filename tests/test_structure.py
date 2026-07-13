@@ -150,3 +150,94 @@ def test_mass_is_plausible_for_a_worn_device(exo):
     reads kilograms the sections or the density are wrong by orders of magnitude."""
     g = exo.mass() * 1000
     assert 5.0 < g < 200.0, f"device mass {g:.1f} g is not a wearable"
+
+
+def test_the_palm_is_a_cup_not_a_plate():
+    """The user: "invert the support structure -- it doesn't follow the natural shape of the
+    hand." They are right, and the hand says so: the palm is a CUP.
+
+    Measured off the metacarpal meshes: the radial and ulnar edges PROTRUDE palmar and the
+    middle is HOLLOW, by 6.4 mm. `build_body` bolts four corners of a FLAT RECTANGLE across
+    it at one depth, so they either float off the eminences or dig into the hollow.
+    """
+    from opt.problem import hands
+    from structure.frame import palmar_arch
+
+    h = hands()[50]
+    pts = palmar_arch(h, h.q_neutral, 0.045, n=5)
+    z = np.array([p[1] for p in pts])
+    assert z.max() - z.min() > 0.003, "the palm should be a cup, several mm deep"
+    # the middle must be the SHALLOWEST (least palmar) -- that is what "hollow" means
+    assert int(np.argmax(z)) not in (0, len(z) - 1), "the hollow should be in the MIDDLE"
+
+
+def test_where_the_compliance_lives_DEPENDS_ON_THE_DESIGN():
+    """I TRIED TO MAKE THIS A UNIVERSAL CLAIM, TWICE, IN BOTH DIRECTIONS. It is not one.
+
+    The user asked for the support structure to follow the hand's natural shape -- and they
+    are right: the palm is a CUP 6.4 mm deep and `build_body` bolts a FLAT PLATE across it
+    (see test_the_palm_is_a_cup_not_a_plate). The obvious next claim is that an ARCH would
+    also be stiffer, because a keypress pushes the body INTO the palm and an arch takes that
+    in COMPRESSION where a plate takes it in BENDING.
+
+    THE MEASUREMENT REFUSES TO SUPPORT THAT CLAIM, and it refuses in both directions. Stiffen
+    each group 100x, see what the key feels:
+
+        design                key face   floor legs   palm support
+        optimiser's lightest      49%          38%            13%
+        optimiser's knee          44%          27%            10%
+        hand-built baseline        2%          12%            18%   <-- palm DOMINATES
+        bounds midpoint            3%           --             9%   <-- palm dominates
+
+    On the devices the OPTIMISER produces, the compliance is in the cantilever out to the
+    wells and the palm is minor -- so an arch cannot help. On HAND-BUILT devices the palm
+    dominates -- so it could. The optimiser has already chosen sections (a wide, thin strip)
+    that move the softness elsewhere.
+
+    ⚠ AND MY "3.8x STIFFER ARCH" WAS AN ARTIFACT. That version skipped the floor routing
+    entirely and cut straight through the fingers; the gain came from DELETING THE CANTILEVER,
+    not from the arch.
+
+    SO: the arch is a FIT and PRESSURE-DISTRIBUTION change -- bear on the two eminences the
+    hand actually presents, rather than a plate across the hollow -- and THIS MODEL CANNOT
+    SCORE COMFORT. Its 3x mass penalty is also largely a BEAM-MODEL ARTIFACT (10 discrete
+    beams where a plate is 4; a MOULDED SHELL following the palm costs nothing extra). Settling
+    it needs shell elements, not beams.
+
+    This test pins the MEASUREMENT, not a conclusion -- because the conclusion is
+    design-dependent and I got it wrong twice by pretending otherwise.
+    """
+    from dataclasses import replace
+
+    from design.vector import BODY_PROX, PRESS_N, keys_on_reference
+    from hand.myohand import FINGERS
+    from opt.problem import hands
+    from opt.run import baseline
+    from structure.frame import build_body, solve
+
+    h = hands()[50]
+    x = baseline()
+    keys, _ = keys_on_reference(h, x)
+    par = dict(sec_alu=(float(x["alu_w"]), float(x["alu_t"])), palm_offset=float(x["palm_offset"]),
+               body_half=float(x["body_half"]), body_prox=BODY_PROX, body_dist=float(x["body_dist"]),
+               stem=float(x["stem"]), mat_frame=str(x["material"]))
+    chords = [(f, 0) for f in FINGERS]
+    base = solve(build_body(h, h.q_neutral, keys, par), chords, press_N=PRESS_N)["max_deflection"]
+
+    def stiffen(pred):
+        exo = build_body(h, h.q_neutral, keys, par)
+        exo.members = [replace(m, b=m.b * 10, d=m.d * 10) if pred(m.name) else m
+                       for m in exo.members]
+        return 1.0 - solve(exo, chords, press_N=PRESS_N)["max_deflection"] / base
+
+    share = {g: stiffen(lambda n, g=g: n.startswith(g))
+             for g in ("palm_", "face", "floorleg", "wall")}
+    assert all(0.0 <= v < 1.0 for v in share.values()), f"implausible shares: {share}"
+    assert sum(share.values()) > 0.15, (
+        f"no group carries the compliance: {share}. The measurement is broken, not the design."
+    )
+    # and the thing that must NOT be assumed: that any one group always dominates.
+    assert max(share.values()) < 0.9, (
+        "one group carries almost everything -- if that is real, say WHICH, and note it is "
+        "design-dependent. It inverts between the baseline and the optimiser's designs."
+    )

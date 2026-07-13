@@ -577,6 +577,68 @@ exoskeleton stands off the hand, so "don't touch" was nearly right. **A gripped 
 
 ---
 
+## 5b. The support structure does not follow the hand — and the obvious fix does not work
+
+**The user: "invert the support structure — it doesn't follow the natural shape of the hand."
+They are right, and the hand says so.**
+
+**The palm is a CUP, 6.4 mm deep** (measured off the metacarpal meshes, `palmar_arch`):
+
+| metacarpal | across the palm | palmar surface |
+|---|---|---|
+| 2nd (index) | +16.6 mm | **−8.9 mm** |
+| 3rd | +4.0 mm | −5.1 mm |
+| 4th | −8.5 mm | **−3.1 mm** |
+| 5th (little) | −19.8 mm | **−9.5 mm** |
+
+The **edges protrude palmar and the middle is hollow** — the transverse metacarpal arch. And
+`build_body` bolts **four corners of a flat rectangle** across it at a single depth, so they
+either float off the eminences or dig into the hollow. That is a real defect and it is exactly
+what was pointed at.
+
+**The obvious fix is an ARCH**, and the physics argues for it: a keypress pushes the body
+**dorsally, into the palm**, so an arch convex toward the palm takes that in **compression**
+where a plate takes it in **bending**.
+
+### ⚠ And the measurement refuses to support it.
+
+Stiffening each group 100× and seeing what the key actually feels:
+
+| design | key face | floor legs | **palm support** |
+|---|---|---|---|
+| optimiser's lightest | 49% | 38% | 13% |
+| optimiser's knee | 44% | 27% | 10% |
+| hand-built baseline | 2% | 12% | **18%** |
+
+On the devices the **optimiser** produces, the compliance is in the **cantilever out to the
+wells** and the palm is minor — an arch there cannot help. On **hand-built** devices the palm
+dominates — it could. **The conclusion is design-dependent, and I asserted it universally
+twice, in opposite directions, before measuring properly.**
+
+⚠ **And my "3.8× stiffer arch" was an artifact.** That version skipped the floor routing
+entirely and cut straight through the fingers (−6.5 mm into the middle phalanx). The gain came
+from **deleting the cantilever**, not from the arch. I was excited by a number produced by a
+broken geometry.
+
+**Four routings all failed the same way**, and the failure is the same topological trap that
+killed the exoskeleton: **you cannot draw a straight line from the palm to a fingertip without
+crossing the finger, because the finger is what lies between them.** The box's "ugly" floor
+ring — drop palmar into open air first, *then* run distally — was solving a real problem, and
+solving it correctly.
+
+**So what is the arch actually for?** **Fit and pressure distribution**, not stiffness: bear on
+the two eminences the hand presents, rather than a plate across the hollow. **This model cannot
+score comfort**, so it cannot make the case for its own change. And the arch's 3× mass penalty
+is largely a **beam-model artifact** (10 discrete beams where a plate is 4; a **moulded shell**
+following the palm costs nothing extra — the same shell, curved). Settling this properly needs
+**shell elements, not beams** — the same caveat already on `BODY_PROX`.
+
+`build_arch` is implemented and clears bone in both postures. It is **not wired into the
+optimiser**, because on a beam model it is 3× the mass for no measurable stiffness, and that
+would be optimising an artifact.
+
+---
+
 ## 6. Model limitations — stated, not hidden
 
 These bound every conclusion above.
