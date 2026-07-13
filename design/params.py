@@ -136,6 +136,21 @@ RESIDUAL_MAX = P(
     "reported, because the whole action set depends on where this line is drawn.",
     describes="muscle equilibrium")
 
+SPACE_FREQ = P(
+    "SPACE_FREQ", 18.0, "keystrokes per 100 letters", Source.LITERATURE,
+    "English averages ~4.5 letters per word, so ~18-20 spaces per 100 letters. Standard "
+    "figure. Load-bearing: the left hand's 15 QWERTY letters are only 58.7 of those 100, so "
+    "SPACE IS ~22% OF THE LEFT HAND'S ENTIRE KEYSTROKE LOAD -- bigger than any letter. It was "
+    "not in the objective at all until the thumb could press.",
+    describes="keystroke frequency")
+
+SHIFT_FREQ = P(
+    "SHIFT_FREQ", 4.0, "keystrokes per 100 letters", Source.GUESS,
+    "Capitals and punctuation needing the LEFT shift. Rougher than SPACE_FREQ. It decides "
+    "whether a pointer fits: with shift on a well, the mouse costs one slot more than we "
+    "have; move it to a hold/chord and the mouse fits.",
+    describes="keystroke frequency")
+
 DEFLECTION_MAX = P(
     "DEFLECTION_MAX", 0.5e-3, "m", Source.GUESS,
     "Above this a key feels mushy. A judgement, not a measurement.",

@@ -549,6 +549,7 @@ These bound every conclusion above.
   | `DEFLECTION_MAX` | 0.5 mm | above this a key "feels mushy" — a judgement, not a measurement |
   | `ADJUSTER_MASS` | 0.15 g/mm | mass of a per-finger slide; not from any real mechanism |
   | `COLUMN_SHIFT_COST` | 5e-6 | cost of translating the hand to the index's 2nd column |
+  | `SHIFT_FREQ` | 4.0 /100 letters | left-shift usage. It **decides whether a pointer fits**: with shift on a well, the mouse costs one slot more than the hand has; move shift to a hold/chord and it fits. |
   | `RESIDUAL_MAX` | 0.05 | how much of the required joint torque a digit may FAIL to produce and still be said to "press" the key. ⚠ Ideally **zero**. It is a tolerance, and **the whole action set depends on where this line is drawn** — sensitivity must be reported. |
 
 - **`SOFT_TISSUE_K`** (25 N/mm) is literature, not measurement: the band is 10–50 N/mm and

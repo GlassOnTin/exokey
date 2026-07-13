@@ -554,6 +554,7 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
     the 5-direction finger well is free prior art. Typeware's twin-key patent is not in the
     way: this is a different mechanism and an older one.
     """
+    from design.layout import MODIFIERS, qwerty_plus_thumb
     from design.qwerty import (ACTIONS, ROWS, Infeasible, best_action_map, cost_of,
                                used_actions)
     from opt.problem import CONSTRAINT_NAMES
@@ -683,12 +684,14 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
         (f, a): max(ph[3][(f, a)] for ph in per_hand)   # worst over the population
         for f in FINGERS for a in ACTIONS
     }
+    # THE THUMB IS NOW IN THE CONSTRAINT SET. It carries the modifiers, so it needs at least
+    # len(MODIFIERS) performable directions -- where before it was excluded entirely, on the
+    # grounds that it could not press at all. It can (66.8 N pinch, see hand/thenar.py).
     margin = -np.inf
     for f in FINGERS:
-        if f == "thumb":
-            continue
-        third = sorted(worst_resid[(f, a)] for a in ACTIONS)[len(ROWS) - 1]
-        margin = max(margin, third - RESIDUAL_MAX)
+        need = len(MODIFIERS) if f == "thumb" else len(ROWS)
+        kth = sorted(worst_resid[(f, a)] for a in ACTIONS)[need - 1]
+        margin = max(margin, kth - RESIDUAL_MAX)
     availability = {k: v <= RESIDUAL_MAX for k, v in worst_resid.items()}
 
     try:
@@ -700,9 +703,28 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
         action_map, _ = best_action_map(mean_effort)
     used = used_actions(action_map)
 
+    # THE THUMB CARRIES SPACE AND SHIFT. It was IDLE -- five performable directions on the
+    # cheapest digit on the hand, doing nothing, while the LITTLE FINGER (the weakest digit
+    # there is) carried three QWERTY rows. That was invisible while the model believed the
+    # thumb could not press at all.
+    #
+    # AND SPACE WAS NOT SCORED AT ALL. It is ~18 keystrokes per 100 letters, and the left
+    # hand's 15 QWERTY letters are only 58.7 of those 100 -- so SPACE IS 22% OF THE LEFT
+    # HAND'S ENTIRE LOAD, bigger than any letter, bigger than 'e'. The objective was missing
+    # its single largest term.
+    #
+    # `qwerty_plus_thumb` keeps every letter on the finger QWERTY put it on and hands the
+    # thumb the modifiers. It is 1.4x cheaper and costs the user NOTHING to learn, because
+    # nobody's muscle memory encodes which DIRECTION means which row -- that mapping is new
+    # either way. (A FREE assignment is 3.1x cheaper still, solved exactly -- see
+    # design/layout.py -- but it is a different product: you have to learn it.)
     per_hand_char_effort = []
     for effort, sat, trav, resid in per_hand:
-        per_hand_char_effort.append(cost_of(action_map, effort))
+        try:
+            _, c = qwerty_plus_thumb(effort, resid, RESIDUAL_MAX)
+        except (Infeasible, ValueError):
+            c = cost_of(action_map, effort)   # thumb short of directions: `margin` flags it
+        per_hand_char_effort.append(c)
         # Constrain ONLY the wired directions. 25 exist, 15 are used; demanding all five work
         # would drag the design to the cost of the worst -- index/left is near saturation.
         for f, acts in used.items():

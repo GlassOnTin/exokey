@@ -461,3 +461,81 @@ def test_the_cradle_resolves_the_pressing_vs_packing_tension(hands):
         f"a thumb with NO ADDUCTOR pressed {n_stock}/5 directions. The cradle is too "
         "permissive -- check for self-cancelling contacts."
     )
+
+
+def _slot_costs(h, x):
+    """(effort, residual) for every (digit, direction) of a design."""
+    from design.vector import PRESS_N, action_dirs, posture, tm_of, tp_of
+    from design.qwerty import ACTIONS
+    from hand.cradle import solve as cradle_solve
+
+    eff, res = {}, {}
+    for f in FINGERS:
+        q = posture(h, f, tp_of(x, f), tm_of(x, f), x.get(f"ab_{f}", 0.0))
+        for a in ACTIONS:
+            _, e, r, _ = cradle_solve(h, q, f, a, PRESS_N)
+            eff[(f, a)], res[(f, a)] = e, r
+    return eff, res
+
+
+def test_the_thumb_should_carry_space_and_it_is_free_to_do_so(hands):
+    """THE THUMB WAS IDLE, AND SPACE WAS NOT EVEN SCORED.
+
+    Two errors compounding. The thumb has five performable directions and is the CHEAPEST
+    digit on the hand -- while the LITTLE FINGER, the weakest digit there is, carried three
+    QWERTY rows. And SPACE, the most frequent keystroke in English, was not in the objective
+    at ALL: it is ~18 per 100 letters, and the left hand's 15 QWERTY letters are only 58.7 of
+    those 100, so SPACE IS ~22% OF THE LEFT HAND'S ENTIRE LOAD -- bigger than any letter.
+
+    Handing the thumb the modifiers costs the user NOTHING to learn: nobody's muscle memory
+    encodes which DIRECTION means which row -- that mapping is new either way.
+    """
+    from design.layout import free, qwerty_plus_thumb, qwerty_strict
+    from design.vector import RESIDUAL_MAX
+
+    h = hands[50]
+    x = mid_design()
+    x["tp_hand"], x["tm_hand"] = 0.35, 0.40
+    eff, res = _slot_costs(h, x)
+
+    _, strict = qwerty_strict(eff, res, RESIDUAL_MAX)
+    _, thumb = qwerty_plus_thumb(eff, res, RESIDUAL_MAX)
+    _, best = free(eff, res, RESIDUAL_MAX)
+
+    assert thumb < strict, "giving the thumb the modifiers must beat leaving it idle"
+    assert best <= thumb, "a FREE assignment is a lower bound; it cannot be worse"
+    assert best < strict, "QWERTY is leaving effort on the table"
+
+
+def test_only_the_thumb_or_index_can_be_a_two_axis_pointer(hands):
+    """SVALBOARD SHIPS A POINTING DEVICE, and a 5-direction well IS a 2-axis stick with a
+    click -- so a well can BE the mouse. But it costs the four tilts, and they stop being
+    characters.
+
+    THE CATCH: a 2-axis pointer needs ALL FOUR tilts, and only the THUMB and the INDEX can
+    perform them. The middle and ring cannot do left/right at all (the interossei are weak),
+    so they could only ever be a ONE-axis mouse. That is not an opinion; it falls out of the
+    muscle model.
+
+    AND THE ANSWER IS THE OPPOSITE OF CONVENTION. Every keyboard, Svalboard included, puts the
+    pointer on the THUMB. Measured here, that costs 6.1x the typing effort while the INDEX
+    costs 1.9x -- precisely BECAUSE the thumb turned out to be the cheapest digit, so
+    surrendering it is expensive. You cannot see that until the thumb has its muscles.
+
+    (Svalboard sidesteps this: its trackball is a SEPARATE sensor, so it consumes no
+    directions -- only hardware and thumb TIME.)
+    """
+    from design.vector import RESIDUAL_MAX
+
+    TILTS = ("forward", "back", "left", "right")
+    h = hands[50]
+    x = mid_design()
+    x["tp_hand"], x["tm_hand"] = 0.35, 0.40
+    _, res = _slot_costs(h, x)
+
+    can_point = {f for f in FINGERS
+                 if all(res[(f, a)] <= RESIDUAL_MAX for a in TILTS)}
+    assert "thumb" in can_point and "index" in can_point, "thumb and index should manage 4 tilts"
+    assert not ({"middle", "ring"} & can_point), (
+        "middle/ring cannot perform left/right -- they cannot drive a 2-axis pointer"
+    )
