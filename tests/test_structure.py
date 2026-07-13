@@ -624,3 +624,70 @@ def test_no_shell_element_leaps_across_the_hand():
     assert edge.max() < 0.030, (
         f"a shell element spans {edge.max()*1000:.0f} mm. The domain's rings are ~7 mm apart, so "
         f"anything near 30 mm is a strip stitched to the wrong place.")
+
+
+def test_a_singular_lattice_must_not_report_ZERO_deflection():
+    """`max(0.0, nan)` is 0.0 in Python, and that is how a broken model reports a perfect score.
+
+    A lattice sampled off a skin surface has floating islands -- knots of bars with no path back to
+    an anchor. An island has six rigid-body modes and no restraint, so the stiffness matrix is
+    singular; PyNite's sparse solve returns NaN rather than raising; and Python's `max` returns its
+    FIRST argument whenever the comparison is False, which every comparison with NaN is. The model
+    duly announced "buttons steady at 0 um". It survived HALVING THE BAR RADIUS unchanged, which is
+    what gave it away: a real structure gets softer when you thin it.
+    """
+    import numpy as np
+
+    from structure.lattice import solve
+
+    # two bars, and a third that floats free of everything
+    nodes = np.array([[0, 0, 0], [0.05, 0, 0], [0.10, 0, 0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.05]],
+                     dtype=float)
+    bars = [(0, 1), (1, 2), (3, 4)]
+    anchor_k = {0: 1e6}
+    anchor_n = {0: np.array([0.0, 0.0, 1.0])}
+    buttons = {"index": 3}                     # a button ON the island: no load path at all
+    loads = {3: np.array([0.0, 0.0, -0.2])}
+
+    w, _se, _m, _t = solve(nodes, bars, [0, 1, 2], buttons, loads, anchor_k, anchor_n)
+    assert not np.isfinite(w), (
+        f"a button with NO load path to the anchor reported {w*1e6:.1f} um. A singular solve must "
+        f"come back as inf, never as a number -- least of all as zero.")
+
+
+def test_flesh_cannot_PULL_the_gauntlet_back_onto_the_hand():
+    """The anchor is BILINEAR, and modelling it as a bidirectional spring is fiction.
+
+    A keypress at a fingertip ~120 mm from the wrist is a MOMENT: it presses one end of the anchor
+    patch INTO the hand and lifts the other end OFF it. Flesh can resist the first and not the
+    second. Give the solver springs that pull and it will happily hang the whole structure from
+    them -- the free-form lattice grew a 7.3 g design reporting 495 um at the buttons, of which
+    40% of the anchor reaction was tension that nothing was supplying. Re-solved honestly, the
+    same structure deflects 9178 um.
+
+    So a node lifting OFF must feel the STRAP (soft webbing), not the tissue (stiff), and the
+    difference has to show up in the answer.
+    """
+    import numpy as np
+
+    from structure.lattice import STRAP_K, solve
+
+    # a cantilever off a single anchored node, loaded so the anchor is pulled outward (+z)
+    nodes = np.array([[0, 0, 0], [0.03, 0, 0], [0.06, 0, 0]], dtype=float)
+    bars = [(0, 1), (1, 2)]
+    anchor_k = {0: 1e6}                        # stiff tissue
+    anchor_n = {0: np.array([0.0, 0.0, 1.0])}  # outward = +z
+    buttons = {"index": 2}
+
+    up, _, _, t_up = solve(nodes, bars, [0, 1], buttons, {2: np.array([0.0, 0.0, +0.2])},
+                           anchor_k, anchor_n)
+    dn, _, _, t_dn = solve(nodes, bars, [0, 1], buttons, {2: np.array([0.0, 0.0, -0.2])},
+                           anchor_k, anchor_n)
+
+    assert up > dn, (
+        f"pulling the anchor OFF the hand ({up*1e6:.0f} um) is no softer than pressing it IN "
+        f"({dn*1e6:.0f} um). The tissue spring is still bidirectional, so the structure is being "
+        f"held on by a force nothing supplies.")
+    assert t_up > 0 and t_dn == 0.0, (
+        f"the strap carries {t_up:.3f} N when lifted and {t_dn:.3f} N when pressed. It must carry "
+        f"the lift and nothing else -- webbing does not push.")
