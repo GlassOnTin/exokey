@@ -16,7 +16,7 @@ from hand.myohand import FINGERS
 from opt.problem import hands
 from structure.frame import hand_axes
 from structure.lattice import BAR_R, solve
-from viz.scene import skin_trace, well_traces
+from viz.scene import skin_trace, strap_traces, well_traces
 
 
 def tubes(nodes, bars, live, se, r, n=7):
@@ -78,9 +78,10 @@ def main():
     x = fd["x"]
     q = h.compose({f: posture(h, f, tp_of(x, f), tm_of(x, f), float(x.get(f"ab_{f}", 0.0)))
                    for f in FINGERS})
-    _n, _b, _btn, _l, anchor_k, anchor_n = ground(h, q)
+    _n, _b, _btn, _l, anchor_k, anchor_n, _t, strap_n = ground(h, q)
     cases = load_cases(h, q, btn, wired=used_actions(fd["action_map"]))
-    w, se, mass, tension, per_case = solve(nodes, bars, live, btn, cases, anchor_k, anchor_n)
+    w, se, _ss, mass, tension, per_case = solve(nodes, bars, live, btn, cases, anchor_k, anchor_n,
+                                               strap_n=strap_n)
 
     traces = []
     sk = skin_trace(h, q, opacity=0.20)
@@ -115,6 +116,9 @@ def main():
         traces.append(go.Scatter3d(x=A[:, 0], y=A[:, 1], z=A[:, 2], mode="markers",
                                    marker=dict(size=4, color="#b03060", symbol="x"),
                                    name="anchor", hoverinfo="name", showlegend=False))
+        # THE STRAPS. Flesh can only push; the strap supplies the pull, and without it this same
+        # structure deflects 9178 um instead of 485. It goes ALL THE WAY ROUND the hand.
+        traces += strap_traces(h, q, A)
 
     _o, _e_d, e_r, e_o = hand_axes(h, q)
     eye = 1.55 * e_o + 0.62 * e_r

@@ -41,6 +41,11 @@ MATERIALS = {
     "webbing": dict(E=2.0e9, G=0.70e9, nu=0.40, rho=1150.0, yield_=60e6, fatigue=20e6),
     # the spring-steel clip that pre-tensions the strap against the palm support
     "spring_steel": dict(E=200e9, G=79e9, nu=0.30, rho=7850.0, yield_=1200e6, fatigue=600e6),
+    # 316L STAINLESS WIRE, annealed -- the user's process: form it on a printed jig and laser-weld
+    # the nodes. Yield is the ANNEALED figure (~205 MPa); cold-drawn wire is 2-3x that, but the
+    # heat-affected zone around a weld is annealed whatever the wire started as, and the welds are
+    # exactly where the joints are. Take the weakest state, because that is the state at the joint.
+    "ss316": dict(E=193e9, G=77e9, nu=0.30, rho=8000.0, yield_=205e6, fatigue=170e6),
 }
 
 SAFETY_FACTOR = 2.0

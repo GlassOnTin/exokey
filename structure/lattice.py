@@ -42,7 +42,7 @@ from scipy.spatial import cKDTree
 from design.params import P, Source
 from hand.flesh import CARPUS, METACARPALS, skin
 from hand.myohand import FINGERS
-from structure.anchor import bearing_surface
+from structure.anchor import bearing_surface, under_strap
 from structure.fem import Frame
 from structure.frame import MATERIALS, hand_axes
 
@@ -63,6 +63,14 @@ STRAP_K = P("STRAP_K", 3.3e5, "N/m", Source.DERIVED,
             "circumference of the hand at the palm, 0.20 m:  k = EA/L = 2e9 * 3.3e-5 / 0.20. "
             "It is 20x SOFTER than the tissue patch it works against, so it is the compliant "
             "element in the anchor and it dominates lift-off.")
+
+FILLET = 0.0006     # m -- manufacture/mesh.py BLEND. The part grows this at every junction.
+
+SHELL_T = P("SHELL_T", 0.0006, "m", Source.GUESS,
+            "Thickness of a candidate PLATE in the ground structure. It is the plate's equivalent "
+            "of BAR_R and it trades against it: a thin plate beats a strut on membrane and loses "
+            "on bending. 0.6 mm is at the low end of what SLS resolves reliably in CF-PA12. NOT "
+            "optimised -- like BAR_R, the section is fixed and only the topology is solved.")
 
 SEG_CLEAR = P("SEG_CLEAR", 0.75, "-", Source.GUESS,
               "Minimum gap between any point along a STRUT and the skin, as a fraction of `hug` "
@@ -143,9 +151,18 @@ def ground(h, q, hug=0.004, layer=None, pitch=0.004, reach=2.2, press_N=0.196):
         dead[taken.query_ball_point(seeds[i], 0.65 * pitch)] = True
     seeds, snorm = seeds[keepi], snorm[keepi]
 
-    # TWO SHEETS. The depth between them is what carries the moment.
-    inner = seeds + snorm * hug
-    outer = seeds + snorm * (hug + layer)
+    # ⚠ `hug` IS A CLEARANCE OF THE PART, NOT OF ITS CENTRELINE.
+    #
+    # Every clearance check in this project measured strut AXES against the skin. A strut is not a
+    # line: it is a rod of radius BAR_R, and once meshed its junctions carry fillets on top of
+    # that. Meshed and measured, the printed solid stood 0.69 mm off the skin where 4 mm had been
+    # asked for. "No strut passes through flesh, closest approach 3.19 mm" was TRUE AND IRRELEVANT
+    # -- it was a fact about a wire diagram, and you cannot wear a wire diagram.
+    #
+    # So the centreline is pushed out by the rod's own radius plus the fillet it will grow.
+    skin_gap = hug + float(BAR_R) + FILLET
+    inner = seeds + snorm * skin_gap
+    outer = seeds + snorm * (skin_gap + layer)
     nodes = np.vstack([inner, outer])
     n_in = len(inner)
 
@@ -154,7 +171,7 @@ def ground(h, q, hug=0.004, layer=None, pitch=0.004, reach=2.2, press_N=0.196):
     # ⚠ A NODE THAT SITS INSIDE THE HAND IS NOT A DESIGN CHOICE, IT IS A MISTAKE. Offsetting along
     # a vertex normal cannot see the NEIGHBOURING digit, so nodes in the valley between two
     # fingers land in flesh. Drop them; the gauntlet may not be there.
-    ok = skin_tree.query(nodes)[0] >= hug - 1e-4
+    ok = skin_tree.query(nodes)[0] >= skin_gap - 1e-4
     nodes = nodes[ok]
     remap = -np.ones(len(ok), int)
     remap[np.flatnonzero(ok)] = np.arange(ok.sum())
@@ -178,6 +195,21 @@ def ground(h, q, hug=0.004, layer=None, pitch=0.004, reach=2.2, press_N=0.196):
     nodes = np.vstack([nodes, np.array(extra)])
 
     # CANDIDATE BARS: every pair close enough to be a strut...
+    # ⚠ CANDIDATE PLATES, NOT JUST STRUTS.
+    #
+    # The user: "where we have groupings of elements, could we turn those into shaped plates?"
+    #
+    # Yes -- but NOT by finding clusters afterwards and converting them. A plate carries MEMBRANE
+    # action and a beam cannot, and that is not a detail: this project already got the palm arch's
+    # mass wrong by 25x for exactly this reason. So wherever the struts have gone dense and
+    # sheet-like, a plate is very likely stiffer per gram. WHERE those places are is precisely what
+    # cannot be judged by eye, and it is the optimiser's job.
+    #
+    # So offer BOTH. Triangulate each node sheet, hand ESO the triangles alongside the bars, and
+    # rank them in the same currency (strain energy per unit VOLUME). Where a plate earns its keep
+    # it survives; where a strut does, the strut does. The answer is then measured, not asserted.
+    tris = _sheet_triangles(nodes, n_in, seeds, snorm, pitch, skin_tree, hug)
+
     tree = cKDTree(nodes)
     pairs = np.array(sorted(tree.query_pairs(r=reach * pitch)), dtype=int)
     # ...plus the buttons, which must be able to reach whatever is near them.
@@ -209,10 +241,60 @@ def ground(h, q, hug=0.004, layer=None, pitch=0.004, reach=2.2, press_N=0.196):
                 anchor_n[i] = anchor_n.get(i, np.zeros(3)) + np.asarray(nrm)
     for i, v in anchor_n.items():
         anchor_n[i] = v / (np.linalg.norm(v) + 1e-12)
-    return nodes, bars, btn, loads, anchor_k, anchor_n
+    # WHICH anchor nodes the strap can pull on. Not all of them: a strap is a BAND.
+    strap_n = under_strap(h, q, nodes, sorted(anchor_k))
+    return nodes, bars, btn, loads, anchor_k, anchor_n, tris, strap_n
 
 
-def connected(bars, live, anchor_k, buttons, n_nodes):
+def _sheet_triangles(nodes, n_in, seeds, snorm, pitch, skin_tree, hug):
+    """Candidate PLATES: a Delaunay triangulation of each node sheet, in the sheet's own surface.
+
+    The sheets are curved, so triangulate in a LOCAL tangent frame around each seed rather than
+    globally -- a global 2-D projection of a hand-shaped surface folds over on itself and produces
+    triangles that span the knuckles. Cheap and robust: for each seed, take its k nearest
+    neighbours on the sheet, project into that seed's tangent plane, Delaunay there, and keep the
+    triangles that touch the seed. Duplicates are dropped by their sorted node tuple.
+    """
+    from scipy.spatial import Delaunay, cKDTree as KD
+
+    out = set()
+    for base, N in ((0, len(seeds)), (n_in, len(seeds))):
+        pts = np.array([nodes[base + i] for i in range(N) if base + i < len(nodes)])
+        if len(pts) < 4:
+            continue
+        kd = KD(pts)
+        for i in range(len(pts)):
+            idx = kd.query(pts[i], k=min(9, len(pts)))[1]
+            nrm = snorm[min(i, len(snorm) - 1)]
+            u = np.cross(nrm, [0.0, 0.0, 1.0])
+            if np.linalg.norm(u) < 1e-6:
+                u = np.cross(nrm, [0.0, 1.0, 0.0])
+            u /= np.linalg.norm(u)
+            v = np.cross(nrm, u)
+            P = np.stack([(pts[idx] - pts[i]) @ u, (pts[idx] - pts[i]) @ v], axis=1)
+            try:
+                dl = Delaunay(P)
+            except Exception:
+                continue
+            for t in dl.simplices:
+                if 0 not in t:
+                    continue                      # keep only triangles touching this seed
+                g = tuple(sorted(base + int(idx[m]) for m in t))
+                if len(set(g)) != 3:
+                    continue
+                A, B, C = nodes[list(g)]
+                if max(np.linalg.norm(A - B), np.linalg.norm(B - C),
+                       np.linalg.norm(C - A)) > 2.0 * pitch:
+                    continue                      # not a local triangle: it spans a gap
+                # ...and it must not lie inside the hand, same rule as a strut
+                mid = np.array([(A + B + C) / 3, (A + B) / 2, (B + C) / 2, (C + A) / 2])
+                if skin_tree.query(mid)[0].min() < 0.9 * hug:
+                    continue
+                out.add(g)
+    return sorted(out)
+
+
+def connected(bars, live, anchor_k, buttons, n_nodes, shells=(), live_s=()):
     """The live bars that actually have a path to an ANCHOR. Everything else is a floating island.
 
     ⚠ THIS IS WHY THE LATTICE SOLVED TO NaN AND REPORTED IT AS ZERO. A lattice sampled off a skin
@@ -231,7 +313,16 @@ def connected(bars, live, anchor_k, buttons, n_nodes):
 
     if not live:
         return [], False
-    ij = np.array([bars[e] for e in live])
+    # ⚠ A PLATE HOLDS THINGS TOGETHER TOO. Building the connectivity graph from BARS ALONE made
+    # the mixed ground structure nonsense: a region stitched by triangles read as "disconnected",
+    # its struts were pruned, the solve blew up, and ESO backed off and quit -- leaving 94% of the
+    # plates in place at 20 um of deflection against a 500 um gate, and a "result" 5x too heavy
+    # that was really just a loop that never ran.
+    ij = [bars[e] for e in live]
+    for e in live_s:
+        a, b, c = shells[e]
+        ij += [(a, b), (b, c), (c, a)]
+    ij = np.array(ij)
     g = coo_matrix((np.ones(len(ij)), (ij[:, 0], ij[:, 1])), shape=(n_nodes, n_nodes))
     _n, lab = connected_components(g, directed=False)
     root = {lab[i] for i in anchor_k}
@@ -265,7 +356,7 @@ def load_cases(h, q, buttons, press_N=0.196, wired=None):
 
 
 def solve(nodes, bars, live, buttons, cases, anchor_k, anchor_n, r=None, mat="cf_pa12",
-          strap_k=None, iters=8):
+          strap_k=None, iters=8, shells=(), live_s=(), shell_t=None, strap_n=None):
     """(worst button deflection over all cases, {bar: strain energy}, mass, strap tension N).
 
     ⚠ THE ANCHOR IS BILINEAR, AND GETTING THAT WRONG IS WHAT MAKES A GAUNTLET LOOK GOOD ON PAPER.
@@ -292,16 +383,24 @@ def solve(nodes, bars, live, buttons, cases, anchor_k, anchor_n, r=None, mat="cf
     J = np.pi * r ** 4 / 2
     p = MATERIALS[mat]
 
-    live, reachable = connected(bars, live, anchor_k, buttons, len(nodes))
-    if not reachable or not live:
-        return float("inf"), {}, 0.0, 0.0, {}
+    live, reachable = connected(bars, live, anchor_k, buttons, len(nodes),
+                                shells=shells, live_s=live_s)
+    if not reachable or (not live and not live_s):
+        return float("inf"), {}, {}, 0.0, 0.0, {}
     lb = [bars[e] for e in live]
-    fr = Frame(nodes, lb, p["E"], p["E"] / 2.6, A, I, J)
+    ls = [shells[e] for e in live_s]
+    shell_t = float(SHELL_T) if shell_t is None else shell_t
+    fr = Frame(nodes, lb, p["E"], p["E"] / 2.6, A, I, J, shells=ls, shell_t=shell_t)
     anch = [i for i in anchor_k if i in fr.idx]
     if not anch:
-        return float("inf"), {}, 0.0, 0.0, {}
-    ktot = sum(anchor_k[i] for i in anch)
-    k_strap = {i: strap_k * anchor_k[i] / ktot for i in anch}
+        return float("inf"), {}, {}, 0.0, 0.0, {}
+    # ⚠ THE STRAP PULLS ONLY WHERE A BAND TOUCHES. Everywhere else, a node lifting off the hand is
+    # restrained by NOTHING -- flesh does not pull, and neither does thin air. Smearing the strap
+    # over the whole bearing patch was worth 11% of the button's steadiness, taken from a strap
+    # that was not there.
+    band = set(anch) if strap_n is None else (set(strap_n) & set(anch))
+    ktot = sum(anchor_k[i] for i in band) or 1.0
+    k_strap = {i: (strap_k * anchor_k[i] / ktot if i in band else 0.0) for i in anch}
 
     def springs(lift):
         return {i: (k_strap[i] if i in lift else anchor_k[i]) for i in anch}
@@ -330,21 +429,24 @@ def solve(nodes, bars, live, buttons, cases, anchor_k, anchor_n, r=None, mat="cf
             fr.factorise(springs(lift))
         d = float(np.linalg.norm(fr.disp(U, buttons[f])[0]))
         if not np.isfinite(d):
-            return float("inf"), {}, 0.0, 0.0, {}
+            return float("inf"), {}, {}, 0.0, 0.0, {}
         per_case[(f, act)] = d
         worst = max(worst, d)
         tension = max(tension, sum(k_strap[i] * float(np.linalg.norm(fr.disp(U, i)[0]))
                                    for i in lift))
         U_all.append(U[0])
 
-    se_arr = fr.strain_energy(np.array(U_all))
+    Ua = np.array(U_all)
+    se_arr = fr.strain_energy(Ua)
     se = {e: float(se_arr[k]) for k, e in enumerate(live)}
-    mass = fr.mass(A, p["rho"])
-    return float(worst), se, float(mass), float(tension), per_case
+    ss_arr = fr.shell_energy(Ua)
+    ss = {e: float(ss_arr[k]) for k, e in enumerate(live_s)}
+    mass = fr.mass(A, p["rho"]) + fr.shell_mass(p["rho"])
+    return float(worst), se, ss, float(mass), float(tension), per_case
 
 
 def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
-         press_N=0.196, wired=None, relax=True, on_step=None):
+         press_N=0.196, wired=None, relax=True, plates=False, r=None, on_step=None):
     """WOLFF'S LAW. Delete the bars that carry no load, until the buttons stop being crisp.
 
     Bone is not designed, it is grown: it lays down material where it is strained and resorbs it
@@ -354,25 +456,38 @@ def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
     The gate is the WORST of the load cases, not their sum: a key that is mushy when you press it
     is mushy, however crisp the other fourteen are.
     """
-    nodes, bars, btn, _loads, ak, an = ground(h, q, hug=hug, pitch=pitch, press_N=press_N)
+    nodes, bars, btn, _loads, ak, an, tris, strap_n = ground(h, q, hug=hug, pitch=pitch,
+                                                             press_N=press_N)
+    shells = tris if plates else []
     cases = load_cases(h, q, btn, press_N=press_N, wired=wired)
     Vs, Fs, _Ls = skin(h, q, labels=True)
     Ns = _normals(Vs, Fs)
-    live, reachable = connected(bars, list(range(len(bars))), ak, btn, len(nodes))
+    live_s = list(range(len(shells)))
+    live, reachable = connected(bars, list(range(len(bars))), ak, btn, len(nodes),
+                                shells=shells, live_s=live_s)
     if not reachable:
         raise RuntimeError("a button has no load path to the anchor: the domain is disconnected")
-    w, se, mass, tens, pc = solve(nodes, bars, live, btn, cases, ak, an, mat=mat)
-    hist = [(len(live), w, mass, tens)]
+    w, se, ss, mass, tens, pc = solve(nodes, bars, live, btn, cases, ak, an, mat=mat, r=r,
+                                      shells=shells, live_s=live_s, strap_n=strap_n)
+    hist = [(len(live), w, mass, tens, len(live_s))]
     if on_step:
         on_step(0, live, w, mass, tens)
 
     cut, step = rate, 0
-    while cut > 0.005 and len(live) > 50:
+    while cut > 0.005 and (len(live) + len(live_s)) > 50:
         step += 1
-        order = sorted(live, key=lambda e: se.get(e, 0.0))
-        drop = set(order[:max(1, int(cut * len(live)))])
-        trial = [e for e in live if e not in drop]
-        w2, se2, mass2, tens2, pc2 = solve(nodes, bars, trial, btn, cases, ak, an, mat=mat)
+        # ⚠ ONE RANKING FOR BOTH. A strut and a plate compete on the SAME criterion -- strain
+        # energy per unit VOLUME -- so ESO deletes whichever is doing less work, whatever shape it
+        # happens to be. Rank them separately and you have decided the answer in advance.
+        pool = ([("b", e, se.get(e, 0.0)) for e in live]
+                + [("s", e, ss.get(e, 0.0)) for e in live_s])
+        pool.sort(key=lambda t: t[2])
+        drop = set((k, e) for k, e, _v in pool[:max(1, int(cut * len(pool)))])
+        trial = [e for e in live if ("b", e) not in drop]
+        trial_s = [e for e in live_s if ("s", e) not in drop]
+        w2, se2, ss2, mass2, tens2, pc2 = solve(nodes, bars, trial, btn, cases, ak, an, mat=mat,
+                                                r=r, shells=shells, live_s=trial_s,
+                                                strap_n=strap_n)
 
         # ⚠ AND NOW LET THE SURVIVORS DRIFT, EVERY STEP -- not once at the end.
         # The user: "Perhaps we'd find some better solutions allowing the elements to drift
@@ -382,24 +497,28 @@ def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
         # slack ESO can spend on deleting MORE. Topology and shape are one problem; solving them
         # in sequence leaves material on the table.
         if relax and np.isfinite(w2):
+            rr = float(BAR_R) if r is None else r
             fr2 = Frame(nodes, [bars[e] for e in trial], MATERIALS[mat]["E"],
-                        MATERIALS[mat]["E"] / 2.6, np.pi * float(BAR_R) ** 2,
-                        np.pi * float(BAR_R) ** 4 / 4, np.pi * float(BAR_R) ** 4 / 2,
+                        MATERIALS[mat]["E"] / 2.6, np.pi * rr ** 2,
+                        np.pi * rr ** 4 / 4, np.pi * rr ** 4 / 2,
                         spring={i: k for i, k in ak.items()})
             U2 = fr2.solve([c[2] for c in cases])
             moved = relax_nodes(fr2, U2, nodes, bars, trial, btn, ak, Vs, Ns, hug=hug)
-            w3, se3, mass3, tens3, pc3 = solve(moved, bars, trial, btn, cases, ak, an, mat=mat)
+            w3, se3, ss3, mass3, tens3, pc3 = solve(moved, bars, trial, btn, cases, ak, an,
+                                                    mat=mat, r=r, shells=shells,
+                                                    live_s=trial_s, strap_n=strap_n)
             if np.isfinite(w3) and w3 <= max(w2, gate) and _clears(moved, bars, trial, Vs, hug):
-                nodes, w2, se2, mass2, tens2, pc2 = moved, w3, se3, mass3, tens3, pc3
+                nodes, w2, se2, ss2, mass2, tens2, pc2 = (moved, w3, se3, ss3, mass3, tens3, pc3)
 
         if w2 > gate or not np.isfinite(w2):
             cut *= 0.5                      # took too much: back off and try a smaller bite
             continue
-        live, w, se, mass, tens, pc = trial, w2, se2, mass2, tens2, pc2
-        hist.append((len(live), w, mass, tens))
+        live, live_s, w, se, ss, mass, tens, pc = (trial, trial_s, w2, se2, ss2,
+                                                   mass2, tens2, pc2)
+        hist.append((len(live), w, mass, tens, len(live_s)))
         if on_step:
             on_step(step, live, w, mass, tens)
-    return nodes, bars, live, btn, cases, ak, an, hist, pc
+    return nodes, bars, live, btn, cases, ak, an, hist, pc, shells, live_s
 
 
 def _clears(nodes, bars, live, skin_V, hug):
@@ -428,7 +547,9 @@ def _clears(nodes, bars, live, skin_V, hug):
     # reported "no gain" as though the physics had spoken. It had not; I had mis-set the bar.
     #
     # The floor is SEG_CLEAR: a real minimum gap between any part of a strut and the skin.
-    return bool(tree.query(np.array(pts))[0].min() >= float(SEG_CLEAR) * hug)
+    # the SURFACE of the rod, not its axis -- see the warning in ground()
+    return bool(tree.query(np.array(pts))[0].min() - float(BAR_R) - FILLET
+                >= float(SEG_CLEAR) * hug)
 
 
 def cost(h, q, wired=None, press_N=0.196, pitch=0.008, gate=0.5e-3, mat="cf_pa12", rate=0.20):
@@ -456,7 +577,7 @@ def cost(h, q, wired=None, press_N=0.196, pitch=0.008, gate=0.5e-3, mat="cf_pa12
     """
     p = MATERIALS[mat]
     try:
-        nodes, bars, live, btn, cases, ak, an, hist, _pc = grow(
+        nodes, bars, live, btn, cases, ak, an, hist, _pc, _sh, _ls = grow(
             h, q, pitch=pitch, rate=rate, gate=gate, mat=mat, press_N=press_N, wired=wired,
             relax=False)
     except (RuntimeError, ValueError):
@@ -467,7 +588,7 @@ def cost(h, q, wired=None, press_N=0.196, pitch=0.008, gate=0.5e-3, mat="cf_pa12
                     util=float("inf"), struts=0, feasible=False)
 
     n_solid, w_solid, m_solid = hist[0][:3]
-    _n, w, m, _t = hist[-1]
+    _n, w, m, _t = hist[-1][:4]
 
     # THE STRESS, on the structure that actually survived -- not on the solid, which is a
     # different structure carrying the same load through 30x more material.

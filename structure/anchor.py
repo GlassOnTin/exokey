@@ -229,3 +229,59 @@ def report(h, q) -> None:
     print(f"  tissue thickness   {T_.min()*1000:.1f} .. {T_.max()*1000:.1f} mm")
     print(f"  total stiffness    {K_.sum()/1000:.0f} kN/m")
     print(f"  stiffest patch     {K_.max()/1000:.1f} kN/m   softest {K_.min()/1000:.1f} kN/m")
+
+
+STRAP_W = P("STRAP_W", 0.016, "m", Source.GUESS,
+            "Width of a strap band. 16 mm of webbing is a normal glove strap. NOT measured, and "
+            "it decides how many anchor nodes the strap can pull on, which decides how much of "
+            "the lift-off it can carry.")
+
+
+def strap_bands(h, q, anchor_pts):
+    """WHERE THE STRAP ACTUALLY IS. Two stations along the hand, and they are not free choices.
+
+    ⚠ THE MODEL USED TO SMEAR THE STRAP OVER THE WHOLE BEARING PATCH -- every anchor node could
+    pull. A strap cannot do that. It is a BAND: it pulls where it touches and nowhere else. Making
+    it honest costs 11% of the button's steadiness (412 -> 459 um against a 500 um gate), and that
+    11% was being taken from a strap that did not exist.
+
+    The two stations are DERIVED, not chosen:
+
+      * THE WRIST BAND goes PROXIMAL OF THE THUMB'S CMC. The user, looking at the render: "the
+        straps are currently too far down the thumbs and so would restrict or load the thumb."
+        Correct, and no loop around the base of the metacarpals can avoid the thumb ray -- it is
+        simply THERE. Going proximal of the trapezium is what a watch strap does, and why.
+      * THE METACARPAL BAND sits at the distal end of the bearing patch, where it passes through
+        the FIRST WEB SPACE, distal of the thumb metacarpal (measured: 28 mm clear).
+
+    And they must be far apart, because the keypress is a MOMENT and what resists a moment is a
+    COUPLE. Two bands side by side in the middle of the palm would have almost no lever -- the
+    "anchor was a hinge" mistake, which cost 55% of the button's travel when this project made it.
+
+    ONE DEFINITION, used by BOTH the physics (structure/lattice) and the picture (viz/scene). They
+    diverged once already: the render drew a strap round the thumb while the model quietly pulled
+    on thumb-free nodes, and only the user's eye caught it.
+    """
+    import mujoco
+
+    from hand.flesh import skin
+
+    V, _, L = skin(h, q, labels=True)
+    o, e_d, _e_r, _e_o = hand_axes(h, q)
+    tid = {mujoco.mj_name2id(h.model, mujoco.mjtObj.mjOBJ_BODY, b)
+           for b in ("firstmc", "proximal_thumb", "distal_thumb")}
+    thumb_d = (V[np.isin(L, list(tid))] - o) @ e_d
+    d = (np.asarray(anchor_pts, float) - o) @ e_d
+    wrist = float(thumb_d.min()) - 0.012 if len(thumb_d) else float(d.min())
+    return [min(wrist, float(d.min())), float(np.percentile(d, 88))]
+
+
+def under_strap(h, q, nodes, anchor_ids, width=None):
+    """Which anchor nodes a band actually touches -- and therefore which ones the strap can pull."""
+    width = float(STRAP_W) if width is None else width
+    o, e_d, _r, _oo = hand_axes(h, q)
+    A = np.asarray([nodes[i] for i in anchor_ids], float)
+    st = strap_bands(h, q, A)
+    d = (A - o) @ e_d
+    return {int(i) for i, di in zip(anchor_ids, d)
+            if any(abs(float(di) - s) < width / 2 for s in st)}

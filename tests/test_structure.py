@@ -689,12 +689,14 @@ def test_flesh_cannot_PULL_the_gauntlet_back_onto_the_hand():
     anchor_n = {0: np.array([0.0, 0.0, 1.0])}  # outward = +z
     buttons = {"index": 2}
 
-    up, _s, _m, t_up, _p = solve(
+    # strap_n=[0]: the anchor node is UNDER A BAND, so the strap can pull on it. (With no band
+    # there, nothing restrains lift-off at all -- which is the point of the parameter.)
+    up, _se, _ss, _m, t_up, _p = solve(
         nodes, bars, [0, 1], buttons,
-        [("index", "click", {2: np.array([0.0, 0.0, +0.2])})], anchor_k, anchor_n)
-    dn, _s, _m, t_dn, _p = solve(
+        [("index", "click", {2: np.array([0.0, 0.0, +0.2])})], anchor_k, anchor_n, strap_n=[0])
+    dn, _se, _ss, _m, t_dn, _p = solve(
         nodes, bars, [0, 1], buttons,
-        [("index", "click", {2: np.array([0.0, 0.0, -0.2])})], anchor_k, anchor_n)
+        [("index", "click", {2: np.array([0.0, 0.0, -0.2])})], anchor_k, anchor_n, strap_n=[0])
 
     assert up > dn, (
         f"pulling the anchor OFF the hand ({up*1e6:.0f} um) is no softer than pressing it IN "

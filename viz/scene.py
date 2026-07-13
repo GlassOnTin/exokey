@@ -292,3 +292,101 @@ def skin_trace(h, q, opacity: float = 0.35, colour: str = "#e8c4a8"):
         lighting=dict(ambient=0.55, diffuse=0.85, specular=0.12, roughness=0.9),
         name="skin", hoverinfo="skip", showlegend=False,
     )
+
+
+def strap_traces(h, q, anchor_pts, n_bands=2, width=0.016, standoff=0.0012):
+    """THE STRAPS, drawn as the bands they are -- around the WHOLE hand, not just over the top.
+
+    THE USER: "Could you illustrate the straps in the render too?"
+
+    They are not decoration. The gauntlet's anchor is BILINEAR: flesh can PUSH the device off the
+    hand but it cannot PULL it back on, and a keypress ~120 mm from the wrist is a MOMENT -- it
+    presses one end of the anchor patch INTO the hand and lifts the other end OFF it. THE STRAP
+    CARRIES THE LIFTING END. Take it away and the same structure deflects 9178 um instead of 485:
+    18x the gate. It is doing about 1 N of work and it is load-bearing.
+
+    So it has to be drawn, and it has to be drawn going ALL THE WAY ROUND. A band drawn only
+    across the back of the hand is a band that cannot pull -- and drawing it that way would hide
+    exactly the thing the physics depends on.
+
+    Each band is the hand's own cross-section at that station: take the skin in a slab, hull it in
+    the plane, and lay the webbing on it.
+    """
+    import mujoco
+
+    from hand.flesh import skin
+    from structure.frame import hand_axes
+
+    # ⚠ THE STRAP MUST NOT WRAP THE THUMB.
+    #
+    # THE USER: "I see that the straps are currently too far down the thumbs and so would restrict
+    # or load the thumb."
+    #
+    # And they are right, and it is a ROUTING CONSTRAINT, not a drawing error. A band built from
+    # the hand's whole cross-section at a station necessarily encircles the THUMB RAY as well --
+    # and a strap that crosses the thumb metacarpal loads the thumb on every keystroke and fights
+    # its opposition. That is not a strap anyone could fit.
+    #
+    # A real glove strap goes through the FIRST WEB SPACE: it wraps the four-metacarpal block and
+    # the carpus, and passes BETWEEN thumb and index. The anchor already lives there (BEARING is
+    # carpus + metacarpals 2-5, never firstmc), so the physics was right and only the picture was
+    # wrong -- which is the sort of thing that stays wrong until someone LOOKS at it.
+    V, _, L = skin(h, q, labels=True)
+    THUMB = ("firstmc", "proximal_thumb", "distal_thumb", "trapezium")
+    tid = {mujoco.mj_name2id(h.model, mujoco.mjtObj.mjOBJ_BODY, b) for b in THUMB}
+    V_thumb = V[np.isin(L, list(tid))]
+    V = V[~np.isin(L, list(tid))]
+    o, e_d, e_r, e_o = hand_axes(h, q)
+    A = np.asarray(anchor_pts, float)
+    if not len(A):
+        return []
+    # ⚠ THE PHYSICS AND THE PICTURE MUST USE THE SAME DEFINITION, or they drift apart and only an
+    # eye catches it. structure.anchor.strap_bands() decides where the bands are -- proximal of the
+    # thumb's CMC at the wrist, through the first web space at the metacarpal heads -- and BOTH the
+    # solver (which pulls only on the nodes a band touches) and this render read it from there.
+    from structure.anchor import strap_bands
+
+    stations = strap_bands(h, q, A) if n_bands > 1 else [float(((A - o) @ e_d).mean())]
+
+    traces = []
+    for st in stations:
+        sel = np.abs((V - o) @ e_d - st) < width / 2
+        if sel.sum() < 30:
+            continue
+        P = V[sel]
+        c = P.mean(axis=0)
+        u = (P - c) @ e_r
+        v = (P - c) @ e_o
+        ang = np.arctan2(v, u)
+        # the outline of the cross-section: the furthest point in each angular bin
+        loop = []
+        NB = 96
+        for k in range(NB):
+            lo, hi = -np.pi + 2 * np.pi * k / NB, -np.pi + 2 * np.pi * (k + 1) / NB
+            m = (ang >= lo) & (ang < hi)
+            if not m.any():
+                continue
+            rr = np.hypot(u[m], v[m])
+            j = np.argmax(rr)
+            a = 0.5 * (lo + hi)
+            R = rr[j] + standoff
+            loop.append(c + R * (np.cos(a) * e_r + np.sin(a) * e_o))
+        if len(loop) < 8:
+            continue
+        loop.append(loop[0])
+        loop = np.array(loop)
+
+        Vv, Ff = [], []
+        for k in range(len(loop) - 1):
+            b = len(Vv)
+            Vv += [loop[k] - 0.5 * width * e_d, loop[k] + 0.5 * width * e_d,
+                   loop[k + 1] + 0.5 * width * e_d, loop[k + 1] - 0.5 * width * e_d]
+            Ff += [(b, b + 1, b + 2), (b, b + 2, b + 3)]
+        Vv = np.array(Vv)
+        Ff = np.array(Ff)
+        traces.append(go.Mesh3d(
+            x=Vv[:, 0], y=Vv[:, 1], z=Vv[:, 2], i=Ff[:, 0], j=Ff[:, 1], k=Ff[:, 2],
+            color="#b03060", opacity=0.30, flatshading=True,
+            lighting=dict(ambient=0.7, diffuse=0.5),
+            name="strap (carries the lift)", hoverinfo="name", showlegend=False))
+    return traces
