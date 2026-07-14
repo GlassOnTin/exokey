@@ -175,21 +175,35 @@ def main():
     # can I live with them", and the answer is the COLUMN OF PLASTIC that has to run from the bed up
     # to that node and then be snapped off. So draw that column. A forest of them is the honest
     # picture of "too many supports"; a handful is the honest picture of "fine".
-    props = [int(i) for i in z["pillars"]] if "pillars" in z.files else []
+    # ⚠ AND DRAW *ALL* OF THE SUPPORT, NOT JUST THE PILLARS. The support bill has two halves and
+    # the first render showed only one: 179 PILLARS (a node with nothing under it) but none of the
+    # 484 PROPS (a strut too shallow and too long to bridge, which needs holding up at its midpoint).
+    # A picture of 28% of the supports, in an animation about typing, is worse than no picture.
+    pil = [int(i) for i in z["pillars"]] if "pillars" in z.files else []
+    sag = [int(e) for e in z["sagging"]] if "sagging" in z.files else []
     px, py, pz = [], [], []
-    if props and "build_dir" in z.files:
+    n_pil = n_prop = 0
+    if "build_dir" in z.files:
         d = np.asarray(z["build_dir"], float)
         d = d / np.linalg.norm(d)
         used = sorted({i for e in live for i in bars[e]})
         bed = min(float(nodes[i] @ d) for i in used)
-        for i in props:
-            a = nodes[i]
-            foot = a - (float(a @ d) - bed) * d          # straight down the build direction, to the bed
-            px += [float(a[0]), float(foot[0]), None]
-            py += [float(a[1]), float(foot[1]), None]
-            pz += [float(a[2]), float(foot[2]), None]
-    print(f"  gauntlet: {src}, {len(live)} struts, "
-          f"{radii.min()*1e3:.2f}-{radii.max()*1e3:.2f} mm, {len(props)} pillars")
+
+        def column(a):
+            """The line the printer has to run from the bed up to `a`, and you then snap off."""
+            foot = a - (float(a @ d) - bed) * d
+            px.extend([float(a[0]), float(foot[0]), None])
+            py.extend([float(a[1]), float(foot[1]), None])
+            pz.extend([float(a[2]), float(foot[2]), None])
+
+        for i in pil:
+            column(nodes[i])
+            n_pil += 1
+        for e in sag:
+            column(0.5 * (nodes[bars[e][0]] + nodes[bars[e][1]]))   # a prop under the midpoint
+            n_prop += 1
+    print(f"  gauntlet: {src}, {len(live)} struts, {radii.min()*1e3:.2f}-{radii.max()*1e3:.2f} mm")
+    print(f"  support: {n_pil} pillars + {n_prop} props under un-bridgeable struts")
 
     frames = []
     print(f"posing the hand into each of the {sum(len(v) for v in wired.values())} wired presses\n")
@@ -222,7 +236,8 @@ def main():
         rest=[rest_b[0], rest_b[1], rest_b[2]],
         gauntlet=gauntlet,
         pillars=[px, py, pz],
-        n_pillars=len(props),
+        n_pillars=n_pil,
+        n_props=n_prop,
         mass_g=float(z["mass"]) if "mass" in z.files else None,
         struts=len(live),
         camera=dict(eye=[float(v) for v in eye], up=[float(v) for v in e_d]),

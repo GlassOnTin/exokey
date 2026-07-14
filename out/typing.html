@@ -35,15 +35,18 @@
   <span class="k" id="dev-info" style="margin-left:auto"></span>
   <button id="play">⏸ pause</button>
   <button id="rock">⏸ rotation</button>
+  <button id="sup">show supports</button>
 </header>
 <div class="note">
   Each pose is <b>derived</b>, not drawn: the fingertip is pushed one switch-travel along that
   action's own direction, and the joint angles come from the pad <b>Jacobian</b> — the same one the
   effort model uses. <b>Residual</b> is how much of the required joint torque the muscles fail to
   produce; 0% means the digit can really do it. The gauntlet is drawn at <b>the radius the physics
-  chose for each strut</b> — thick where the load runs, thin where it does not. The red lines are the
-  <b>sacrificial pillars</b> — the columns the printer has to run up from the bed and you snap
-  off. Everything else holds itself up.
+  chose for each strut</b> — thick where the load runs, thin where it does not. <b>Show supports</b> draws every column
+  the printer has to run up from the bed and you then snap off — <b>pillars</b> under the nodes with
+  nothing beneath them, <b>props</b> under the struts too long to bridge. They lie almost flat here
+  because the part prints <b>on its side</b>, so the printer's vertical axis is nearly in the screen
+  plane. Everything else holds itself up.
 </div>
 <div id="wrap">
   <div id="side"><table id="tbl"></table></div>
@@ -102,8 +105,15 @@ function draw(k) {
         lightposition:{x:2000, y:-1200, z:1800}, hoverinfo:'skip' },
       // WHERE THE PRINTER NEEDS A PROP. Not hidden -- the whole point is that you can see how few
       // there are and where they land.
+      // EVERY COLUMN THE PRINTER HAS TO RUN UP FROM THE BED AND YOU THEN SNAP OFF -- pillars under
+      // the nodes with nothing beneath them, props under the struts too long to bridge.
+      //
+      // They run almost HORIZONTALLY across this view, and that is not a bug: the build direction
+      // is radial (the part prints ON ITS SIDE, little-finger down), so the printer's vertical axis
+      // lies nearly flat in a camera that looks at the back of the hand. Off by default -- 663
+      // columns laid across a hand pressing a key is a picture of neither thing.
       { type:'scatter3d', x:D.pillars[0], y:D.pillars[1], z:D.pillars[2], mode:'lines',
-        line:{color:'#e03131', width:1}, opacity:0.45, hoverinfo:'skip' },
+        line:{color:'#e03131', width:1}, opacity:0.4, hoverinfo:'skip', visible:false },
       // where the hand RESTS -- so you can see how far the pressing digit has actually moved
       { type:'scatter3d', x:D.rest[0], y:D.rest[1], z:D.rest[2], mode:'lines',
         line:{color:'#e6ded6', width:7}, hoverinfo:'skip' },
@@ -141,7 +151,8 @@ fetch('typing.json?_=' + Date.now()).then(r => r.json()).then(d => {
                          draw(i = +tr.dataset.i); };
   document.getElementById('dev-info').innerHTML =
     `<b>${D.struts}</b> struts` + (D.mass_g ? ` · <b>${D.mass_g.toFixed(1)} g</b>` : '') +
-    ` · <span style="color:#e03131">${D.n_pillars} pillars</span>`;
+    ` · <span style="color:#e03131">${D.n_pillars + D.n_props} supports</span>` +
+    `<span style="color:#999"> (${D.n_pillars} pillars + ${D.n_props} props)</span>`;
   draw(0);
   cam0 = { eye:{x:D.camera.eye[0], y:D.camera.eye[1], z:D.camera.eye[2]},
            up:{x:D.camera.up[0], y:D.camera.up[1], z:D.camera.up[2]} };
@@ -170,5 +181,11 @@ document.getElementById('play').onclick = () => {
 document.getElementById('rock').onclick = () => {
   rocking = !rocking;
   document.getElementById('rock').textContent = rocking ? '⏸ rotation' : '↻ rotation';
+};
+let sup = false;
+document.getElementById('sup').onclick = () => {
+  sup = !sup;
+  document.getElementById('sup').textContent = sup ? 'hide supports' : 'show supports';
+  Plotly.restyle('dev', {visible: sup}, [1]);
 };
 </script>
