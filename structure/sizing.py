@@ -161,7 +161,7 @@ class Sizer:
 
 def size(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, strap_k,
          gate=0.5e-3, mat="cf_pa12", r_min=1e-6, r_max=2.5e-3, r0=9e-4,
-         steps=22, pnorm=8.0, eta=0.5, on_step=None):
+         steps=22, pnorm=8.0, eta=0.5, on_step=None, r_init=None, patience=3):
     """Minimise mass subject to the deflection gate. Returns (radii, mass, worst, live).
 
     OPTIMALITY CRITERIA, derived rather than invented. At a KKT point, for any strut not sitting on
@@ -198,8 +198,15 @@ def size(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, strap_k,
     """
     S = Sizer(nodes, bars, mat=mat, r0=r0)
     idx = S.fr.idx
-    r = np.full(len(bars), r0)
+    # ⚠ r0 IS THE STIFFNESS *REFERENCE*; r_init IS WHERE THE SEARCH *STARTS*. They were the same
+    # thing, so every re-size began from a UNIFORM radius and had to rediscover a five-decade spread
+    # from scratch in 22 steps. After a 25% cut the surviving struts' own radii are an excellent
+    # starting point -- the topology barely moved -- and starting there is both faster and lands
+    # somewhere better.
+    r = (np.full(len(bars), r0) if r_init is None
+         else np.clip(np.asarray(r_init, float).copy(), r_min, r_max))
     dV = 2.0 * S.rho * np.pi * S.L                      # dV/dr, up to the factor r
+    stall = 0
 
     anch = [i for i in anchor_k if i in idx]
     band = set(strap_n) & set(anch)
@@ -309,8 +316,17 @@ def size(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, strap_k,
             else:
                 hi = mid
         r_new = trial(hi)
-        if S.mass(r_new) >= S.mass(r) and step > 3:
-            break                           # converged: the OC cannot find anything lighter
+        # ⚠ ONE NON-IMPROVING STEP IS NOT CONVERGENCE. The OC is not monotone -- the anchor's active
+        # set moves, the p-norm's adaptive correction moves -- so a single step that fails to reduce
+        # the mass is normal and the next one often does. Breaking on the first one stopped the
+        # sizer with 8% of the deflection budget still unspent (458 um against a 500 um gate), and
+        # every unspent micron is grams of strut nobody asked for.
+        if S.mass(r_new) >= S.mass(r):
+            stall += 1
+            if stall >= patience and step > 3:
+                break                       # genuinely converged: nothing lighter to be had
+        else:
+            stall = 0
         r = r_new
 
     if best is None:
@@ -320,9 +336,36 @@ def size(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, strap_k,
     return r, m, wbest, live
 
 
+def _down_struts(nodes, bars, live, build_dir):
+    """(strut -> the node it holds up, node -> how many struts hold it up).
+
+    A strut holds up its UPPER end, and only if it is steep enough to self-support and that end is
+    off the bed. Everything else holds nothing, however thick it is.
+    """
+    from structure.lattice import BASE_T, _steep, _tilt
+
+    steep = _steep(nodes, bars, build_dir)
+    _t, _L, hh = _tilt(nodes, bars, build_dir)
+    used = {i for e in live for i in bars[e]}
+    if not used:
+        return {}, {}
+    bed = min(hh[i] for i in used) + float(BASE_T)
+    holds: dict = {}
+    n_down: dict = {}
+    for e in live:
+        if not steep[e]:
+            continue
+        a, b = bars[e]
+        up = a if hh[a] > hh[b] else b
+        if hh[up] > bed:
+            holds[e] = up
+            n_down[up] = n_down.get(up, 0) + 1
+    return holds, n_down
+
+
 def size_and_prune(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, strap_k,
                    gate=0.5e-3, mat="cf_pa12", r_print=2.5e-4, rate=0.25, on_step=None,
-                   build_dir=None):
+                   build_dir=None, on_stop=None):
     """SIZE, THEN PRUNE, THEN RE-SIZE. The only version of this that yields a buildable structure.
 
     ⚠ PURE SIZING DOES NOT PRODUCE A TOPOLOGY. It produces a CONTINUUM of radii: the run that
@@ -340,7 +383,7 @@ def size_and_prune(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, str
     and stop when deletion can no longer be paid for. Every intermediate design meets the gate by
     construction, so there is never a moment where the answer depends on something unbuildable.
     """
-    from structure.lattice import connected, protect_support, repair_support
+    from structure.lattice import connected, repair_support
 
     # ⚠ PRUNE THE DOMAIN TO THE ANCHORED COMPONENT *BEFORE* THE FIRST SOLVE, NOT AFTER IT.
     # `connected` only ran inside the prune loop, so the very first size() saw whatever ground()
@@ -386,12 +429,39 @@ def size_and_prune(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, str
     # strut is at or above 0.4 mm BECAUSE THE PHYSICS PUT IT THERE -- nothing is clamped, nothing is
     # parked, and the mass is honest. That is also what finally forces the FEW, THICK, CHUNKY
     # members that manufacture was supposed to force all along.
-    for step in range(40):
+    #
+    # ⚠ AND IT MUST NOT GIVE UP ON THE FIRST CUT THAT FAILS. The loop used to `break` the moment a
+    # re-size missed the gate -- so ONE cut that went a little too far ended the whole run. On the
+    # 5.5 mm domain it stopped after FOUR steps (3476 -> 1928 struts) and reported 20.28 g, of which
+    # ~6 g was nothing but nozzle-floor material on struts doing no work. That was not an optimum,
+    # it was a pruner that had tripped over its own feet.
+    #
+    # A cut that breaks the gate is not a stopping condition. It is a cut that was TOO BIG. So put
+    # it back and take a smaller one, and only stop when even a 2% cut cannot be paid for.
+    rate_now = float(rate)
+    rmap: dict = {}                    # bar -> its radius in the last design that MET the gate
+    prev: list = []                    # that design's live set, to undo a cut that went too far
+    why = "ran out of steps"
+
+    for step in range(80):
         sb = [bars[e] for e in live]
+        # WARM START. The topology barely moved, so the surviving struts' own radii are a far better
+        # starting point than a uniform rod -- and the OC lands somewhere better for it.
+        r_init = np.array([rmap[e] for e in live]) if rmap and all(e in rmap for e in live) else None
         r, m, w, _ = size(nodes, sb, buttons, cases, anchor_k, anchor_n, strap_n, strap_k,
-                          gate=gate, mat=mat, r_min=r_size, r0=max(9e-4, 2 * r_size))
+                          gate=gate, mat=mat, r_min=r_size, r0=max(9e-4, 2 * r_size),
+                          r_init=r_init)
         if not np.isfinite(w) or w > gate:
-            break
+            if not prev:
+                why = "even the full domain cannot meet the gate"
+                break
+            rate_now *= 0.5
+            if rate_now < 0.02:
+                why = "no cut, however small, can be paid for"
+                break
+            live = list(prev)          # undo the cut that went too far, and take a gentler one
+            continue
+        prev = list(live)
 
         # THE PRINTABLE MASS OF THIS TOPOLOGY: what it costs with every sub-nozzle strut fattened UP
         # to the nozzle. Fattening only ADDS material, so it only STIFFENS, so the gate still holds
@@ -422,23 +492,50 @@ def size_and_prune(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, str
         # With a nozzle floor, DELETION IS THE ONLY THING THAT REDUCES MASS -- the sizer cannot
         # express "I want this gone", it can only make a strut as thin as the floor allows. So the
         # pruner has to do it, and it has to keep doing it.
-        order = np.argsort(r)
-        n_cut = max(1, int(rate * len(live)))
-        keep = protect_support(nodes, bars, live, build_dir) if build_dir is not None else set()
+        rmap = {e: float(r[k]) for k, e in enumerate(live)}
+
+        # ⚠ THE CUT MUST NEVER ORPHAN A NODE IN THE FIRST PLACE, rather than orphan it and then have
+        # the repair hand the strut back. `protect_support` returns the struts that are a node's ONLY
+        # down-strut -- a set computed ONCE, before the cut. So a node with TWO thin down-struts had
+        # NEITHER protected, the cut took both, the node was orphaned, and `repair_support` gave one
+        # straight back. Do that to enough nodes and the trial stops shrinking: `len(trial) >=
+        # len(live)` fires and the loop halts, having pruned nothing.
+        #
+        # So COUNT DOWN as you go. A strut may be dropped unless it is the last one still holding its
+        # node up AT THAT MOMENT.
+        down = _down_struts(nodes, bars, live, build_dir) if build_dir is not None else ({}, {})
+        holds, n_down = down
+        n_cut = max(1, int(rate_now * len(live)))
         drop = set()
-        for i in order:
+        for i in np.argsort(r):
             if len(drop) >= n_cut:
                 break
-            if live[int(i)] not in keep:
-                drop.add(live[int(i)])
+            e = live[int(i)]
+            node = holds.get(e)
+            if node is not None and n_down.get(node, 0) <= 1:
+                continue               # the LAST thing holding that node up: not ours to take
+            drop.add(e)
+            if node is not None:
+                n_down[node] -= 1
         trial = [e for e in live if e not in drop]
         trial, ok = connected(bars, trial, anchor_k, buttons, len(nodes))
         if build_dir is not None and ok:
-            # give back only struts THIS cut removed, so the trial can never grow -- the
-            # `len(trial) == len(live)` guard below then still terminates the loop.
+            # `connected` can still strand a node, so the repair remains -- but it now has almost
+            # nothing to do, because the cut above never orphaned anything.
             trial = repair_support(nodes, bars, trial, build_dir, pool=live)
             trial, ok = connected(bars, trial, anchor_k, buttons, len(nodes))
-        if not ok or len(trial) < 12 or len(trial) >= len(live):
+        # ⚠ AND *THIS* IS THE SAME BUG ONE MORE TIME. A cut that severs a button from the anchors is
+        # not a stopping condition either -- it is, again, a cut that was TOO BIG. Halve it and try
+        # again. Only when even a 2% cut cannot be made is the pruner actually finished.
+        if not ok or len(trial) >= len(live):
+            rate_now *= 0.5
+            if rate_now < 0.02:
+                why = ("no cut, however small, keeps the buttons connected" if not ok
+                       else "every remaining strut is holding something up")
+                break
+            continue
+        if len(trial) < 12:
+            why = "nothing left to cut"
             break
         live = trial
 
@@ -463,6 +560,11 @@ def size_and_prune(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, str
     # What is left over is what genuinely has to be propped off the bed and snapped away, and the
     # caller counts it with `unsupported(nodes, bars, live, build_dir)`.
 
+    # ⚠ SAY WHY YOU STOPPED. A pruner that halts silently after four steps and reports a number is
+    # indistinguishable from one that converged, and that is exactly how 20.28 g got quoted as an
+    # optimum when it was a stalled run.
+    if on_stop:
+        on_stop(why, len(best[0]) if best else 0, best[2] if best else float("inf"))
     if best is None:
         return [], np.zeros(0), float("inf"), float("inf")
     live, r, m, w = best

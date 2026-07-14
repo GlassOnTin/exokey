@@ -38,6 +38,7 @@ minimum-mass shell wants to be. Deleting them collapses the structure. Fattening
 from __future__ import annotations
 
 import pickle
+import time
 
 import numpy as np
 
@@ -49,7 +50,7 @@ from opt.problem import hands
 from structure.frame import MATERIALS, hand_axes
 from structure.lattice import (BASE_T, BRIDGE_MAX, NOZZLE_R, OVERHANG, STRAP_K, _steep, buildable,
                                ground, load_cases, unsupported)
-from structure.sizing import Sizer, size
+from structure.sizing import Sizer, size_and_prune
 
 SRC = "out/sized.npz"
 
@@ -83,58 +84,55 @@ def main():
                      for f in FINGERS})
     _o, e_d, e_r, e_o = hand_axes(ref, q)
 
-    z = np.load(SRC, allow_pickle=True)
-    nodes = z["nodes"]
-    bars = [tuple(b) for b in z["bars"]]
-    live = [int(e) for e in z["live"]]
-    r0 = z["radii"]
-    btn = {f: int(i) for f, i in zip(z["fingers"], z["buttons"])}
-
-    # the ground structure that built these nodes -- for the anchor springs and the strap band
-    pitch = None
-    for cand in (0.004, 0.005, 0.006, 0.008):
-        gn = ground(ref, q, pitch=cand)
-        if len(gn[0]) == len(nodes) and np.allclose(gn[0], nodes, atol=1e-9):
-            pitch, (_n, _b, _bt, _l, ak, an, _t, sn) = cand, gn
-            break
-    if pitch is None:
-        raise SystemExit(f"cannot reproduce the ground structure {SRC} was built on")
+    # ⚠ RUN THE WHOLE PIPELINE. This used to load a topology found by an EARLIER, unconstrained run
+    # and merely fatten it to the nozzle -- which meant the printable structure was never actually
+    # OPTIMISED under the printing constraints, only projected onto them.
+    pitch, reach = 0.008, 2.2
+    nodes, bars, btn, _l, ak, an, _t, sn = ground(ref, q, pitch=pitch, reach=reach)
     cases = load_cases(ref, q, btn, wired=wired)
+    rho = MATERIALS["cf_pa12"]["rho"]
+    n = float(NOZZLE_R)
+    print(f"DOMAIN: {len(bars)} candidate bars at {pitch*1e3:.0f} mm pitch x reach {reach}")
+    print(f"  gate {float(DEFLECTION_MAX)*1e6:.0f} um, {len(cases)} wired load cases, "
+          f"nozzle {n*1e3:.1f} mm (HARD)\n")
+
+    # the build direction, chosen for LEAST SUPPORT PLASTIC -- see support_mm() below
+    def _sup(d, lv):
+        d = np.asarray(d, float); d = d / np.linalg.norm(d)
+        hh = nodes @ d
+        used_ = sorted({i for e in lv for i in bars[e]})
+        bed = min(hh[i] for i in used_)
+        tot = sum(float(hh[i] - bed) for i in unsupported(nodes, bars, lv, d))
+        ok_ = buildable(nodes, bars, d)
+        for e in lv:
+            if not ok_[e]:
+                a, b = bars[e]
+                tot += float(0.5 * (hh[a] + hh[b]) - bed)
+        return tot
+
+    rng = np.random.default_rng(5)
+    V = rng.normal(size=(400, 3)); V /= np.linalg.norm(V, axis=1, keepdims=True)
+    build = min(V, key=lambda d: _sup(d, list(range(len(bars)))))
+
+    t0 = time.time()
+    stop = {}
+    live, r, m, w = size_and_prune(
+        nodes, bars, btn, cases, ak, an, sn, float(STRAP_K),
+        gate=float(DEFLECTION_MAX), r_print=n, build_dir=build,
+        on_step=lambda s, n_, mm, ww: print(
+            f"  prune {s:2d}: {n_:5d} struts {mm*1000:7.2f} g {ww*1e6:4.0f} um "
+            f"[{time.time()-t0:4.0f}s]", flush=True),
+        on_stop=lambda why, n_, mm: stop.update(why=why))
+    if not len(live):
+        raise SystemExit(f"NO STRUCTURE MET THE GATE ({stop.get('why')})")
+    print(f"\n  the pruner stopped because: {stop.get('why')}")
 
     sb = [bars[e] for e in live]
     S = Sizer(nodes, sb)
-    rho = MATERIALS["cf_pa12"]["rho"]
     mass = lambda rr: float(rho * np.pi * np.sum(rr ** 2 * S.L)) * 1000   # noqa: E731
-
-    n = float(NOZZLE_R)
-    below = r0 < n
-    w0 = solve_at(S, r0, cases, ak, an, sn, btn)
-    print(f"THE UNCONSTRAINED ANSWER ({SRC}, ground structure at {pitch*1e3:.0f} mm pitch)")
-    print(f"  {len(live)} struts, {mass(r0):.2f} g, worst button {w0*1e6:.0f} um "
-          f"(gate {float(DEFLECTION_MAX)*1e6:.0f})")
-    print(f"  radii {r0.min()*1e3:.2f}-{r0.max()*1e3:.2f} mm")
-    print(f"  ⚠ {below.sum()}/{len(live)} ({100*below.mean():.0f}%) are THINNER THAN THE "
-          f"{n*1e3:.1f} mm NOZZLE, and they carry {100*mass(r0*below)/mass(r0):.0f}% of the mass.")
-    print("    They are not dust. They are a fine net doing real work.\n")
-
-    # ---- RULE 1: the nozzle. FATTEN, then RE-SIZE against it. ---------------------------------
-    r_clamp = np.maximum(r0, n)
-    w_clamp = solve_at(S, r_clamp, cases, ak, an, sn, btn)
-    print("FATTEN every sub-nozzle strut up to the nozzle (only adds material, so only stiffens):")
-    print(f"  {mass(r_clamp):.2f} g ({mass(r_clamp)/mass(r0):.1f}x), worst button "
-          f"{w_clamp*1e6:.0f} um -- still inside the gate, by construction")
-
-    r_opt, m_opt, w_opt, _ = size(nodes, sb, btn, cases, ak, an, sn, float(STRAP_K),
-                                  gate=float(DEFLECTION_MAX), r_min=n, r0=max(9e-4, 2 * n),
-                                  steps=30)
-    use_opt = np.isfinite(w_opt) and w_opt <= float(DEFLECTION_MAX) and m_opt * 1000 < mass(r_clamp)
-    print("RE-SIZE the same topology with the nozzle as the TRUE lower bound "
-          "(the OC redistributes around the floor):")
-    print(f"  {m_opt*1000:.2f} g, worst button {w_opt*1e6:.0f} um"
-          f"{'  <- LIGHTER, take it' if use_opt else '  <- no better, keep the clamp'}\n")
-
-    r = r_opt if use_opt else r_clamp
-    w = w_opt if use_opt else w_clamp
+    idle = int((r <= n * 1.02).sum())
+    print(f"  {idle}/{len(live)} struts sit ON the nozzle floor doing no work "
+          f"{'-- CLEAN' if idle == 0 else '-- the pruner could not remove them'}")
 
     # ---- RULES 2+3: the build direction, chosen for the FEWEST SUPPORT POINTS -----------------
     # ⚠ PILLARS ARE NOT THE WHOLE SUPPORT BILL. A node with nothing under it needs a pillar off the
@@ -189,11 +187,10 @@ def main():
     named = [("wrist -> fingers", e_d), ("fingers -> wrist", -e_d),
              ("palm down (dorsal up)", e_o), ("palm up (dorsal down)", -e_o),
              ("thumb up", e_r), ("little up", -e_r)]
-    rng = np.random.default_rng(5)
-    V = rng.normal(size=(800, 3))
-    V /= np.linalg.norm(V, axis=1, keepdims=True)
-    build = min(V, key=support_mm)
-    by_count = min(V, key=lambda d: pillars(d) + props(d))     # what "fewest supports" would pick
+    V2 = rng.normal(size=(800, 3))
+    V2 /= np.linalg.norm(V2, axis=1, keepdims=True)
+    build = min(V2, key=support_mm)                            # re-pick, now on the ANSWER
+    by_count = min(V2, key=lambda d: pillars(d) + props(d))    # what "fewest supports" would pick
 
     used = sorted({i for e in live for i in bars[e]})
     print(f"BUILD DIRECTION -- chosen for the LEAST SUPPORT PLASTIC "
@@ -204,19 +201,30 @@ def main():
         ht, nb, a, b = shape(d)
         print(f"  {name:>24s} {pillars(d):8d} {props(d):6d} {support_mm(d)*1e3:8.0f}mm "
               f"{ht*1e3:6.0f}mm   {nb:2d} nodes {a*1e3:3.0f}x{b*1e3:3.0f}mm")
+    # ⚠ DERIVE THE POSTURE, DO NOT ASSERT IT. The previous 921-strut answer printed "on its side"
+    # and "count picks the worst orientation" as hard-coded prose -- and both became FALSE the moment
+    # the pruner was fixed and the structure changed. A render or a message that states a conclusion
+    # it did not compute is a lie waiting for its moment.
+    lie = max(("palm down", build @ e_o), ("palm up", -(build @ e_o)),
+              ("fingers up", -(build @ e_d)), ("wrist up", build @ e_d),
+              ("thumb up", -(build @ e_r)), ("little up", build @ e_r), key=lambda t: t[1])[0]
     print(f"  (chosen: distal {build @ e_d:+.2f}  radial {build @ e_r:+.2f}  "
-          f"dorsal {build @ e_o:+.2f} -- it prints ON ITS SIDE)")
-    print(f"\n  ⚠ MINIMISING SUPPORT *COUNT* PICKS ALMOST THE WORST ORIENTATION FOR SUPPORT")
-    print(f"    *VOLUME*: {support_mm(by_count)*1e3:.0f} mm of column against "
-          f"{support_mm(build)*1e3:.0f} mm "
-          f"({support_mm(by_count)/support_mm(build):.1f}x), because the fewest-pillar direction")
-    print("    stands the part on end and every pillar then has to climb its whole height.")
+          f"dorsal {build @ e_o:+.2f} -- it prints {lie.upper()})")
+    ratio = support_mm(by_count) / max(support_mm(build), 1e-9)
+    if ratio > 1.05:
+        print(f"\n  ⚠ MINIMISING SUPPORT *COUNT* COSTS {ratio:.1f}x MORE SUPPORT *VOLUME* "
+              f"({support_mm(by_count)*1e3:.0f} mm of column against {support_mm(build)*1e3:.0f}):")
+        print("    the fewest-point direction stands the part on end, and every pillar then has to")
+        print("    climb its whole height.")
+    else:
+        print(f"\n  (here the two objectives happen to agree: {ratio:.2f}x. They did NOT on the")
+        print("   previous structure, where counting cost 1.9x the support plastic.)")
     print("\n  ⚠ NO DIRECTION REACHES ZERO. A shell that hugs a hand has an overhanging underside")
     print("    whichever way you turn it. Zero-support is not available; FEWEST is.")
-    print("  ⚠ THE PROPS ARE AN ARTEFACT OF THE 8 mm LATTICE PITCH: at that pitch the longest bar is")
-    print("    17.6 mm, well past the 10 mm a bridge will span. A ground structure whose pitch x")
-    print("    reach is INSIDE the bridge span has NO props at all, by construction -- but it is a")
-    print("    much larger domain and it has NOT been re-optimised here.")
+    print("  ⚠ THE PROPS COME FROM THE 8 mm LATTICE PITCH (longest bar 17.6 mm, past the 10 mm a")
+    print("    bridge spans). A FINER lattice removes them by construction -- and MEASURED, it costs")
+    print("    2.3x the mass (5.5 mm pitch: 1872 struts, 13.95 g, and 39% of them idle on the nozzle")
+    print("    floor). Mass is worn every day; support is paid once. The coarse lattice wins.")
     print("  ⚠ AND THE DIRECTION IS CHOSEN ON SUPPORT ALONE. A real print also wants a low part on")
     print("    a broad footprint -- visible in the table, NOT optimised.")
 
@@ -254,7 +262,7 @@ def main():
 
     np.savez("out/printable.npz", nodes=nodes, bars=np.array(bars), live=np.array(live),
              radii=r, buttons=np.array([btn[f] for f in FINGERS]), fingers=np.array(FINGERS),
-             anchors=z["anchors"], mass=mass(r), button_um=w * 1e6, bars0=len(bars),
+             anchors=np.array(sorted(ak)), mass=mass(r), button_um=w * 1e6, bars0=len(bars),
              build_dir=build, pitch=pitch, pillars=np.array(prop, dtype=int),
              sagging=np.array(sag, dtype=int),
              overhang=float(OVERHANG), bridge_max=float(BRIDGE_MAX), nozzle_r=n)

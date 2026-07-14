@@ -1292,120 +1292,103 @@ out thinner than a 0.4 mm nozzle**. Disclosed method, and the reasoning that for
     express "I want this gone", so the pruner must, and must keep doing it.
 - Disclosed for any minimum feature size and any process (FDM ~0.4 mm, SLS ~0.8 mm, DMLS, resin).
 
-**(a2) Disclosed as a RATIONALE — and ⚠ NOT, so far, as a measured result.** The hypothesis is that
-the minimum-feature bound is what gives a topology-optimised structure its *hierarchy*: a
-minimum-mass truss **wants** many equally thin members, and what would force **few, thick, graded**
-ones is MANUFACTURE.
+**(a2) Disclosed as a RATIONALE — and ⚠ still NOT demonstrated.** The hypothesis is that the
+minimum-feature bound is what gives a topology-optimised structure its *hierarchy*: a minimum-mass
+truss **wants** many equally thin members, and what would force **few, thick, graded** ones is
+MANUFACTURE.
 
-⚠ **This project has not demonstrated it, and the evidence so far points the other way.** The
-printable gauntlet of §8.15b is the *same 921-member topology* as the unconstrained one, fattened
-and re-sized — the topology was **not re-derived under the floor**. Every attempt to re-derive it
-produced a *worse* structure, and the reason is instructive: with a minimum-feature floor, **the
-sizer can no longer express "delete this member"**, so mass can only be reduced by the pruner, and
-the pruner has to delete members that are genuinely carrying load. A minimum-mass **shell** appears
-to want a fine net, and the nozzle cannot print a fine net cheaply. **Whether a from-scratch
-optimisation under the floor yields the chunky, trabecular answer, or merely a heavier one, is
-OPEN.**
-
-**(b) The ground-structure PITCH is tied to the printer's BRIDGING SPAN.** Choose lattice
-`pitch × reach ≤ bridge_max` (≈ **10 mm** for a thin FDM strut with part cooling) so that every
-candidate member is one the printer can lay. Costs nothing, and removes a whole class of
-unbuildable answers from the domain before any solving happens.
-
-**(c) SUPPORT-REACHABILITY as a TOPOLOGICAL constraint on the member graph.** Disclosed:
-- A member is **self-supporting** iff `|u·d| ≥ sin(45°)` for build direction `d` — only such a
-  member can **hold something up**.
-- A member shallower than that but **shorter than the bridge span** is a **BRIDGE**: it *prints*,
-  and it *holds nothing up*. **These are different properties and conflating them is fatal in both
-  directions** (see (g)).
-- **A node prints iff it lies on the bed, OR at least one self-supporting member arrives at it from
-  a STRICTLY LOWER node.** Height falls strictly along such a chain, so this purely **local** test
-  implies the **global** property by induction: every node is reachable from the bed through
-  already-printed material, and the part prints with no support anywhere.
-- Enforced through the **pruner**: a member may be deleted unless it is a node's **last down-strut**.
-  Printability is therefore a hard property of **every design the optimiser can reach**, and is
-  **repaired, not priced**.
-
-**(d) A SUPPORT MEMBER THAT STAYS IS STRUCTURE, NOT SCAFFOLDING.** A strut that holds a node up is
-in the FEM, carries load, and its mass is counted. Support is therefore **free** wherever the design
-domain can supply it, and only what the domain cannot hold up needs a sacrificial pillar.
-
-**(e) SACRIFICIAL SUPPORT IS EXEMPT FROM THE WEARER-CLEARANCE CONSTRAINT — because the wearer is
-not in the printer.** Disclosed as a general principle for printed wearables: **structure** must
-clear the flesh (by the measured soft-tissue map of §8.9); a **sacrificial support pillar may pass
-straight through the volume the anatomy will later occupy**, because that volume is air at print
-time and the support is removed before the part is ever worn. Structure and support are subject to
-**different constraints because they exist at different times**.
-- **Measured:** conflating them declares a printable part unprintable. Requiring every node to be
-  held up by a *structural* member — which must clear the skin — orphaned **all five finger wells**,
-  in every one of 1000+ build directions tried.
-
-**(f) The BUILD DIRECTION is a DESIGN VARIABLE, and the thing to minimise is SUPPORT VOLUME — NOT
-SUPPORT COUNT.** It is 2 DOF of pure geometry, so it is swept exhaustively for nothing.
-- **The support bill has two terms.** A node with nothing under it needs a **pillar** off the bed; a
-  member that is shallow *and* longer than the bridging span needs a **prop** under its midpoint.
-- ⚠ **COUNTING THEM IS THE WRONG OBJECTIVE, AND IT PICKS ALMOST THE WORST ORIENTATION.** The
-  fewest-support-points direction stands the part **on end** — so every pillar then has to climb the
-  part's whole height. **Measured** on the printable gauntlet (921 members, 333 nodes):
-
-  | chosen by | pillars | props | **support column** | part height | bed contact |
-  |---|---|---|---|---|---|
-  | fewest support POINTS | **123** | 411 | 39 846 mm | 172 mm | 3 nodes, 27 × 29 mm |
-  | least support VOLUME | 179 | 484 | **21 342 mm** | **92 mm** | 7 nodes, 63 × 48 mm |
-
-  Minimising the count needs **1.9× more support plastic**, on a part twice as tall standing on a
-  third of the footprint. So the objective is the **total length of column that must be printed and
-  snapped off** — over every unsupported node and every un-bridgeable member's midpoint.
-- The best direction is **not** any of the six natural hand axes (best axis, palm-up: 23 687 mm).
-  It prints **on its side** (distal +0.03 / radial −0.92 / dorsal −0.40).
-
-**(g) MEASURED FINDING — a shell that CONFORMS TO A CURVED LIMB cannot be FDM-printed support-free
-in one piece, in ANY orientation.** Its underside is an overhang whichever way it is turned.
-Verified over 1000+ build directions at three domain resolutions: **no orientation reaches zero
-pillars**, and under a strict self-support rule none even leaves a structure that reaches all five
-wells (the best reaches four). **So the objective is MINIMUM SUPPORT COUNT, not support-freedom** —
-which is also the only thing a maker actually asks for.
-- Corollary, disclosed: *nothing is unprintable.* A steep member self-supports; a short shallow one
-  bridges; a **long** shallow one takes a prop under its middle, which is exactly what a slicer
-  does. **The one rule that cannot be bought out of with support is the minimum feature** — no
-  amount of scaffolding lets a 0.4 mm nozzle lay a 0.26 mm bead. Every other process limit is a
-  **cost**, denominated in support points.
-
-**(h) Disclosed diagnostic.** In a ground-structure FEM on **elastic (soft-tissue) supports**, a
-load point severed from the anchored component presents as a **rigid-body mode — a deflection of
-order 10⁴ m**, not as a singular matrix. Prune the domain to the anchor-connected component
-**before the first solve**, or a modelling failure will present as a finding about the device.
+The topology **is** now re-derived from scratch under the floor (669 members, 6.06 g — see §8.15b),
+and it is **27% sparser and 13% lighter** than the fattened-and-re-sized 921-member version it
+replaced. That is consistent with the hypothesis but it does not establish it: the structure is
+still a net, not a set of chunky trunks. **Open.**
 
 ### 8.15b The printable gauntlet — measured
 
-The disclosed structure of §8.10, made printable by the method above (CF-PA12/CF-nylon,
-E = 6.0 GPa; 17 wired load cases, each digit-direction pressed alone at 0.196 N; gate 500 µm):
+The disclosed structure of §8.10, **optimised from scratch under the printing constraints** of
+§8.15 (CF-PA12 / CF-nylon, E = 6.0 GPa; 17 wired load cases, each digit-direction pressed alone at
+0.196 N; displacement gate 500 µm; nozzle 0.4 mm):
 
 | | unconstrained | **printable (FDM)** |
 |---|---|---|
-| members | 921 | **921** |
-| member radii | 0.26 – 1.55 mm | **0.40 – 1.29 mm** (none below the nozzle) |
-| mass, beam model | 4.79 g | **6.93 g** (1.45×) |
-| mass, the actual filleted SOLID | — | **20.3 g** |
+| members | 921 | **669** |
+| member radii | 0.26 – 1.55 mm | **0.41 – 1.17 mm** (none below the nozzle) |
+| mass, beam model | 4.79 g | **6.06 g** (1.27×) |
+| mass, the actual filleted SOLID | — | **15.5 g** |
 | worst well displacement | 499 µm | **499 µm** (gate 500) |
-| self-supporting members | — | **~37%**; ~165 more print as bridges |
-| sacrificial support | — | **179 pillars** (of 333 nodes) + **484 props** = **21.3 m** of column |
-| build orientation | — | **on its side**, 92 mm tall, 63 × 48 mm bed footprint |
+| members idle at the nozzle floor | — | **0 / 669** |
+| sacrificial support | — | **91 pillars + 283 props**, 13.0 m of column |
+| build orientation | — | **palm up**, 100 mm tall, 96 × 38 mm bed footprint |
 
-- **The cost of the nozzle is 1.45×**, and it is paid by *fattening*: fatten-only gives 7.54 g
-  (1.6×), and re-sizing against the floor recovers it to 6.93 g.
 - ⚠ **The beam model is a WIRE DIAGRAM and it is not the part.** The solid — SDF smooth-min,
-  marching cubes, watertight, clearing the skin by 3.09 mm — is **20.3 g, +193%** on the beam
-  model's 6.93 g. A wire diagram double-counts the volume where members overlap at a node and
-  **misses the fillets entirely**, and neither error is small when a third of the members meet at a
-  node. **Only the solid is the truth.**
-- ⚠ **The prop count is hostage to the bridging span, which is a GUESS.** Measured sensitivity, same
-  structure: **561 props at an 8 mm span → 484 at 10 mm → 177 at 15 mm → 20 at 18 mm.** The longest
-  member is 28.8 mm. So "how many supports" is largely a statement about *the printer*, not about
-  the design, and it is the one number a real print would settle in an afternoon.
-- ⚠ **The props are also an artefact of the 8 mm lattice pitch** (longest candidate bar 17.6 mm). A
-  ground structure whose `pitch × reach` sits inside the bridging span has **no props at all, by
-  construction** — but that is a much larger domain and it has **not** been re-optimised here.
+  marching cubes, watertight, clearing the skin by 3.04 mm — is **15.5 g, +157%** on the beam
+  model's 6.06 g. A wire diagram double-counts the volume where members overlap at a node and
+  **misses the fillets entirely**. **Only the solid is the truth.**
+
+**(i) HOW TO TELL A CONVERGED TOPOLOGY OPTIMISATION FROM A STALLED ONE.** Disclosed as a diagnostic,
+because a pruner that halts early and reports a number is indistinguishable from one that converged:
+
+> **A converged design has NO members idle at the minimum-feature floor, and NO unspent constraint
+> margin.** Either one is proof the run stopped early.
+
+Measured, on two runs of the same problem: the accepted answer has **0 / 669 idle** and spends the
+gate exactly (499 µm of 500). A run on a finer lattice reported **13.95 g** — but carries **733 /
+1872 (39%) idle at the floor** and leaves **10% of the gate unspent** (451 µm). It is an upper
+bound, not an optimum, and quoting it as one would have been wrong.
+
+**(j) A PRUNER MUST NOT TREAT A FAILED CUT AS A STOPPING CONDITION.** Four defects, all the same
+shape — *halting while progress was still available* — and together they cost a factor of ~1.5 in
+mass and ~2 in support:
+- **A cut that breaks the constraint is not a stopping condition; it is a cut that was TOO BIG.**
+  Put it back, halve the rate, and try again. (Likewise a cut that disconnects a load point.)
+- **Warm-start each re-size from the surviving members' own radii.** The stiffness *reference*
+  radius and the search *start* radius are different things; conflating them made every re-size
+  begin from a uniform rod and rediscover a five-decade spread from scratch.
+- **The set of members that must not be deleted has to be recomputed AS THE CUT PROCEEDS.** A
+  "protected" set computed once, before the cut, does not protect a node with *two* thin
+  support-members: the cut takes both, the node is orphaned, and the repair hands one straight back
+  — so the trial stops shrinking and the no-progress guard fires.
+- **One non-improving step is not convergence.** The optimality-criteria loop is not monotone (the
+  contact set moves, the aggregation correction moves). Breaking on the first non-improving step
+  left 8% of the deflection budget unspent, and every unspent micron is grams.
+
+**(k) MEASURED TRADE — MASS against SUPPORT, and it is steep and monotone.** All four points are
+the same problem, the same gate, the same material, differing only in what the domain OFFERS:
+
+| the domain | members | **mass** | support points | support column |
+|---|---|---|---|---|
+| **8 mm lattice (accepted)** | 669 | **6.06 g** | 374 | 13.0 m |
+| 5.5 mm lattice (props vanish by construction) | 1872 | 13.95 g ⚠ | 302 | 8.8 m |
+| 8 mm lattice, **shallow-and-long members forbidden** | 229 | **32.53 g** | **39** | **1.2 m** |
+
+- **A finer lattice removes the props but costs ≥2.3× the mass.** ⚠ And that cost is **not** the
+  extra floor material: both domains have essentially the **same total member length** (27.7 m vs
+  27.4 m) and therefore the same floor mass (14.8 g vs 14.6 g). A plausible 1/pitch² argument for
+  it was **measured and found false**.
+- **Forbidding the members that need props cuts the support burden 10× (374 → 39 points, 13.0 m →
+  1.2 m of column) — and costs 5.4× the mass.** *The long shallow members ARE the load path*: they
+  are the efficient diagonal ties a truss wants, and a structure denied them must be pinned at its
+  maximum radius to hold the same gate.
+- **Mass is worn every day; support is paid once.** So the lightest domain wins, and the support is
+  bought down by the one lever that is free: **the printer's bridging span.**
+
+**(l) THE BRIDGING SPAN IS BOUGHT WITH MATERIAL AND SURFACE FINISH — it is not a free parameter.**
+Measured on the accepted structure: props fall **325 (8 mm span) → 283 (10) → 218 (12) → 106 (15)
+→ 15 (18 mm)**. So "how many supports" is largely a statement about *the printer*, not the design.
+- ⚠ **But a long span restricts the material.** An 18 mm span is reliable in **PLA** and not in
+  CF-nylon, and PLA costs **+39% mass** at the same gate (6.06 → 8.4 g; ρ/E is 2.0× worse, softened
+  to 1.39× because the frame is partly bending-dominated). **The disqualifier is not stiffness — it
+  is CREEP.** A strap holds this device in *permanent tension* against the hand: that is a sustained
+  load, PLA creeps under sustained load, and Tg ≈ 60 °C means it does so faster in a car or in the
+  sun. **A worn device that relaxes its own preload stops registering keypresses.**
+- ⚠ **And supports are themselves a SURFACE-FINISH problem, not only a time-and-plastic one.** They
+  blemish the part wherever they touch, and **43 of the support contacts land on or around a well**
+  — the faces the fingertip actually presses. Fewer supports is therefore also *better finish where
+  it matters*, and the two goals align rather than trade.
+
+⚠ **NOT MODELLED: the wells' own printability.** The whole analysis is on the **member graph**, not
+on the filleted solid. The wells are U-channels — boxes with floors and walls — with their own
+overhangs, and if bottom-surface quality matters anywhere on this part it is the **cup floor** under
+the pad. The model has nothing to say about it.
 
 ### 8.16 Provenance
 

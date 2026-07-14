@@ -881,3 +881,67 @@ def test_the_pruner_keeps_every_down_strut_the_domain_can_offer():
     could = set(unsupported(nodes, bars, range(len(bars)), e_d))
     got = set(unsupported(nodes, bars, live, e_d))
     assert got <= could, f"the pruner deleted the last down-strut of {sorted(got - could)}"
+
+
+def test_the_cut_never_orphans_a_node_it_then_has_to_repair():
+    """THE PRUNER STALLED AFTER FOUR STEPS AND REPORTED ITS STALL AS AN OPTIMUM (20.28 g).
+
+    `protect_support` returned the struts that are a node's ONLY down-strut -- a set computed ONCE,
+    before the cut. So a node held by TWO thin down-struts had NEITHER of them protected: the cut
+    took both, the node was orphaned, and `repair_support` gave one straight back. Do that to enough
+    nodes and the trial stops shrinking, the `len(trial) >= len(live)` guard fires, and the loop
+    halts having pruned almost nothing -- silently, and reporting a number that looks like an answer.
+
+    So the cut must COUNT DOWN as it goes: a strut may be dropped unless it is, AT THAT MOMENT, the
+    last one still holding its node up.
+    """
+    from structure.sizing import _down_struts
+
+    d = np.array([0.0, 0.0, 1.0])
+    # nodes 0 and 1 sit on the bed; node 2 is held above them by TWO steep struts.
+    nodes = np.array([[0, 0, 0.0], [0.01, 0, 0.0], [0.005, 0, 0.02]])
+    bars = [(0, 2), (1, 2)]
+    holds, n_down = _down_struts(nodes, bars, [0, 1], d)
+
+    assert holds == {0: 2, 1: 2}, "both struts hold up node 2 (its UPPER end)"
+    assert n_down[2] == 2, "node 2 is held by TWO struts -- so a STATIC protect-set protects NEITHER"
+
+    # the greedy rule, played out: take the first, and the second becomes untouchable.
+    n_down[holds[0]] -= 1
+    assert n_down[2] == 1
+    assert n_down[holds[1]] <= 1, "the second strut is now the LAST one holding node 2 up"
+
+
+def test_the_pruner_says_why_it_stopped():
+    """A pruner that halts silently and reports a number is indistinguishable from one that
+    converged. That is exactly how a four-step stall got quoted as a 20.28 g optimum."""
+    from design.qwerty import used_actions
+    from design.vector import evaluate, posture, tm_of, tp_of
+    from hand.myohand import FINGERS
+    from opt.problem import hands
+    from opt.run import baseline
+    from structure.frame import hand_axes
+    from structure.lattice import NOZZLE_R, STRAP_K, ground, load_cases
+    from structure.sizing import size_and_prune
+
+    H = hands()
+    h = H[50]
+    x = baseline()
+    q = h.compose({f: posture(h, f, tp_of(x, f), tm_of(x, f), float(x.get(f"ab_{f}", 0.0)))
+                   for f in FINGERS})
+    _o, e_d, _r, _oo = hand_axes(h, q)
+    nodes, bars, btn, _l, ak, an, _t, sn = ground(h, q, pitch=0.010)
+    cases = load_cases(h, q, btn, wired=used_actions(evaluate(x, H)["action_map"]))[:2]
+
+    stop = {}
+    size_and_prune(nodes, bars, btn, cases, ak, an, sn, float(STRAP_K),
+                   r_print=float(NOZZLE_R), build_dir=e_d,
+                   on_stop=lambda why, n, m: stop.update(why=why, n=n, m=m))
+
+    LEGITIMATE = {"ran out of steps",
+                  "even the full domain cannot meet the gate",
+                  "no cut, however small, can be paid for",
+                  "no cut, however small, keeps the buttons connected",
+                  "nothing left to cut",
+                  "every remaining strut is holding something up"}
+    assert stop.get("why") in LEGITIMATE, f"unexplained stop: {stop.get('why')!r}"

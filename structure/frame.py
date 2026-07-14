@@ -38,6 +38,21 @@ MATERIALS = {
     "al7075": dict(E=71.7e9, G=26.9e9, nu=0.33, rho=2810.0, yield_=503e6, fatigue=159e6),
     "pa12": dict(E=1.7e9, G=0.60e9, nu=0.40, rho=1010.0, yield_=48e6, fatigue=16e6),
     "cf_pa12": dict(E=6.0e9, G=2.2e9, nu=0.40, rho=1060.0, yield_=70e6, fatigue=25e6),
+    # PLA. It is here ONLY to price the bridging question, and the price is what matters.
+    #
+    # THE USER: "an 18mm span is fine but does reduce the bottom surface quality and restricts us
+    # to PLA." So the bridging span is NOT a free parameter -- it is BOUGHT, with material and with
+    # surface finish. And what it costs is set by rho/E, because this design is stiffness-limited:
+    # at a fixed geometry, hitting the same deflection needs A ~ 1/E, so mass ~ rho/E.
+    #
+    #     CF-PA12   rho/E = 1060 / 6.0e9 = 1.77e-7
+    #     PLA       rho/E = 1240 / 3.5e9 = 3.54e-7        -> 2.0x WORSE per unit stiffness
+    #
+    # ⚠ AND THE STIFFNESS IS THE LEAST OF IT. Tg ~= 60 C: PLA softens in a car, in the sun, against
+    # a body on a hot day. It CREEPS under sustained load -- and the strap holds this gauntlet in
+    # permanent tension against the hand, which is exactly a sustained load. And it is brittle, with
+    # poor fatigue, in a device that is meant to take millions of keystrokes.
+    "pla": dict(E=3.5e9, G=1.3e9, nu=0.36, rho=1240.0, yield_=50e6, fatigue=15e6),
     "webbing": dict(E=2.0e9, G=0.70e9, nu=0.40, rho=1150.0, yield_=60e6, fatigue=20e6),
     # the spring-steel clip that pre-tensions the strap against the palm support
     "spring_steel": dict(E=200e9, G=79e9, nu=0.30, rho=7850.0, yield_=1200e6, fatigue=600e6),
