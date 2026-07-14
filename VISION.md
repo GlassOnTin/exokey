@@ -864,10 +864,80 @@ where MyoHand had nothing anyway.
 
 ---
 
+## 5g. The organising principle: this is a HUMAN FACTORS design
+
+**THE USER:** *"The whole exercise is a human factors design. That's part of the appeal."*
+
+That is the frame, and losing it is what has cost this project the most. **Nearly every constraint
+here is a fact about PEOPLE:**
+
+| the constraint | what it actually is |
+|---|---|
+| `DEFLECTION_MAX` = 500 µm | a key that moves feels **mushy** |
+| `PRESS_N` = 0.30 N | what a **finger** presses |
+| `SWITCH_TRAVEL` | what a **finger** feels |
+| effort = Σaᵢ³ | what a **hand** can sustain |
+| `hug` / `SEG_CLEAR` | it must not **rub** |
+| `STRAP_NODES_MIN` | the strap must not **dig in** |
+| 5th–95th percentile | it must **fit a person** |
+| mass | it is **worn all day** |
+| **`SKIN_R`** | **it must not scratch or cut** ← *was missing entirely* |
+
+And only **three** are facts about a **machine**: `NOZZLE_R`, `OVERHANG`, `BRIDGE_MAX`.
+
+⚠ **AND I LET ONE OF THE MACHINE'S NUMBERS SET A LIMIT THAT A HAND HAS TO TOUCH.** `NOZZLE_R` =
+0.4 mm is what a **printer** can lay. It is not, and never was, what a **palm** can bear. Measured on
+the structure this project was about to ship: **669 of 669 members (100%) are thinner than a friendly
+surface allows**, at a median radius of **0.41 mm** — a 0.8 mm wire — and **56 of them end in a free
+0.4 mm POINT.** Every structural measure in the project was blind to those points, *because a
+cantilever tip carries no load and so costs nothing to leave in.* A hand would have found all 56 of
+them in a second.
+
+**This is the same failure as every other big one here**, and the pattern is worth naming: the model
+kept failing to represent the **human**, and it always looked like a technical bug —
+
+- the "finger pad" was the **fingernail** (§4a);
+- the thumb had **no adductor**, so it could not press (§6);
+- **flesh could pull as well as push**, so the anchor was a fiction (495 µm → 9178 µm);
+- "clearance" **punished intended contact** — a gripped body is *held* (§4d);
+- and the minimum feature was set by the **printer**, not the **hand**.
+
+Every one a human-factors failure wearing a technical costume.
+
+### 5g.1 Reproducibility is a HUMANIST constraint, and it is hard
+
+**THE USER:** *"I'm hoping for a 3D-printable design as it fits the open source model. The open
+source model is also humanist and I think more efficient than the typeware.nl business model."*
+
+So: **the design must be reproducible by ONE PERSON with ONE PRINTER.** That is a first-class
+constraint, and it is the thing that separates this from a product behind a patent.
+
+It **rules out**, however good the engineering:
+
+- **a soft closed-cell foam over a stiff skeleton** — which is the textbook answer, and how ski
+  boots, helmets and prosthetic liners solve exactly this problem — because it needs a second
+  material, a mould, and a supplier;
+- **dual-material printing** (a TPU overmould) — because it needs a second extruder;
+- **the welded-wire build** (§8.12) — because it needs a laser welder.
+
+Each is good engineering. **Each is a barrier between a person and a working keyboard.** An open
+design that needs a second extruder is not open to everyone, and a design that must be *bought* is
+not open at all.
+
+Consequence, and it is the harder road: **the friendliness has to come out of the same single
+printed part** — from the geometry, not from a liner.
+
 ## 6. Model limitations — stated, not hidden
 
 These bound every conclusion above.
 
+- ⚠ **The load paths are CURVED by a guess, not by an optimiser.** `SPLINE_TENSION` (how hard a load
+  path bows away from its own chord) and `MAX_TURN` (75° — beyond which two members at a node are a
+  *branch*, not a continuing path, and are left as a corner) are both **GUESSES**. The tension is
+  *swept* and the mass it costs at the deflection gate is measured, so its price is known — but the
+  curvature itself is **fitted, not optimised**: nothing moves the control points to minimise
+  anything. A true spline-shape optimisation (form-finding on the interior points) has **not** been
+  done.
 - ⚠ **The printability model is a GEOMETRIC one, and nothing has been printed.** The
   self-support rule (45°), the bridging span (`BRIDGE_MAX`, 10 mm) and the bed-contact depth
   (**`BASE_T`, 3 mm — a GUESS**: how close to the lowest point a node must be to count as
@@ -1389,6 +1459,77 @@ Measured on the accepted structure: props fall **325 (8 mm span) → 283 (10) �
 on the filleted solid. The wells are U-channels — boxes with floors and walls — with their own
 overhangs, and if bottom-surface quality matters anywhere on this part it is the **cup floor** under
 the pad. The model has nothing to say about it.
+
+### 8.15c CURVED (spline) load paths — and two justifications that failed their own measurement
+
+**THE USER:** *"My bones have no sharp edges."*
+
+Disclosed: a method for removing the **kinks** from a topology-optimised structure, and the measured
+finding that doing so is **free**.
+
+**(m) THE LOAD PATHS OF A GROUND-STRUCTURE TRUSS ARE POLYLINES, AND THEY KINK AT EVERY NODE.** Every
+member is a straight chord, so a load path through several members is a polyline with a corner at
+each one. **Measured: 384 of the 669 members continue a load path through a node, and they turn a
+median of 31° there — up to 74°.** A smooth-min SDF fillet hides this on the *printed part*; the
+**centreline** is still kinked, and the beam model still has a moment discontinuity at every one.
+
+**Disclosed construction:**
+- At each node, **pair up the members that continue each other** — greedily, straightest first — and
+  give each matched pair a **SHARED TANGENT** (the bisector). Each member then becomes a **cubic
+  Hermite curve** that leaves and arrives tangentially, so the load path through it is **C¹**.
+- **Discretise each curve into straight sub-beams.** A curved beam *is* a polyline of straight beams
+  in the limit, so **the FEM needs no new element type at all** — only a finer mesh. (4 sub-beams
+  per member here.)
+- A member with **no continuation within `MAX_TURN` (75°)** at one end is at a genuine **BRANCH**,
+  and stays a corner. Five members really do meet at a trabecular node and only one pair of them can
+  be tangent; the rest branch, and the fillet blends them. *That is what a branch point is.*
+- The **tension `τ`** scales the tangents. **τ = 0 collapses the curve back onto the straight chord
+  exactly** — it is the regression, and it reproduces the straight structure to +0.00% of length.
+
+**(n) ⚠ AND *NOT* WITH A TRAIL COVER, WHICH IS THE OBVIOUS THING AND IS WRONG.** An Eulerian trail
+cover (as used for wire-forming, §8.12) already picks "the straightest continuation at each node" —
+but it must use **every edge**, so when the straight continuations run out it is **forced into
+hairpins**. Measured on the real structure: the trails turn a **median of 57°** and **up to 180°** —
+a complete reversal. Fit a spline through that and the curve doubles back on itself. **A load path
+is under no obligation to cover every edge. A wire is. They are different objects.**
+
+**(o) ⚠ A SPLINE CUTS CORNERS, AND THE CORNER IT CUTS MAY BE THE HAND.** The straight members clear
+the flesh **by construction** — every candidate was checked against the skin before it was ever
+offered to the optimiser (§8.10.2). **The CURVE between the same two nodes is a different object**,
+and it is free to bow the wrong way. Measured, unrepaired: the worst clearance fell from **2.98 mm
+to 2.35 mm**, straight through a 3.0 mm floor. So the curves' **interior points** are pushed back out
+along the local skin normal until the rod surface clears — and **the NODES never move**, because they
+are where the load is applied, where the anchors bear and where the buttons sit.
+
+**(p) MEASURED: THE CURVATURE IS FREE.** Same topology, same gate, same nozzle:
+
+| τ | mass | peak stress | load-path turn (90th pct) |
+|---|---|---|---|
+| 0.00 (straight) | 6.38 g | 4.7 MPa | 25.8° |
+| 0.15 | 5.91 g (−7.4%) | 7.6 MPa | 21.1° |
+| 0.30 | 6.25 g (−2.1%) | 5.9 MPa | **17.3°** |
+| 0.50 | 6.39 g (+0.2%) | 7.2 MPa | 18.3° |
+
+- **The mass is FLAT and NON-MONOTONE across τ.** That is the optimiser's own noise, not a trend. So
+  the disclosed claim is **not** "curvature saves 7%" — it is the weaker and defensible one:
+  **curvature costs nothing measurable in mass**, while the load paths measurably straighten
+  (90th-percentile turn **26° → 17°**).
+
+**(q) ⚠ AND BOTH OBVIOUS JUSTIFICATIONS FOR IT FAIL THEIR OWN MEASUREMENT — recorded because a
+reason that does not survive its own test is not a reason:**
+- **CLEARANCE.** *"A straight chord between two nodes sitting `hug` off a convex limb dips toward the
+  flesh in the middle."* It does — but it **does not bind**: 0 of 669 members sit at the clearance
+  floor. Not a reason.
+- **FATIGUE.** *"A kink in a load path is a stress riser, and this device takes millions of
+  keystrokes."* Measured peak stress is **4.7–7.6 MPa against a 70 MPa yield — 10% utilisation.** The
+  structure is **stiffness-limited, not strength-limited**, so the kinks were never going to crack
+  it. Not a reason either.
+- What is left is the one the user gave, and it is sufficient: **the structure is a bone, and bones
+  have no sharp edges.** It costs nothing, so there is nothing to trade it against.
+
+⚠ **NOT OPTIMISED: the curvature is FITTED.** `SPLINE_TENSION` is *swept*, so its price is known —
+but nothing moves the control points to minimise anything. A true spline-shape optimisation
+(form-finding on the interior points, subject to the flesh constraint) has **not** been done.
 
 ### 8.16 Provenance
 

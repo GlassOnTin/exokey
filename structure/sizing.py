@@ -383,7 +383,7 @@ def size_and_prune(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, str
     and stop when deletion can no longer be paid for. Every intermediate design meets the gate by
     construction, so there is never a moment where the answer depends on something unbuildable.
     """
-    from structure.lattice import connected, repair_support
+    from structure.lattice import connected, prune_dead_ends, repair_support
 
     # ⚠ PRUNE THE DOMAIN TO THE ANCHORED COMPONENT *BEFORE* THE FIRST SOLVE, NOT AFTER IT.
     # `connected` only ran inside the prune loop, so the very first size() saw whatever ground()
@@ -394,6 +394,12 @@ def size_and_prune(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, str
     live, ok = connected(bars, list(range(len(bars))), anchor_k, buttons, len(nodes))
     if not ok:
         raise ValueError("a button is not connected to any anchor -- the DOMAIN is broken")
+    # ⚠ AND KILL THE DEAD ENDS BEFORE ANYTHING ELSE. A member with a free end carries no load, so it
+    # costs nothing and every structural measure is blind to it -- but it is a SPIKE on a device that
+    # goes on a hand, and `protect_support` will otherwise refuse to delete it on the grounds that it
+    # is the last thing holding up its own tip.
+    bearing = set(anchor_k) | {int(b) for b in buttons.values()}
+    live = prune_dead_ends(bars, live, bearing)
     if build_dir is not None:
         live = repair_support(nodes, bars, live, build_dir)
     best = None
@@ -518,6 +524,7 @@ def size_and_prune(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, str
             if node is not None:
                 n_down[node] -= 1
         trial = [e for e in live if e not in drop]
+        trial = prune_dead_ends(bars, trial, bearing)      # a cut can CREATE a new free end
         trial, ok = connected(bars, trial, anchor_k, buttons, len(nodes))
         if build_dir is not None and ok:
             # `connected` can still strand a node, so the repair remains -- but it now has almost

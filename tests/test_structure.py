@@ -945,3 +945,60 @@ def test_the_pruner_says_why_it_stopped():
                   "nothing left to cut",
                   "every remaining strut is holding something up"}
     assert stop.get("why") in LEGITIMATE, f"unexplained stop: {stop.get('why')!r}"
+
+
+def test_an_oriented_ellipse_is_4x_stiffer_than_a_circle_of_the_same_mass():
+    """THE USER: "I think the thickness of struts should be a spline too, with a major and minor
+    radius, and principal orientation as a spline."
+
+    A CIRCLE IS THE WORST SECTION FOR A MEMBER THAT BENDS IN ONE PLANE. For an ellipse of semi-axes
+    a, b:  A = pi*a*b  (the mass), and  I = pi*a*b^3/4  one way,  pi*a^3*b/4  the other. So at
+    CONSTANT AREA -- at constant MASS -- material can be moved out of the direction nothing pushes
+    and into the direction that is bent. A 2:1 ellipse is 4x stiffer in its strong plane than a
+    circle of the same mass.
+
+    ⚠ AND THE ROLL IS THEN THE DESIGN. This file's own docstring used to say the element's rotation
+    about its own axis "does not matter -- no orientation vector to get wrong". That is true of a
+    CIRCLE and of nothing else: the moment a section has a major and a minor axis, WHICH WAY IT IS
+    TURNED is the whole point. This checks that turning it 90 degrees really does change the answer
+    by exactly Iz/Iy -- because if the roll were being ignored, both answers would be identical.
+    """
+    from structure.fem import _element_k, local_axes
+
+    E, G = 6.0e9, 2.3e9
+    a, b = 2.0e-3, 1.0e-3                     # a 2:1 ellipse
+    L, F = 0.10, 1.0
+    A = np.pi * a * b
+    Iy = np.pi * a * b ** 3 / 4               # resists bending in the local x-z plane
+    Iz = np.pi * a ** 3 * b / 4               # resists bending in the local x-y plane
+    J = np.pi * a ** 3 * b ** 3 / (a ** 2 + b ** 2)
+    assert Iz / Iy == pytest.approx(4.0), "a 2:1 ellipse is 4x stiffer one way than the other"
+
+    # a circle of THE SAME AREA, for the comparison that matters
+    rc = np.sqrt(a * b)
+    Ic = np.pi * rc ** 4 / 4
+    assert np.pi * rc ** 2 == pytest.approx(A), "same area = same mass"
+
+    def tip(roll, iy, iz):
+        ex, ey, ez, LL = local_axes(np.array([L, 0.0, 0.0]), roll)
+        kl = _element_k(LL, E, G, A, iy, iz, J)
+        R = np.vstack([ex, ey, ez])
+        T = np.zeros((12, 12))
+        for q in range(4):
+            T[3 * q:3 * q + 3, 3 * q:3 * q + 3] = R
+        K = (T.T @ kl @ T)[6:, 6:]
+        f = np.zeros(6)
+        f[2] = F                              # tip load along GLOBAL +z
+        return float(np.linalg.solve(K, f)[2])
+
+    strong = tip(0.0, Iy, Iz)                 # major axis turned INTO the load plane
+    weak = tip(np.pi / 2, Iy, Iz)             # ...and turned across it
+    circle = tip(0.0, Ic, Ic)
+
+    assert strong == pytest.approx(F * L ** 3 / (3 * E * Iz), rel=1e-9)
+    assert weak == pytest.approx(F * L ** 3 / (3 * E * Iy), rel=1e-9)
+    assert weak / strong == pytest.approx(4.0, rel=1e-6), "the ROLL is being ignored"
+
+    # THE PRIZE: same mass, 2x stiffer than the circle -- and 4x better than getting it wrong way up
+    assert circle / strong == pytest.approx(2.0, rel=1e-6)
+    assert strong < circle < weak

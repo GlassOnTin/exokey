@@ -30,26 +30,70 @@ from scipy.sparse import coo_matrix
 from scipy.sparse.linalg import splu
 
 
-def _element_k(L, E, G, A, I, J):
-    """The 12x12 local stiffness of one Euler-Bernoulli frame element."""
+def _element_k(L, E, G, A, Iy, Iz=None, J=None):
+    """The 12x12 local stiffness of one Euler-Bernoulli frame element.
+
+    ⚠ Iy AND Iz ARE SEPARATE, AND THAT IS THE WHOLE POINT OF A NON-CIRCULAR SECTION.
+
+    THE USER: "I think the thickness of struts should be a spline too, with a major and minor radius,
+    and principal orientation as a spline."
+
+    A CIRCLE IS THE WORST POSSIBLE SECTION FOR A MEMBER THAT BENDS IN ONE PLANE. For an ellipse of
+    semi-axes a, b:  A = pi*a*b, and I = pi*a*b^3/4 about one axis and pi*a^3*b/4 about the other.
+    So AT CONSTANT AREA -- at constant MASS -- you can move stiffness out of the direction nothing is
+    pushing and into the direction that is being bent. A 2:1 ellipse is 4x stiffer in its strong
+    plane than a circle of the same mass. That is why I-beams exist, and it is why a long bone's
+    cross-section is an ellipse whose principal axis lines up with the bending it actually sees.
+
+    A round rod spends material providing stiffness in a direction nothing loads.
+
+    Called with a single `Iy` and no `Iz`, this is the old circular element, exactly.
+    """
+    Iz = Iy if Iz is None else Iz
+    J = 2.0 * Iy if J is None else J
     k = np.zeros((12, 12))
     k[0, 0] = k[6, 6] = E * A / L
     k[0, 6] = k[6, 0] = -E * A / L
     k[3, 3] = k[9, 9] = G * J / L
     k[3, 9] = k[9, 3] = -G * J / L
 
-    a, b, c, d = 12 * E * I / L ** 3, 6 * E * I / L ** 2, 4 * E * I / L, 2 * E * I / L
-    # bending in the local x-y plane: v (1, 7) and rz (5, 11)
+    # bending in the local x-y plane -- v (1, 7) and rz (5, 11) -- resisted by Iz
+    a, b, c, d = (12 * E * Iz / L ** 3, 6 * E * Iz / L ** 2,
+                  4 * E * Iz / L, 2 * E * Iz / L)
     for (i, j, v) in ((1, 1, a), (1, 5, b), (1, 7, -a), (1, 11, b),
                       (5, 5, c), (5, 7, -b), (5, 11, d),
                       (7, 7, a), (7, 11, -b), (11, 11, c)):
         k[i, j] = k[j, i] = v
-    # bending in the local x-z plane: w (2, 8) and ry (4, 10) -- signs flip
+    # bending in the local x-z plane -- w (2, 8) and ry (4, 10) -- resisted by Iy; signs flip
+    a, b, c, d = (12 * E * Iy / L ** 3, 6 * E * Iy / L ** 2,
+                  4 * E * Iy / L, 2 * E * Iy / L)
     for (i, j, v) in ((2, 2, a), (2, 4, -b), (2, 8, -a), (2, 10, -b),
                       (4, 4, c), (4, 8, b), (4, 10, d),
                       (8, 8, a), (8, 10, b), (10, 10, c)):
         k[i, j] = k[j, i] = v
     return k
+
+
+def local_axes(v, roll=0.0):
+    """The element's own axes (ex along it, ey and ez across it), ROLLED about its own axis.
+
+    ⚠ THE ROLL USED TO BE ARBITRARY, AND THIS FILE'S OWN DOCSTRING SAID SO -- "its own axis does not
+    matter, no orientation vector to get wrong". That is true of a CIRCLE and of nothing else. The
+    moment an element has a major and a minor axis, the roll IS the design: it is which way the
+    section is turned to meet the bending.
+    """
+    L = float(np.linalg.norm(v))
+    ex = v / L
+    ref = np.array([0.0, 0.0, 1.0])
+    if abs(float(ex @ ref)) > 0.99:
+        ref = np.array([0.0, 1.0, 0.0])
+    ez0 = np.cross(ex, ref)
+    ez0 /= np.linalg.norm(ez0)
+    ey0 = np.cross(ez0, ex)
+    c, s = np.cos(roll), np.sin(roll)
+    ey = c * ey0 + s * ez0
+    ez = -s * ey0 + c * ez0
+    return ex, ey, ez, L
 
 
 def _cst_k(p0, p1, p2, E, nu, t):
@@ -104,7 +148,7 @@ class Frame:
     """
 
     def __init__(self, nodes, bars, E, G, A, I, J, spring=None, fixed=(),
-                 shells=(), shell_t=0.0006, nu=0.3):
+                 shells=(), shell_t=0.0006, nu=0.3, roll=0.0):
         self.nodes = np.asarray(nodes, float)
         self.bars = [tuple(b) for b in bars]
         # the node map must cover SHELLS too, or a triangle whose corner touches no bar loses it
@@ -116,17 +160,10 @@ class Frame:
 
         rows, cols, vals = [], [], []
         kloc, Ts, Ls, dofs_all = [], [], [], []
-        for (i, j) in self.bars:
+        for be, (i, j) in enumerate(self.bars):
             pi, pj = self.nodes[i], self.nodes[j]
-            v = pj - pi
-            L = float(np.linalg.norm(v))
-            ex = v / L
-            ref = np.array([0.0, 0.0, 1.0])
-            if abs(ex @ ref) > 0.99:
-                ref = np.array([0.0, 1.0, 0.0])
-            ez = np.cross(ex, ref)
-            ez /= np.linalg.norm(ez)
-            ey = np.cross(ez, ex)
+            ex, ey, ez, L = local_axes(pj - pi, float(np.asarray(roll).flat[be])
+                                       if np.size(roll) > 1 else float(roll))
             R = np.vstack([ex, ey, ez])                    # local axes as rows
             T = np.zeros((12, 12))
             for b in range(4):

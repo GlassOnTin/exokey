@@ -192,6 +192,36 @@ def unsupported(nodes, bars, live, build_dir):
     return sorted(used - held)
 
 
+def prune_dead_ends(bars, live, keep):
+    """Delete every member with a FREE END. They carry no load, and they are SPIKES.
+
+    ⚠ THE PRUNER WAS PROTECTING THEM, AND THE REASON IS ABSURD ONCE YOU SEE IT.
+    A member whose far end is loose carries ZERO force -- nothing is attached to that end, so there
+    is nothing to react. It is pure dead weight, and the sizer duly drives it to the floor. But
+    `protect_support` then refuses to delete it, BECAUSE IT IS THE LAST THING HOLDING UP ITS OWN
+    TIP -- a node that only exists because the member exists, and which would vanish with it.
+
+    So 56 of them survived every prune, at the 0.4 mm nozzle floor, as 0.4 mm POINTS sticking out of
+    a device that goes on a hand. Invisible to every structural measure in this project, because
+    they cost nothing and carry nothing. Visible instantly to anyone who touched it.
+
+    `keep` is the nodes that are load-bearing even at degree one: the BUTTONS (a well ends at the
+    fingertip, on purpose) and the ANCHORS (they bear on the flesh).
+    """
+    live = list(live)
+    keep = {int(i) for i in keep}
+    for _ in range(40):
+        deg: dict[int, int] = {}
+        for e in live:
+            for i in bars[e]:
+                deg[int(i)] = deg.get(int(i), 0) + 1
+        dead = {i for i, d in deg.items() if d == 1 and i not in keep}
+        if not dead:
+            break
+        live = [e for e in live if not (dead & {int(bars[e][0]), int(bars[e][1])})]
+    return live
+
+
 def protect_support(nodes, bars, live, build_dir):
     """The struts that are the ONLY thing holding some node up. Deleting one costs a pillar.
 
