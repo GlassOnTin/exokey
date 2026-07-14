@@ -12,7 +12,7 @@ The disclosure has been **extended and re-anchored** twice. **All three stamps s
 proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one — it
 is a *floor* on the date, and floors do not move.
 
-### Current — HUMAN FACTORS as the organising principle (§5g), and the sections (§8.15c–d)
+### Current — HUMAN FACTORS as the organising principle (§5g), and the whole structural stack
 
 Adds: **human factors as the organising principle** (§5g) — nearly every constraint here is a fact
 about PEOPLE, only three are facts about a machine, and reproducibility ("one person, one printer")
@@ -25,10 +25,10 @@ bone is HOLLOW**.
 
 | file | sha256 |
 |---|---|
-| `VISION.md` (the disclosure) | `095c2713b0dd7ed0d9da24644c747847bcda4eaef5f6b2bdcc3e1844dd482a74` |
-| `MANIFEST.sha256` (hashes of all 63 source + doc files) | `fe06fa5e00654a42afd7d94f3285972a9da99ec2edcdffaad4174e6cf1d14e2d` |
+| `VISION.md` (the disclosure) | `15d99f392e9fe34fdec8908cb602bd49e32349c0667c398d005790318296866b` |
+| `MANIFEST.sha256` (hashes of all 63 source + doc files) | `f0e4fb4db6eb348e8e760464a40b1d58e5eefab1abe560ad1b2a0a3388335d91` |
 
-Stamped: **2026-07-14T21:15:43Z** (UTC, submission time). Proofs: `VISION.md.ots`,
+Stamped: **2026-07-14T21:40:41Z** (UTC, submission time). Proofs: `VISION.md.ots`,
 `MANIFEST.sha256.ots`.
 
 ⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
