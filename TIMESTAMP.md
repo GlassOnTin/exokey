@@ -12,21 +12,23 @@ The disclosure has been **extended and re-anchored** twice. **All three stamps s
 proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one — it
 is a *floor* on the date, and floors do not move.
 
-### Current — MANUFACTURABILITY as a constraint on the design space (§8.15, §8.15b)
+### Current — HUMAN FACTORS as the organising principle (§5g), and the sections (§8.15c–d)
 
-Adds the printability method and its measured results: the minimum-feature bound imposed by
-**delete-then-fatten-then-re-size**; **support-reachability** as a topological constraint on the
-member graph; the **bridge/self-support distinction**; that **sacrificial support is exempt from the
-wearer-clearance constraint, because the wearer is not in the printer**; the **build direction as a
-design variable minimised on support VOLUME, not support COUNT**; and the finding that a shell which
-conforms to a curved limb **cannot be FDM-printed support-free in any orientation**.
+Adds: **human factors as the organising principle** (§5g) — nearly every constraint here is a fact
+about PEOPLE, only three are facts about a machine, and reproducibility ("one person, one printer")
+is a HUMANIST constraint; the **ergonomic floor** `SKIN_R` and the finding that it, not the nozzle,
+is what makes a topology-optimised structure **trabecular**; **curved (spline) load paths**;
+**oriented elliptical and stadium sections** and the proof that a circle is the worst section for a
+member that bends; and the central measured result — **the device is TOUCH-limited, not
+load-limited** (95% of its members are as thick as they are because a HAND must bear them), so **the
+bone is HOLLOW**.
 
 | file | sha256 |
 |---|---|
-| `VISION.md` (the disclosure) | `4cf6652fd6341e627011069931d61d116994c306959453b746e26ea19ecd4b79` |
-| `MANIFEST.sha256` (hashes of all 57 source + doc files) | `3b4956e76e59c8ac27f4f5b84acf06d3516be2349543b6a6114cc783c012b590` |
+| `VISION.md` (the disclosure) | `095c2713b0dd7ed0d9da24644c747847bcda4eaef5f6b2bdcc3e1844dd482a74` |
+| `MANIFEST.sha256` (hashes of all 63 source + doc files) | `fe06fa5e00654a42afd7d94f3285972a9da99ec2edcdffaad4174e6cf1d14e2d` |
 
-Stamped: **2026-07-14T18:41:44Z** (UTC, submission time). Proofs: `VISION.md.ots`,
+Stamped: **2026-07-14T21:15:43Z** (UTC, submission time). Proofs: `VISION.md.ots`,
 `MANIFEST.sha256.ots`.
 
 ⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
