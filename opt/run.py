@@ -35,7 +35,6 @@ def baseline() -> dict:
     for f in ("index", "middle", "ring", "little"):
         x[f"dp_{f}"] = 0.0
         x[f"dm_{f}"] = 0.0
-    x["tp_thumb"] = 0.55
     x["tm_thumb"] = 0.60
     for f, sgn in zip(("index", "middle", "ring", "little"), (1.0, 0.33, -0.33, -1.0)):
         x[f"ab_{f}"] = 0.75 * sgn   # fan splay, or the wells collide
@@ -61,61 +60,85 @@ def main():
     from pymoo.parallelization import StarmapParallelization
 
     class Live(Callback):
-        """THE OPTIMISER STREAMS INTO THE RENDER. It should always have done.
+        """THE OPTIMISER STREAMS INTO THE RENDER -- AND KEEPS EVERY FRAME.
 
         The user, twice: "I usually prefer to do this sort of project with a tight coupled
         visualisation, or sometimes even visualisation being first and optimisation event coupled
         to it." And every substantial bug in this project was caught by LOOKING -- the fingernail,
-        the thumb's sign, the wells intersecting, the bone not fitting the well, the black sheet
-        across the back of the hand. Not one by a test written in advance, because you cannot
-        write a test for a mistake you do not know you are making.
+        the thumb's sign, the wells intersecting, the strap floating off the forearm. Not one by a
+        test written in advance, because you cannot write a test for a mistake you do not know you
+        are making.
 
-        And yet every run so far has been: optimise for an hour, THEN render a page. The picture
-        arrived after the decision.
+        ⚠ AND IT USED TO THROW THE HISTORY AWAY. Each generation OVERWROTE front.json and
+        live.json, so all you could ever see was the last frame. The user: "Do we keep a history of
+        checkpoints for the optimisation flow? It would be great to see an animation of the full
+        optimisation!" We did not. Now we do: every generation is written to out/history/, and
+        out/anim.html plays them back.
 
-        Each generation writes the front (cheap). Every `every` generations it also RE-GROWS the
-        knee design's gauntlet (~19 s) so the bone structure on screen is the bone structure the
-        optimiser currently believes in.
+        The FRONT is cheap (a few hundred bytes) so it is kept every generation. The GROWN
+        STRUCTURE costs a ~25 s re-grow, so it is kept every `every` generations -- and that time
+        is not stolen from the search, because the callback runs in the main process while the
+        worker pool sits idle between generations.
         """
 
-        def __init__(self, hands_, every=5):
+        def __init__(self, hands_, every=2):
             super().__init__()
             self.h = hands_
             self.every = every
             self.t0 = time.time()
+            self.frames = []
+            os.makedirs("out/history", exist_ok=True)
+            for f in os.listdir("out/history"):
+                os.remove(os.path.join("out/history", f))
 
         def notify(self, algorithm):
             import json
 
-            from viz.live import publish
+            from viz.live import scene
 
-            g = algorithm.n_gen
+            g = int(algorithm.n_gen)
             F = algorithm.opt.get("F")
             X = algorithm.opt.get("X")
             if F is None or not len(F):
                 return
             F = np.atleast_2d(F)
-            os.makedirs("out", exist_ok=True)
-            payload = dict(gen=int(g), elapsed=time.time() - self.t0,
-                           front=[[float(a), float(b)] for a, b in F[:, :2]],
-                           n_feasible=int(len(F)))
+            Fn = (F - F.min(0)) / (F.max(0) - F.min(0) + 1e-12)
+            knee = int(np.argmin((Fn ** 2).sum(1)))
+
+            frame = dict(gen=g, elapsed=round(time.time() - self.t0, 1),
+                         front=[[float(a), float(b)] for a, b in F[:, :2]],
+                         knee=knee, scene=None)
+            if g % self.every == 0 and len(X):
+                try:
+                    sc = scene(self.h[50], X[knee], gen=g,
+                               note=f"gen {g} — knee: {F[knee, 1]:.1f} g")
+                    frame["scene"] = dict(traces=sc["traces"], layout=sc["layout"],
+                                          note=sc["note"], bone_g=sc["bone_g"],
+                                          struts=sc["struts"], button_um=sc["button_um"])
+                except Exception as e:                       # the render must never kill the run
+                    print(f"[live] scene failed: {type(e).__name__}: {e}", flush=True)
+
+            with open(f"out/history/gen_{g:03d}.json", "w") as fh:
+                json.dump(frame, fh)
+            self.frames.append(g)
+            with open("out/history/manifest.json.tmp", "w") as fh:
+                json.dump(dict(gens=self.frames, done=False), fh)
+            os.replace("out/history/manifest.json.tmp", "out/history/manifest.json")
+
+            # ...and the LAST frame is what the live page polls
             with open("out/front.json.tmp", "w") as fh:
-                json.dump(payload, fh)
+                json.dump(dict(gen=g, elapsed=frame["elapsed"], front=frame["front"],
+                               n_feasible=len(F)), fh)
             os.replace("out/front.json.tmp", "out/front.json")
+            if frame["scene"]:
+                with open("out/live.json.tmp", "w") as fh:
+                    json.dump(dict(gen=g, **frame["scene"]), fh)
+                os.replace("out/live.json.tmp", "out/live.json")
+
             print(f"[live] gen {g}: {len(F)} on the front, "
                   f"effort {F[:,0].min():.3e}-{F[:,0].max():.3e}, "
                   f"mass {F[:,1].min():.1f}-{F[:,1].max():.1f} g "
-                  f"[{time.time()-self.t0:.0f}s]", flush=True)
-            if g % self.every == 0 and len(X):
-                Fn = (F - F.min(0)) / (F.max(0) - F.min(0) + 1e-12)
-                knee = X[int(np.argmin((Fn ** 2).sum(1)))]
-                try:
-                    publish(self.h[50], knee, gen=int(g),
-                            note=f"gen {g} — knee: {F[int(np.argmin((Fn**2).sum(1))), 1]:.1f} g")
-                except Exception as e:                       # the render must never kill the run
-                    print(f"[live] publish failed: {type(e).__name__}: {e}", flush=True)
-
-    from design.vector import evaluate
+                  f"[{frame['elapsed']:.0f}s]", flush=True)
 
     # ---- baseline, scored with the SAME evaluator --------------------------------------
     print("scoring the hand-built baseline (Twiddler-like)...")
@@ -139,6 +162,15 @@ def main():
     t0 = time.perf_counter()
     res = minimize(problem, algorithm, ("n_gen", args.gen), seed=args.seed,
                    callback=Live(hands()), verbose=True, save_history=False)
+
+    # mark the history complete so the animation player knows it has every frame
+    import json as _json
+    try:
+        _m = _json.load(open("out/history/manifest.json"))
+        _m["done"] = True
+        _json.dump(_m, open("out/history/manifest.json", "w"))
+    except Exception:
+        pass
     dt = time.perf_counter() - t0
     pool.close()
 

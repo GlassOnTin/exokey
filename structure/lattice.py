@@ -42,7 +42,8 @@ from scipy.spatial import cKDTree
 from design.params import P, Source
 from hand.flesh import CARPUS, METACARPALS, skin
 from hand.myohand import FINGERS
-from structure.anchor import bearing_surface, under_strap
+from structure.anchor import (STRAP_NODES_MIN, bearing_surface, strap_grip,
+                              under_strap)
 from structure.fem import Frame
 from structure.frame import MATERIALS, hand_axes
 
@@ -474,7 +475,9 @@ def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
         on_step(0, live, w, mass, tens)
 
     cut, step = rate, 0
-    while cut > 0.005 and (len(live) + len(live_s)) > 50:
+    # a hard step cap, as a BACKSTOP. A loop whose termination depends on the physics behaving is
+    # a loop that will one day not terminate -- and this one already did.
+    while cut > 0.005 and (len(live) + len(live_s)) > 50 and step < 500:
         step += 1
         # ⚠ ONE RANKING FOR BOTH. A strut and a plate compete on the SAME criterion -- strain
         # energy per unit VOLUME -- so ESO deletes whichever is doing less work, whatever shape it
@@ -510,6 +513,32 @@ def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
             if np.isfinite(w3) and w3 <= max(w2, gate) and _clears(moved, bars, trial, Vs, hug):
                 nodes, w2, se2, ss2, mass2, tens2, pc2 = (moved, w3, se3, ss3, mass3, tens3, pc3)
 
+        # ⚠ THE STRAP MUST KEEP ITS GRIP ON BOTH BANDS.
+        #
+        # Nothing else stops ESO deleting its way down to ONE node holding the whole tension side
+        # of the anchor -- measured, 3 of 8 designs did exactly that. It is NOT a strength problem:
+        # the struts at a strap node run at 4% of allowable, LESS than the average strut, because
+        # the strap carries ~1 N and a 1.8 mm rod takes 89 N. It is a SINGLE POINT OF FAILURE. And
+        # the two bands are a COUPLE: three nodes on one band and none on the other is a HINGE,
+        # which is the mistake that cost 55% of the button's travel earlier in this project.
+        #
+        # ⚠ REPAIR, DO NOT REJECT. Throwing away the whole deletion batch whenever it broke the
+        # grip made ESO STALL: it halved the cut, ran out of steps, and returned a structure both
+        # HEAVIER and needlessly STIFFER than the gate (4.97 g -> 11.22 g at 152 um against a
+        # 500 um gate -- material left on the table, not spent). So: take the deletion, then put
+        # back only the struts that the strap actually needs to keep hold.
+        dropped_bars = {e for (k, e) in drop if k == "b"}
+        trial = _repair_grip(trial, dropped_bars, bars, strap_n, se)
+
+        # ⚠ IF THE REPAIR GAVE EVERYTHING BACK, NOTHING WAS DELETED -- AND ACCEPTING THAT IS AN
+        # INFINITE LOOP. `trial` equals `live`, so the deflection is unchanged, so the step is
+        # ACCEPTED, so `cut` never halves and `live` never shrinks. grow() spins forever. It hung
+        # the test suite, and it would have hung an hour-long cloud run if the tests had not been
+        # the thing that caught it. Treat a fully-undone deletion as a cut that was too big.
+        if len(trial) >= len(live):
+            cut *= 0.5
+            continue
+
         if w2 > gate or not np.isfinite(w2):
             cut *= 0.5                      # took too much: back off and try a smaller bite
             continue
@@ -519,6 +548,38 @@ def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
         if on_step:
             on_step(step, live, w, mass, tens)
     return nodes, bars, live, btn, cases, ak, an, hist, pc, shells, live_s
+
+
+def _repair_grip(trial, drop, bars, strap_n, se):
+    """Put back the fewest struts that restore the strap's grip on every band.
+
+    A pull node is only holding the strap if a LIVE strut touches it. So for each band that has
+    fallen below the minimum, re-admit the highest-strain-energy deleted strut at each missing pull
+    node -- highest, because that is the one the structure was leaning on most, and re-admitting an
+    idle strut would restore the count while carrying nothing.
+    """
+    need = int(float(STRAP_NODES_MIN))
+    if not strap_n:
+        return trial
+    live = set(trial)
+    held = {i for e in live for i in bars[e]}
+    for b in range(max(strap_n.values()) + 1):
+        band = [i for i, bb in strap_n.items() if bb == b]
+        have = [i for i in band if i in held]
+        for i in sorted(set(band) - set(have),
+                        key=lambda n: -max((se.get(e, 0.0) for e in drop if n in bars[e]),
+                                           default=0.0)):
+            if len(have) >= need:
+                break
+            back = [e for e in drop if i in bars[e]]
+            if not back:
+                continue
+            e = max(back, key=lambda e: se.get(e, 0.0))
+            live.add(e)
+            drop.discard(e)
+            held.update(bars[e])
+            have.append(i)
+    return sorted(live)
 
 
 def _clears(nodes, bars, live, skin_V, hug):
@@ -582,13 +643,15 @@ def cost(h, q, wired=None, press_N=0.196, pitch=0.008, gate=0.5e-3, mat="cf_pa12
             relax=False)
     except (RuntimeError, ValueError):
         return dict(mass_g=float("inf"), solid_g=float("inf"), worst=float("inf"),
-                    util=float("inf"), struts=0, feasible=False)
+                    util=float("inf"), struts=0, grip=0, feasible=False)
     if not live or not np.isfinite(hist[-1][1]):
         return dict(mass_g=float("inf"), solid_g=float("inf"), worst=float("inf"),
-                    util=float("inf"), struts=0, feasible=False)
+                    util=float("inf"), struts=0, grip=0, feasible=False)
 
     n_solid, w_solid, m_solid = hist[0][:3]
     _n, w, m, _t = hist[-1][:4]
+    held = {i for e in live for i in bars[e]}
+    grip = strap_grip(under_strap(h, q, nodes, sorted(ak)), held)
 
     # THE STRESS, on the structure that actually survived -- not on the solid, which is a
     # different structure carrying the same load through 30x more material.
@@ -601,8 +664,8 @@ def cost(h, q, wired=None, press_N=0.196, pitch=0.008, gate=0.5e-3, mat="cf_pa12
     util = float(fr.stress(U, r).max() / (p["yield_"] / 2.0))        # SF = 2
 
     return dict(mass_g=float(m) * 1000.0, solid_g=float(m_solid) * 1000.0,
-                worst=float(w_solid), util=util, struts=len(live),
-                feasible=bool(w_solid <= gate))
+                worst=float(w_solid), util=util, struts=len(live), grip=int(grip),
+                feasible=bool(w_solid <= gate and grip >= int(float(STRAP_NODES_MIN))))
 
 
 def relax_nodes(fr, U, nodes, bars, live, buttons, anchor_k, skin_V, skin_N,

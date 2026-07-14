@@ -231,6 +231,16 @@ def report(h, q) -> None:
     print(f"  stiffest patch     {K_.max()/1000:.1f} kN/m   softest {K_.min()/1000:.1f} kN/m")
 
 
+STRAP_NODES_MIN = P("STRAP_NODES_MIN", 3.0, "-", Source.GUESS,
+                    "Minimum structural nodes each strap band must be held by. A GUARD, not a "
+                    "fix: measured, the struts at a strap node run at 4% of allowable stress -- "
+                    "LESS than the average strut (7%) -- because the strap carries ~1 N and a "
+                    "1.8 mm rod takes 89 N. So this is NOT about strength. It is about ESO being "
+                    "free, otherwise, to delete its way down to ONE node holding the entire "
+                    "tension side of the anchor: a single weld defect, a single fatigue crack, "
+                    "and the gauntlet lifts off. Nothing has tested a joint, so the number is a "
+                    "judgement about redundancy, and it is a guess.")
+
 STRAP_W = P("STRAP_W", 0.016, "m", Source.GUESS,
             "Width of a strap band. 16 mm of webbing is a normal glove strap. NOT measured, and "
             "it decides how many anchor nodes the strap can pull on, which decides how much of "
@@ -305,11 +315,30 @@ def strap_bands(h, q, anchor_pts):
 
 
 def under_strap(h, q, nodes, anchor_ids, width=None):
-    """Which anchor nodes a band actually touches -- and therefore which ones the strap can pull."""
+    """Which anchor nodes each band touches. Returns {node: band index}.
+
+    Per BAND, not just in total -- because the two bands are a COUPLE and a couple needs both ends.
+    Three nodes on the metacarpal band and none on the wrist band is not an anchor; it is a hinge,
+    and this project has already paid 55% of the button's travel to learn what a hinge does.
+    """
     width = float(STRAP_W) if width is None else width
     o, e_d, _r, _oo = hand_axes(h, q)
     A = np.asarray([nodes[i] for i in anchor_ids], float)
     st = strap_bands(h, q, A)
     d = (A - o) @ e_d
-    return {int(i) for i, di in zip(anchor_ids, d)
-            if any(abs(float(di) - s) < width / 2 for s in st)}
+    out = {}
+    for i, di in zip(anchor_ids, d):
+        for b, s_ in enumerate(st):
+            if abs(float(di) - s_) < width / 2:
+                out[int(i)] = b
+                break
+    return out
+
+
+def strap_grip(strap_n, held):
+    """How many structural nodes hold EACH band. The weakest band is the answer."""
+    if not strap_n:
+        return 0
+    n_bands = max(strap_n.values()) + 1
+    counts = [sum(1 for i, b in strap_n.items() if b == k and i in held) for k in range(n_bands)]
+    return min(counts) if counts else 0

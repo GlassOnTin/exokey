@@ -109,15 +109,32 @@ def main():
         traces.append(go.Scatter3d(x=[p[0]], y=[p[1]], z=[p[2]], mode="markers",
                                    marker=dict(size=5, color="#111", symbol="diamond"),
                                    name=f"{f} mount", hoverinfo="name", showlegend=False))
-    # only the anchor nodes the GROWN structure actually stands on
+    # ⚠ TWO DIFFERENT THINGS, AND DRAWING THEM THE SAME WAY IS HOW A FICTION SURVIVES.
+    #
+    # The ANCHOR nodes are everywhere the gauntlet BEARS on the hand -- and bearing is compression:
+    # flesh pushing back. The STRAP nodes are the few the strap can PULL on, and they exist only
+    # where a band physically touches. The old render drew all of them as identical red crosses,
+    # so "the crosses are nowhere near the wrist band" looked like a rendering complaint when it
+    # was the structure genuinely failing to reach its own tension anchor.
+    from structure.anchor import under_strap
+
     used = {i for e in live for i in bars[e]}
     A = nodes[[int(i) for i in z["anchors"] if int(i) in used]]
     if len(A):
         traces.append(go.Scatter3d(x=A[:, 0], y=A[:, 1], z=A[:, 2], mode="markers",
-                                   marker=dict(size=4, color="#b03060", symbol="x"),
-                                   name="anchor", hoverinfo="name", showlegend=False))
+                                   marker=dict(size=3, color="#888", symbol="x"),
+                                   name="bears on the hand (compression)", hoverinfo="name",
+                                   showlegend=False))
+        pulled = sorted(set(under_strap(h, q, nodes, [int(i) for i in z["anchors"]])) & used)
+        if pulled:
+            Pp = nodes[pulled]
+            traces.append(go.Scatter3d(
+                x=Pp[:, 0], y=Pp[:, 1], z=Pp[:, 2], mode="markers",
+                marker=dict(size=9, color="#b03060", symbol="diamond",
+                            line=dict(width=1, color="#fff")),
+                name="THE STRAP PULLS HERE", hoverinfo="name", showlegend=False))
         # THE STRAPS. Flesh can only push; the strap supplies the pull, and without it this same
-        # structure deflects 9178 um instead of 485. It goes ALL THE WAY ROUND the hand.
+        # structure deflects 9178 um instead of 485. They go ALL THE WAY ROUND the hand.
         traces += strap_traces(h, q, A)
 
     _o, _e_d, e_r, e_o = hand_axes(h, q)

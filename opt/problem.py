@@ -39,7 +39,7 @@ from pymoo.core.variable import Choice, Integer, Real
 from design.vector import INT_BOUNDS, MATERIAL_CHOICES, REAL_BOUNDS, evaluate
 
 CONSTRAINT_NAMES = [
-    "travel", "saturation", "adjust-range", "yield", "supportable", "common-drive",
+    "travel", "saturation", "adjust-range", "yield", "strap-grip", "supportable", "common-drive",
     "key-overlap", "swept-path", "well-finger", "performable",
 ]
 # "travel" and "saturation" now mean ALL THREE ACTIONS (push/lift/contort) on every hand:

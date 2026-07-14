@@ -157,6 +157,19 @@ DEFLECTION_MAX = P(
     describes="key feel")
 
 
+THUMB_CMC = P(
+    "THUMB_CMC", 0.299, "-", Source.DERIVED,
+    "The thumb's CMC flexion, as a fraction of its range. FIXED, not optimised -- and it is fixed "
+    "at the value MyoHand's own q_neutral already sits at, which is the CLINICAL POSITION OF "
+    "FUNCTION (derived at Stage 0): the posture a resting, opposed thumb actually holds. "
+    "Swept from 0.02 to 0.80, effort/character moves by 0.3% -- NOTHING -- and gauntlet mass is "
+    "flat below 0.45 (26-27 g, well inside ESO's own +-15-30% trajectory noise) and only "
+    "penalises at 0.8 (37.6 g). So it is a DEAD VARIABLE, not a tight bound: going BELOW the old "
+    "0.10 floor buys nothing either. The GA was pinning it to that floor and `report_cornered` "
+    "flagged it, which is what that check is for. One less dimension, and the value is derived "
+    "rather than picked out of noise.")
+
+
 def guesses() -> list[Param]:
     """Everything we made up. These belong in VISION.md, every one of them."""
     return [p for p in REGISTRY if p.source is Source.GUESS]

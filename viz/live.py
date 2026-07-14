@@ -102,7 +102,7 @@ def scene(h, x, gen: int = -1, note: str = "") -> dict:
 
     A = [nodes[i] for i in sorted(ak)]
     held = {i for e in live for i in bars[e]}
-    pulled = sorted(under_strap(h, q_on, nodes, sorted(ak)) & held)
+    pulled = sorted(set(under_strap(h, q_on, nodes, sorted(ak))) & held)
     if pulled:
         Q = np.array([nodes[i] for i in pulled])
         traces.append(dict(type="scatter3d", x=[float(v) for v in Q[:, 0]],

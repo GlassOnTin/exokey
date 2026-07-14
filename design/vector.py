@@ -24,7 +24,8 @@ import os
 import numpy as np
 
 from design.params import (COMMON_DRIVE as _CD, DEFLECTION_MAX, RESIDUAL_MAX as _RESID,
-                           SVALBOARD, WELL_WALL as _WELL_WALL, check_coherent)
+                           SVALBOARD, THUMB_CMC, WELL_WALL as _WELL_WALL, check_coherent)
+from structure.anchor import STRAP_NODES_MIN
 from hand.cradle import solve as cradle_solve
 from hand.myohand import FINGERS, FLEXION_JOINTS, MyoHand
 
@@ -107,8 +108,14 @@ MATERIAL_CHOICES = ["al6061", "al7075", "cf_pa12"]
 
 # Continuous variables: name -> (lo, hi). Per-finger curl, splay, switch force, structure.
 REAL_BOUNDS: dict[str, tuple[float, float]] = {}
-REAL_BOUNDS["tp_thumb"] = (0.10, 0.80)      # the thumb drives independently of the fingers
-REAL_BOUNDS["tm_thumb"] = (0.10, 0.80)
+# ⚠ tp_thumb IS NO LONGER A VARIABLE. It pinned to its lower bound in every design on the front,
+# and `report_cornered` says that means one of two things needing OPPOSITE fixes: the bound is too
+# tight (the optimum is outside it and every answer is an artefact), or the variable is DEAD (the
+# objective is flat in it, so it is not a decision). Swept from 0.02 to 0.80: effort/character
+# moves 0.3% and mass is flat below 0.45 -- so the bound was fine and the variable is dead. It is
+# now the CLINICAL POSITION OF FUNCTION (design/params.py THUMB_CMC), which is where MyoHand's own
+# q_neutral already sits, rather than a number picked out of ESO's trajectory noise.
+REAL_BOUNDS["tm_thumb"] = (0.10, 0.80)      # the thumb's MP still drives independently
 
 # COMMON DRIVE, BUILT IN RATHER THAN CHECKED.
 #
@@ -440,6 +447,8 @@ _DIGIT_BODIES = {
 
 def _curl(x: dict, finger: str, which: str) -> float:
     if finger == "thumb":
+        if which == "tp":                       # FIXED: see REAL_BOUNDS and params.THUMB_CMC
+            return float(THUMB_CMC)
         return float(x[f"{which}_thumb"])
     lo, hi = REAL_BOUNDS[f"{which}_hand"]
     return float(np.clip(x[f"{which}_hand"] + x[f"d{which[1]}_{finger}"], lo, hi))
@@ -763,6 +772,12 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
         worst_saturation,           # no muscle maxed out in any wired direction
         required_adjust - adjust,   # the wells must actually reach: STAGE 5, as a constraint
         gc["util"] - 1.0,           # the grown bone must not yield (SF 2) -- ON THE LATTICE now
+        float(STRAP_NODES_MIN) - gc["grip"],    # ⚠ THE STRAP MUST KEEP HOLD OF *BOTH* BANDS.
+        #   Not a strength constraint -- the struts at a strap node run at 4% of allowable, less
+        #   than the average strut, because the strap carries ~1 N and a 1.8 mm rod takes 89 N.
+        #   It is a SINGLE-POINT-OF-FAILURE constraint: nothing else stops ESO deleting its way
+        #   down to one node carrying the whole tension side of the anchor, and the two bands are
+        #   a COUPLE -- three nodes on one and none on the other is a HINGE.
         gc["worst"] - float(DEFLECTION_MAX),   # THE DOMAIN MUST BE ABLE TO SUPPORT THIS LAYOUT:
         #   if the SOLID lattice -- every candidate strut present -- already misses the gate, then
         #   no amount of material in this design space can hold these buttons steady, and the
