@@ -52,6 +52,7 @@ def scene(h, x, gen: int = -1, note: str = "") -> dict:
     from design.vector import PRESS_N, evaluate, posture, tm_of, tp_of
     from hand.myohand import FINGERS
     from opt.problem import hands
+    from structure.frame import hand_axes
     from structure.lattice import grow
 
     per = {f: posture(h, f, tp_of(x, f), tm_of(x, f), x.get(f"ab_{f}", 0.0)) for f in FINGERS}
@@ -87,11 +88,45 @@ def scene(h, x, gen: int = -1, note: str = "") -> dict:
                        mode="markers", marker=dict(size=5, color="#e8590c"),
                        hoverinfo="skip", name="buttons"))
 
+    # ⚠ THE STRAPS, AND THE NODES THEY ACTUALLY PULL ON.
+    #
+    # The user, watching the live run: "the straps no longer appear connected to the elements? Is
+    # that just a rendering issue?" It was not. The wrist band had been placed 31 mm PROXIMAL of
+    # the hand -- out on the forearm, where the gauntlet does not go -- so the structure reached it
+    # at ONE node. A band the structure cannot reach is not a strap; it is a decoration the solver
+    # is nonetheless leaning on.
+    #
+    # So the live view now draws BOTH: the bands, and the structural nodes the strap is pulling
+    # on. If those markers are not sitting ON a band, the anchor is fiction, and you can see it.
+    from structure.anchor import strap_bands, under_strap
+
+    A = [nodes[i] for i in sorted(ak)]
+    held = {i for e in live for i in bars[e]}
+    pulled = sorted(under_strap(h, q_on, nodes, sorted(ak)) & held)
+    if pulled:
+        Q = np.array([nodes[i] for i in pulled])
+        traces.append(dict(type="scatter3d", x=[float(v) for v in Q[:, 0]],
+                           y=[float(v) for v in Q[:, 1]], z=[float(v) for v in Q[:, 2]],
+                           mode="markers", marker=dict(size=7, color="#b03060",
+                                                       symbol="diamond"),
+                           hoverinfo="skip", name="strap pulls here"))
+    o, e_d, e_r, e_o = hand_axes(h, q_on)
+    for st in strap_bands(h, q_on, np.array(A)):
+        c = o + st * e_d
+        ring = [c + 0.055 * (np.cos(t) * e_r + np.sin(t) * e_o)
+                for t in np.linspace(0, 2 * np.pi, 40)]
+        R = np.array(ring)
+        traces.append(dict(type="scatter3d", x=[float(v) for v in R[:, 0]],
+                           y=[float(v) for v in R[:, 1]], z=[float(v) for v in R[:, 2]],
+                           mode="lines", line=dict(color="#b03060", width=6),
+                           hoverinfo="skip", name="strap"))
+
     bone_g = hist[-1][2] * 1000.0
     return dict(
         gen=int(gen),
         note=(f"{note} — {len(live)} struts, {bone_g:.1f} g of bone, "
-              f"buttons {hist[-1][1]*1e6:.0f} µm, strap {hist[-1][3]:.2f} N"),
+              f"buttons {hist[-1][1]*1e6:.0f} µm, strap {hist[-1][3]:.2f} N "
+              f"through {len(pulled)} nodes"),
         traces=traces,
         layout=dict(scene=dict(aspectmode="data", xaxis_visible=False,
                                yaxis_visible=False, zaxis_visible=False)),

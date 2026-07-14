@@ -264,16 +264,44 @@ def strap_bands(h, q, anchor_pts):
     """
     import mujoco
 
-    from hand.flesh import skin
+    from hand.flesh import CARPUS as CARPAL_BONES, skin
 
     V, _, L = skin(h, q, labels=True)
     o, e_d, _e_r, _e_o = hand_axes(h, q)
-    tid = {mujoco.mj_name2id(h.model, mujoco.mjtObj.mjOBJ_BODY, b)
-           for b in ("firstmc", "proximal_thumb", "distal_thumb")}
-    thumb_d = (V[np.isin(L, list(tid))] - o) @ e_d
+
+    def span(names):
+        ids = {mujoco.mj_name2id(h.model, mujoco.mjtObj.mjOBJ_BODY, b) for b in names}
+        W = V[np.isin(L, list(ids))]
+        if not len(W):
+            return None
+        d = (W - o) @ e_d
+        return float(d.min()), float(d.max())
+
+    # ⚠ THE WINDOW FOR A WRIST BAND IS DERIVED, NOT CHOSEN -- and my first rule was neither.
+    #
+    # "12 mm proximal of the most proximal thumb skin" sounds safe until you MEASURE where the
+    # thumb metacarpal starts: it reaches back to -2 mm, right onto the carpus. So the rule walked
+    # the band out to -31 mm -- past the wrist, onto the FOREARM -- where the gauntlet does not go.
+    # The user saw it immediately: "the straps no longer appear connected to the elements".
+    #
+    # A band that the structure cannot reach is not a strap. It is a decoration that the solver is
+    # nonetheless leaning on.
+    #
+    # The real window has two walls and they are both anatomy:
+    #     PROXIMAL of the thumb metacarpal   -- or it loads the thumb
+    #     ON the carpus                      -- or it is not on the hand
+    # A wrist strap lives between them, which is exactly where a watch sits and why.
+    thumb_mc = span(["firstmc"])
+    carpus = span(CARPAL_BONES)
     d = (np.asarray(anchor_pts, float) - o) @ e_d
-    wrist = float(thumb_d.min()) - 0.012 if len(thumb_d) else float(d.min())
-    return [min(wrist, float(d.min())), float(np.percentile(d, 88))]
+
+    if thumb_mc and carpus:
+        lo = carpus[0] + 0.006                      # not right off the proximal edge of the wrist
+        hi = min(thumb_mc[0] - 0.004, carpus[1])    # clear of the thumb metacarpal
+        wrist = 0.5 * (lo + hi) if hi > lo else lo
+    else:
+        wrist = float(d.min())
+    return [float(wrist), float(np.percentile(d, 88))]
 
 
 def under_strap(h, q, nodes, anchor_ids, width=None):
