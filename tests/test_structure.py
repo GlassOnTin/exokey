@@ -705,3 +705,43 @@ def test_flesh_cannot_PULL_the_gauntlet_back_onto_the_hand():
     assert t_up > 0 and t_dn == 0.0, (
         f"the strap carries {t_up:.3f} N when lifted and {t_dn:.3f} N when pressed. It must carry "
         f"the lift and nothing else -- webbing does not push.")
+
+
+def test_the_live_render_actually_renders():
+    """A RENDER THAT FAILS SILENTLY IS WORSE THAN NO RENDER: it looks like nothing is happening.
+
+    viz/live.py has now broken TWICE in the same way and nobody noticed until the run was over.
+
+      1. It went on drawing the PALMAR BOX for a whole 62-minute optimisation, failing every
+         generation with `KeyError: 'alu_w'` -- a variable deleted with the architecture it shaped.
+      2. Then it unpacked grow()'s return with the wrong arity and did it again.
+
+    Both times the exception was CAUGHT so a render bug could not kill an hour-long run -- which is
+    right -- and both times the 3D panel therefore sat empty while the front streamed happily
+    beside it. The user, who has caught nearly every real bug in this project by LOOKING, was
+    looking at nothing.
+
+    So the render is exercised like any other code path. It is not decoration; it is the
+    instrument.
+    """
+    import json
+    import os
+    import tempfile
+
+    from design.vector import posture
+    from hand.myohand import FINGERS
+    from viz.live import scene
+
+    h = MyoHand()
+    x = {"tp_hand": 0.45, "tm_hand": 0.45, "adjust": 0.012, "material": "cf_pa12"}
+    for f in ("index", "middle", "ring", "little"):
+        x[f"dp_{f}"] = 0.0
+        x[f"dm_{f}"] = 0.0
+        x[f"ab_{f}"] = 0.0
+    x["tp_thumb"] = 0.5
+    x["tm_thumb"] = 0.5
+
+    s = scene(h, x, gen=1, note="test")
+    assert s["traces"], "the live scene has no traces -- it is drawing nothing"
+    assert s["struts"] > 0, "the live scene grew no structure"
+    json.dumps(s)                      # it has to survive the trip to the browser, too

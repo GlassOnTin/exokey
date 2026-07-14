@@ -59,7 +59,7 @@ def scene(h, x, gen: int = -1, note: str = "") -> dict:
 
     r = evaluate(x, hands())
     wired = used_actions(r["action_map"])
-    nodes, bars, live, btn, cases, ak, an, hist, pc = grow(
+    nodes, bars, live, btn, cases, ak, an, hist, pc, _sh, _ls = grow(
         h, q_on, wired=wired, gate=float(DEFLECTION_MAX), pitch=0.008, rate=0.20)
 
     seg = _bone_segments(h, q_on)
