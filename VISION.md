@@ -1292,10 +1292,20 @@ out thinner than a 0.4 mm nozzle**. Disclosed method, and the reasoning that for
     express "I want this gone", so the pruner must, and must keep doing it.
 - Disclosed for any minimum feature size and any process (FDM ~0.4 mm, SLS ~0.8 mm, DMLS, resin).
 
-**(a2) Disclosed corollary — the minimum feature is what gives the structure its hierarchy.** A
-minimum-mass truss **wants** many equally thin members; what forces **few, thick, graded** members
-is MANUFACTURE. Printability is not a compromise against the optimisation; it is the thing that
-makes the answer trabecular.
+**(a2) Disclosed as a RATIONALE — and ⚠ NOT, so far, as a measured result.** The hypothesis is that
+the minimum-feature bound is what gives a topology-optimised structure its *hierarchy*: a
+minimum-mass truss **wants** many equally thin members, and what would force **few, thick, graded**
+ones is MANUFACTURE.
+
+⚠ **This project has not demonstrated it, and the evidence so far points the other way.** The
+printable gauntlet of §8.15b is the *same 921-member topology* as the unconstrained one, fattened
+and re-sized — the topology was **not re-derived under the floor**. Every attempt to re-derive it
+produced a *worse* structure, and the reason is instructive: with a minimum-feature floor, **the
+sizer can no longer express "delete this member"**, so mass can only be reduced by the pruner, and
+the pruner has to delete members that are genuinely carrying load. A minimum-mass **shell** appears
+to want a fine net, and the nozzle cannot print a fine net cheaply. **Whether a from-scratch
+optimisation under the floor yields the chunky, trabecular answer, or merely a heavier one, is
+OPEN.**
 
 **(b) The ground-structure PITCH is tied to the printer's BRIDGING SPAN.** Choose lattice
 `pitch × reach ≤ bridge_max` (≈ **10 mm** for a thin FDM strut with part cooling) so that every

@@ -23,10 +23,10 @@ conforms to a curved limb **cannot be FDM-printed support-free in any orientatio
 
 | file | sha256 |
 |---|---|
-| `VISION.md` (the disclosure) | `a7083e4f9049d69f641db0ed965934efd156b16a37a2a4dbefb427e452f61033` |
-| `MANIFEST.sha256` (hashes of all 57 source + doc files) | `d4afa5da4362d683287b4029aa2cc0a8ea08561154676eac89ef20ecad385032` |
+| `VISION.md` (the disclosure) | `b137ecc9036552239ae6bf794217e62aa0a208e457e2cb0054c4727508808159` |
+| `MANIFEST.sha256` (hashes of all 57 source + doc files) | `9a3dd5f44928abfdb28cc7ddc2481a5daf6bf7200d2d112ba14dbf5e3f61a5d2` |
 
-Stamped: **2026-07-14T16:48:19Z** (UTC, submission time). Proofs: `VISION.md.ots`,
+Stamped: **2026-07-14T16:50:24Z** (UTC, submission time). Proofs: `VISION.md.ots`,
 `MANIFEST.sha256.ots`.
 
 ⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
