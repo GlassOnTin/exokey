@@ -1,4 +1,12 @@
-"""BONE.  PYTHONPATH=. .venv/bin/python scripts/bone.py
+"""BONE -- everything at once.  PYTHONPATH=. .venv/bin/python scripts/bone.py
+
+The whole stack, on one structure:
+
+    FRIENDLY   every surface >= SKIN_R, 0 spikes            (the ergonomic floor)
+    CURVED     the load paths are cubic splines, not kinks  (bones have no sharp edges)
+    HOLLOW     tubes, wall = two perimeters of the nozzle   (a bone has a marrow cavity)
+    PRINTABLE  every member >= the nozzle, supports counted (one person, one printer)
+
 
 The friendly structure (153 members, every surface >= 1.5 mm radius, 0 spikes) costs 14.90 g against
 6.17 g for the wire-thin one nobody could bear to wear. This is what an ELLIPTICAL section buys back.
@@ -30,8 +38,10 @@ from design.vector import evaluate, posture, tm_of, tp_of
 from hand.myohand import FINGERS
 from manufacture.friendly import SKIN_R
 from opt.problem import hands
-from structure.lattice import STRAP_K, ground, load_cases
-from structure.section import K_MAX, size_stadium
+from hand.flesh import skin
+from structure.lattice import SEG_CLEAR, STRAP_K, ground, load_cases
+from structure.section import size_stadium
+from structure.spline import TENSION, curves, kink, push_out
 
 
 def main():
@@ -55,15 +65,31 @@ def main():
     sb = [bars[e] for e in live]
     R = float(SKIN_R)
 
-    print(f"THE FRIENDLY STRUCTURE: {len(sb)} members, {circ:.2f} g as ROUND rods, "
-          f"every surface >= {R*1e3:.1f} mm")
-    print(f"  gate {float(DEFLECTION_MAX)*1e6:.0f} um, {len(cases)} wired load cases, "
-          f"aspect capped at {float(K_MAX):.0f}:1\n")
+    turns0 = kink(nodes, bars, live)
+    print(f"THE FRIENDLY STRUCTURE: {len(sb)} members, {circ:.2f} g as SOLID ROUND rods, "
+          f"every surface >= {R*1e3:.1f} mm, 0 spikes")
+    print(f"  its load paths still KINK: median {np.median(turns0):.0f} deg at each node "
+          f"they run through\n")
 
+    # ---- CURVE the load paths ------------------------------------------------------------------
+    from scipy.spatial import cKDTree
+    V, _F = skin(ref, q)
+    tree = cKDTree(V)
+    need = {e: float(SEG_CLEAR) * 0.004 + float(z["radii"][k]) for k, e in enumerate(live)}
+    n2, b2, owner = curves(nodes, bars, live, tension=float(TENSION) * 0.3)
+    n2, moved = push_out(n2, len(nodes), b2, owner, tree, need)
+    turns1 = kink(n2, b2, list(range(len(b2))))
+    print(f"CURVED: {len(b2)} sub-beams from {len(sb)} members; the kink at each node falls "
+          f"{np.percentile(turns0, 90):.0f} -> {np.percentile(turns1, 90):.0f} deg (p90)")
+    print(f"  (and the curves were pushed {moved*1e3:.2f} mm back out of the flesh)\n")
+
+    print(f"  gate {float(DEFLECTION_MAX)*1e6:.0f} um, {len(cases)} wired load cases\n")
     t0 = time.time()
     b, t, roll, m, w, EL = size_stadium(
-        nodes, sb, btn, cases, ak, an, sn, float(STRAP_K),
+        n2, b2, btn, cases, ak, an, sn, float(STRAP_K),
         gate=float(DEFLECTION_MAX), b_min=R)
+    nodes, sb, live = n2, b2, list(range(len(b2)))
+    bars = b2
     if not np.isfinite(w):
         raise SystemExit("no stadium structure met the gate")
 
@@ -86,11 +112,20 @@ def main():
           f"({100*(m*1000/circ - 1):+.0f}%)")
     aspect = np.ones_like(b)
 
+    from structure.lattice import buildable, unsupported
+    bd = np.asarray(z["build_dir"], float)
+    bd /= np.linalg.norm(bd)
+    pil = unsupported(nodes, bars, live, bd)
+    ok = buildable(nodes, bars, bd)
+    sag = [e for e in live if not ok[e]]
+    print(f"\n  SUPPORT: {len(pil)} pillars + {len(sag)} props")
+
     np.savez("out/bone.npz", nodes=nodes, bars=np.array(bars), live=np.array(live),
-             b=b, t=t, roll=roll, radii=b, aspect=aspect,
+             b=b, wall=W, roll=roll, radii=b, owner=owner,
              buttons=z["buttons"], fingers=z["fingers"], anchors=z["anchors"],
-             mass=m * 1000, button_um=w * 1e6, bars0=len(bars), build_dir=z["build_dir"],
-             pitch=pitch, skin_r=R, pillars=z["pillars"], sagging=z["sagging"])
+             mass=m * 1000, button_um=w * 1e6, bars0=len(bars), build_dir=bd,
+             pitch=pitch, skin_r=R, pillars=np.array(pil, dtype=int),
+             sagging=np.array(sag, dtype=int))
     print("\n  wrote out/bone.npz")
 
 

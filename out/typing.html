@@ -42,11 +42,11 @@
   action's own direction, and the joint angles come from the pad <b>Jacobian</b> — the same one the
   effort model uses. <b>Residual</b> is how much of the required joint torque the muscles fail to
   produce; 0% means the digit can really do it. The gauntlet is drawn at <b>the radius the physics
-  chose for each strut</b> — thick where the load runs, thin where it does not. <b>Show supports</b> draws every column
-  the printer has to run up from the bed and you then snap off — <b>pillars</b> under the nodes with
-  nothing beneath them, <b>props</b> under the struts too long to bridge. They lie almost flat here
-  because the part prints <b>on its side</b>, so the printer's vertical axis is nearly in the screen
-  plane. Everything else holds itself up.
+  chose for each strut</b> — thick where the load runs, thin where it does not. The members are <b>hollow tubes</b> — the wall is drawn
+  translucent so you can see the <b>marrow cavity</b> inside it. 95% of them are as thick as they are
+  because a <b>hand</b> has to bear them, not because a force demands it, so the inside was doing
+  nothing and came out: −19% mass, identical to the touch. <b>Show supports</b> draws every column
+  the printer must run up from the bed and you then snap off.
 </div>
 <div id="wrap">
   <div id="side"><table id="tbl"></table></div>
@@ -98,11 +98,23 @@ function draw(k) {
       // finger presses against. Drawn as tubes rather than lines because in a SIZED structure the
       // radius IS the load: a thick trunk tapering into thin braces is the hierarchy the eye reads
       // as bone, and drawing every strut the same width throws that away.
+      // THE WALL -- semi-transparent, so you can see the MARROW CAVITY inside it. The whole
+      // finding is that this device is TOUCH-limited: 95% of its members are as thick as they are
+      // because a HAND must bear them, not because a force requires it. So the inside is doing
+      // nothing, and it comes out. An opaque tube hides the thing that saved a fifth of the mass.
       { type:'mesh3d', x:G.x, y:G.y, z:G.z, i:G.i, j:G.j, k:G.k,
         intensity:G.intensity, colorscale:[[0,'#0d0887'],[0.1,'#46039f'],[0.2,'#7201a8'],[0.3,'#9c179e'],[0.4,'#bd3786'],[0.5,'#d8576b'],[0.6,'#ed7953'],[0.7,'#fb9f3a'],[0.8,'#fdca26'],[1,'#f0f921']], cmin:0, cmax:1,
-        showscale:false, flatshading:true,
+        showscale:false, flatshading:true, opacity: D.bore ? 0.42 : 1.0,
         lighting:{ambient:0.48, diffuse:0.75, specular:0.40, roughness:0.35, fresnel:0.15},
         lightposition:{x:2000, y:-1200, z:1800}, hoverinfo:'skip' },
+      // the BORE. A long bone is a tube with a marrow cavity; this is the cavity.
+      D.bore
+        ? { type:'mesh3d', x:D.bore.x, y:D.bore.y, z:D.bore.z,
+            i:D.bore.i, j:D.bore.j, k:D.bore.k,
+            color:'#1a1410', flatshading:true, opacity:1.0,
+            lighting:{ambient:0.22, diffuse:0.45, specular:0.05},
+            hoverinfo:'skip' }
+        : { type:'scatter3d', x:[], y:[], z:[], mode:'markers', hoverinfo:'skip' },
       // WHERE THE PRINTER NEEDS A PROP. Not hidden -- the whole point is that you can see how few
       // there are and where they land.
       // EVERY COLUMN THE PRINTER HAS TO RUN UP FROM THE BED AND YOU THEN SNAP OFF -- pillars under
@@ -114,12 +126,15 @@ function draw(k) {
       // columns laid across a hand pressing a key is a picture of neither thing.
       { type:'scatter3d', x:D.pillars[0], y:D.pillars[1], z:D.pillars[2], mode:'lines',
         line:{color:'#e03131', width:1}, opacity:0.4, hoverinfo:'skip', visible:false },
-      // where the hand RESTS -- so you can see how far the pressing digit has actually moved
+      // the rest posture, so you can see how far the pressing digit has actually moved
       { type:'scatter3d', x:D.rest[0], y:D.rest[1], z:D.rest[2], mode:'lines',
         line:{color:'#e6ded6', width:7}, hoverinfo:'skip' },
       // the hand, pressed -- the ONLY thing that changes
       { type:'scatter3d', x:f.bones[0], y:f.bones[1], z:f.bones[2], mode:'lines',
         line:{color:f.colour, width:9}, hoverinfo:'skip' },
+      // THE WELLS. Without them the animation shows fingers pressing at thin air -- and the well
+      // is the entire reason the structure exists.
+      ...(D.wells || []),
     ], {
       margin:{t:6,l:0,r:0,b:0}, template:'plotly_white', showlegend:false, uirevision:'keep',
       scene:{ aspectmode:'data',
@@ -132,7 +147,7 @@ function draw(k) {
   }
   Plotly.restyle('dev', {
     x: [f.bones[0]], y: [f.bones[1]], z: [f.bones[2]], 'line.color': [f.colour],
-  }, [3]);
+  }, [4]);
 }
 
 fetch('typing.json?_=' + Date.now()).then(r => r.json()).then(d => {
@@ -151,8 +166,8 @@ fetch('typing.json?_=' + Date.now()).then(r => r.json()).then(d => {
                          draw(i = +tr.dataset.i); };
   document.getElementById('dev-info').innerHTML =
     `<b>${D.struts}</b> struts` + (D.mass_g ? ` · <b>${D.mass_g.toFixed(1)} g</b>` : '') +
-    ` · <span style="color:#e03131">${D.n_pillars + D.n_props} supports</span>` +
-    `<span style="color:#999"> (${D.n_pillars} pillars + ${D.n_props} props)</span>`;
+    (D.wall_mm ? ` · <b>hollow</b><span style="color:#999"> (${D.wall_mm.toFixed(1)} mm wall)</span>` : '') +
+    ` · <span style="color:#e03131">${D.n_pillars + D.n_props} supports</span>`;
   draw(0);
   cam0 = { eye:{x:D.camera.eye[0], y:D.camera.eye[1], z:D.camera.eye[2]},
            up:{x:D.camera.up[0], y:D.camera.up[1], z:D.camera.up[2]} };
@@ -186,6 +201,6 @@ let sup = false;
 document.getElementById('sup').onclick = () => {
   sup = !sup;
   document.getElementById('sup').textContent = sup ? 'hide supports' : 'show supports';
-  Plotly.restyle('dev', {visible: sup}, [1]);
+  Plotly.restyle('dev', {visible: sup}, [2]);
 };
 </script>

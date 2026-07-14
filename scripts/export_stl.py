@@ -28,7 +28,7 @@ def main():
 
     import os
 
-    src = next(p for p in ("out/smooth.npz", "out/printable.npz", "out/sized.npz",
+    src = next(p for p in ("out/bone.npz", "out/smooth.npz", "out/printable.npz", "out/sized.npz",
                           "out/final.npz") if os.path.exists(p))
     z = np.load(src, allow_pickle=True)
     nodes, bars = z["nodes"], [tuple(b) for b in z["bars"]]

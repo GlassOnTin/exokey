@@ -154,7 +154,7 @@ def main():
 
     from scripts.lattice_view import tubes
 
-    src = next(p for p in ("out/smooth.npz", "out/printable.npz", "out/sized.npz",
+    src = next(p for p in ("out/bone.npz", "out/smooth.npz", "out/printable.npz", "out/sized.npz",
                           "out/final.npz") if os.path.exists(p))
     z = np.load(src, allow_pickle=True)
     nodes, bars = z["nodes"], [tuple(b) for b in z["bars"]]
@@ -164,11 +164,26 @@ def main():
     # so this is the load map, and it needs no second FEM solve to draw.
     order = np.empty(len(radii))
     order[np.argsort(radii)] = np.arange(len(radii))
-    g = tubes(nodes, bars, live, {e: float(order[k]) for k, e in enumerate(live)}, radii)
-    gauntlet = dict(x=[float(v) for v in g.x], y=[float(v) for v in g.y],
-                    z=[float(v) for v in g.z],
-                    i=[int(v) for v in g.i], j=[int(v) for v in g.j], k=[int(v) for v in g.k],
-                    intensity=[float(v) for v in g.intensity])
+    def mesh(rr):
+        t = tubes(nodes, bars, live, {e: float(order[k]) for k, e in enumerate(live)}, rr)
+        return dict(x=[float(v) for v in t.x], y=[float(v) for v in t.y],
+                    z=[float(v) for v in t.z],
+                    i=[int(v) for v in t.i], j=[int(v) for v in t.j], k=[int(v) for v in t.k],
+                    intensity=[float(v) for v in t.intensity])
+
+    gauntlet = mesh(radii)
+
+    # ⚠ THE HOLLOWNESS IS THE POINT, AND AN OPAQUE TUBE HIDES IT COMPLETELY.
+    # The whole finding is that the device is TOUCH-limited -- 95% of the members are as thick as
+    # they are because a HAND has to bear them, not because a force requires it -- so the inside is
+    # doing nothing and comes out. Render the wall SEMI-TRANSPARENT and the MARROW CAVITY solid
+    # inside it, and you can see the thing that saved a fifth of the mass.
+    wall = float(z["wall"]) if "wall" in z.files else 0.0
+    bore = None
+    if wall > 0:
+        ri = np.maximum(radii - wall, 0.0)
+        if (ri > 1e-6).any():
+            bore = mesh(np.maximum(ri, 1e-6))
     # WHERE THE PRINTER NEEDS A PILLAR -- and DRAWN AS A PILLAR, not as a dot.
     #
     # A dot at the node says nothing: the whole question the user asked is "how many supports, and
@@ -227,6 +242,24 @@ def main():
             print(f"  {str(ch):>5s} {f:>7s} {act:>10s} {moved*1000:6.2f}mm {eff:11.3e} "
                   f"{resid*100:8.1f}%")
 
+    # THE WELLS. Without them the animation shows fingers pressing at THIN AIR -- and the well is
+    # the entire reason the structure exists.
+    from design.vector import action_dirs as _ad
+
+    from viz.scene import well_traces
+    cups = []
+    for f in FINGERS:
+        wf = ref.well_frame(q0, f)
+        cups.append(dict(pos=wf["pos"], axis=wf["axis"], floor=wf["floor"],
+                         lateral=wf["lateral"], half=wf["half"], radius=wf["radius"],
+                         finger=f, label=f"{f} well", dirs=dict(_ad(ref, q0, f))))
+    wt = []
+    for tr in well_traces(cups):
+        d = tr.to_plotly_json()
+        d.pop("uid", None)
+        wt.append({k: (v.tolist() if hasattr(v, "tolist") else v)
+                   for k, v in d.items() if v is not None})
+
     o, e_d, e_r, e_o = hand_axes(ref, q0)
     eye = 1.65 * e_o - 0.88 * e_d + 0.22 * e_r
     rest_b = bones(ref, q0)
@@ -235,6 +268,9 @@ def main():
         frames=frames,
         rest=[rest_b[0], rest_b[1], rest_b[2]],
         gauntlet=gauntlet,
+        bore=bore,
+        wells=wt,
+        wall_mm=wall * 1e3,
         pillars=[px, py, pz],
         n_pillars=n_pil,
         n_props=n_prop,
