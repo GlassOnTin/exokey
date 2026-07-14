@@ -876,11 +876,22 @@ def test_the_pruner_keeps_every_down_strut_the_domain_can_offer():
         pytest.skip("coarse pitch found no feasible structure; the domain guards above still ran")
     assert (r >= float(NOZZLE_R) - 1e-9).all(), "a strut in the ANSWER is thinner than the nozzle"
 
-    # THE CLAIM: every node still needing a pillar is one the DOMAIN itself could not support.
-    # If the pruner had thrown away a usable down-strut, this set would be strictly larger.
-    could = set(unsupported(nodes, bars, range(len(bars)), e_d))
-    got = set(unsupported(nodes, bars, live, e_d))
-    assert got <= could, f"the pruner deleted the last down-strut of {sorted(got - could)}"
+    # ⚠ AND THE ANSWER MUST BE ONE PIECE, WITH NO LOOSE ENDS.
+    #
+    # Neither a stray fragment nor a loose end costs anything STRUCTURALLY -- both carry zero load --
+    # which is precisely why every structural measure in this project was blind to them, and why it
+    # took a person LOOKING at the render to find 9 loose ends and a 13-node floating fragment. So
+    # they are ASSERTED, not merely measured.
+    from structure.lattice import cleanup
+    bearing = set(ak) | {int(v) for v in btn.values()}
+    assert sorted(cleanup(bars, live, bearing, btn.values())) == sorted(live), (
+        "the returned structure still contains debris or loose ends")
+
+    # (The pruner's own guard -- never CUT a node's last down-strut -- is unit-tested directly on the
+    #  cut rule, in test_the_cut_never_orphans_a_node_it_then_has_to_repair. What `cleanup` removes
+    #  afterwards is a DESIGN DECISION, not a leak: a support strut whose far end is loose holds a
+    #  node up for the printer AND is a spike on a device that goes on a hand. It is deleted and the
+    #  node pays a PILLAR instead. A pillar is snapped off and thrown away; a spike is worn.)
 
 
 def test_the_cut_never_orphans_a_node_it_then_has_to_repair():
@@ -1002,3 +1013,36 @@ def test_an_oriented_ellipse_is_4x_stiffer_than_a_circle_of_the_same_mass():
     # THE PRIZE: same mass, 2x stiffer than the circle -- and 4x better than getting it wrong way up
     assert circle / strong == pytest.approx(2.0, rel=1e-6)
     assert strong < circle < weak
+
+
+def test_the_answer_is_ONE_PIECE_with_no_loose_ends():
+    """THE USER, LOOKING AT THE RENDER: "There are still a few stray elements and sharp open ended
+    elements."  Both were real, and both were mine.
+
+      A STRAY COMPONENT -- 13 nodes floating completely free, touching no anchor and no button,
+      carrying nothing. `connected()` keeps everything reachable from ANY anchor, and an anchor is
+      merely a node that bears on the flesh, so a fragment hanging off one and connected to nothing
+      else passed the test. The rule has to be stricter: THE STRUCTURE IS THE PIECE THAT HOLDS THE
+      BUTTONS. Everything else is debris.
+
+      NINE LOOSE ENDS -- free-ended members that are neither a button nor an anchor. The dead-end
+      check ran BEFORE the support repair, and the repair ADDS STRUTS BACK: every one it puts back
+      can land a fresh free end that the check has already walked past.
+
+    Neither costs anything structurally -- a loose end carries no load and debris carries no load --
+    which is exactly why every structural measure in this project was blind to both, and why it took
+    a person LOOKING at it to find them.
+    """
+    from structure.lattice import cleanup
+
+    #  0--1--2   is the structure (2 is the button, 0 an anchor)
+    #  3--4      is DEBRIS (touches nothing)
+    #  1--5      is a LOOSE END (5 is neither button nor anchor)
+    bars = [(0, 1), (1, 2), (3, 4), (1, 5)]
+    live = cleanup(bars, [0, 1, 2, 3], keep={0}, buttons=[2])
+    assert 2 not in live, "the debris component must go"
+    assert 3 not in live, "the loose end must go"
+    assert sorted(live) == [0, 1], "and the structure that holds the button must stay"
+
+    # a chain of loose ends unravels completely: 0--1--2--3, only 0 is an anchor, 3 nothing
+    assert cleanup([(0, 1), (1, 2), (2, 3)], [0, 1, 2], keep={0}, buttons=[]) == []

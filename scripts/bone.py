@@ -65,6 +65,17 @@ def main():
     sb = [bars[e] for e in live]
     R = float(SKIN_R)
 
+    # ⚠ CLEAN IT FIRST. friendly.npz was written before `cleanup` existed, and the user found what
+    # it left behind: 9 loose ends and a 13-node fragment floating free of everything.
+    from structure.lattice import cleanup
+    bearing = set(ak) | {int(v) for v in btn.values()}
+    n_before = len(live)
+    live = cleanup(bars, live, bearing, btn.values())
+    if len(live) != n_before:
+        print(f"  ⚠ CLEANED: dropped {n_before - len(live)} members -- debris and loose ends "
+              f"({n_before} -> {len(live)})")
+    sb = [bars[e] for e in live]
+
     turns0 = kink(nodes, bars, live)
     print(f"THE FRIENDLY STRUCTURE: {len(sb)} members, {circ:.2f} g as SOLID ROUND rods, "
           f"every surface >= {R*1e3:.1f} mm, 0 spikes")

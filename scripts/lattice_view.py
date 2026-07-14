@@ -19,7 +19,7 @@ from structure.lattice import BAR_R, solve
 from viz.scene import skin_trace, strap_traces, well_traces
 
 
-def tubes(nodes, bars, live, se, r, n=7):
+def tubes(nodes, bars, live, se, r, n=7, caps=True):
     """Each surviving strut as a round tube, AT ITS OWN RADIUS, coloured by how hard it is working.
 
     ⚠ `r` MAY BE A SINGLE RADIUS OR ONE PER STRUT, AND THAT DISTINCTION IS THE WHOLE POINT.
@@ -66,11 +66,50 @@ def tubes(nodes, bars, live, se, r, n=7):
         for k in range(n):
             th = 2 * np.pi * k / n
             d = rr * (np.cos(th) * u + np.sin(th) * v)
-            V += [a + d, b + d]
+            V.extend([a + d, b + d])
         C += [rank_of[e]] * (2 * n)
         for k in range(n):
             p, qq = base + 2 * k, base + 2 * ((k + 1) % n)
             F += [(p, p + 1, qq + 1), (p, qq + 1, qq)]
+    # ⚠ CAP THE ENDS, OR EVERY STRUT LOOKS LIKE A SAWN-OFF PIPE.
+    #
+    # THE USER, LOOKING AT THE RENDER: "There are still a few... sharp open ended elements."
+    #
+    # Two of the three things they saw were real bugs in the STRUCTURE (a stray fragment and nine
+    # loose ends). This one was a lie in the PICTURE: the tube is drawn as a bare cylindrical wall
+    # with NO END CAPS, so wherever a strut does not happen to be buried inside another one, you see
+    # its open annular rim -- a hard, sharp edge that exists nowhere in the actual part. The part is
+    # a smooth-min SDF of CAPSULES: every end is a hemisphere and every junction is a fillet.
+    #
+    # So put a sphere at every node, at the fattest radius arriving there. That is what the smooth
+    # minimum does, and now the render says so.
+    if caps and len(live):
+        at: dict = {}
+        for kk, e in enumerate(live):
+            rr = float(radii[kk]) if per_strut else float(radii)
+            for i in bars[e]:
+                at[int(i)] = max(at.get(int(i), 0.0), rr)
+        rank_at: dict = {}
+        for kk, e in enumerate(live):
+            for i in bars[e]:
+                rank_at[int(i)] = max(rank_at.get(int(i), 0.0), rank_of[e])
+        m = max(n // 2, 3)
+        th = np.linspace(0, np.pi, m)
+        ph = np.linspace(0, 2 * np.pi, n, endpoint=False)
+        for i, rr in at.items():
+            base = len(V)
+            c = nodes[i]
+            for a in th:
+                for b in ph:
+                    V.append(c + rr * np.array([np.sin(a) * np.cos(b),
+                                                np.sin(a) * np.sin(b), np.cos(a)]))
+            C += [rank_at[i]] * (m * n)
+            for a in range(m - 1):
+                for b in range(n):
+                    p = base + a * n + b
+                    q = base + a * n + (b + 1) % n
+                    F += [(p, q, p + n), (q, q + n, p + n)]
+
     V = np.array(V)
     F = np.array(F)
     return go.Mesh3d(x=V[:, 0], y=V[:, 1], z=V[:, 2],

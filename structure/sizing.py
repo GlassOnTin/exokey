@@ -383,7 +383,7 @@ def size_and_prune(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, str
     and stop when deletion can no longer be paid for. Every intermediate design meets the gate by
     construction, so there is never a moment where the answer depends on something unbuildable.
     """
-    from structure.lattice import connected, prune_dead_ends, repair_support
+    from structure.lattice import cleanup, connected, prune_dead_ends, repair_support
 
     # ⚠ PRUNE THE DOMAIN TO THE ANCHORED COMPONENT *BEFORE* THE FIRST SOLVE, NOT AFTER IT.
     # `connected` only ran inside the prune loop, so the very first size() saw whatever ground()
@@ -524,13 +524,17 @@ def size_and_prune(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, str
             if node is not None:
                 n_down[node] -= 1
         trial = [e for e in live if e not in drop]
-        trial = prune_dead_ends(bars, trial, bearing)      # a cut can CREATE a new free end
         trial, ok = connected(bars, trial, anchor_k, buttons, len(nodes))
         if build_dir is not None and ok:
             # `connected` can still strand a node, so the repair remains -- but it now has almost
             # nothing to do, because the cut above never orphaned anything.
             trial = repair_support(nodes, bars, trial, build_dir, pool=live)
             trial, ok = connected(bars, trial, anchor_k, buttons, len(nodes))
+        # ⚠ AND THE CLEANUP MUST COME *AFTER* THE REPAIR, NOT BEFORE IT. The repair ADDS STRUTS BACK
+        # to hold up orphaned nodes, and every strut it puts back can land a new free end -- which a
+        # check that already ran walks straight past. That is how 9 loose ends and a 13-node stray
+        # fragment survived every prune and ended up in the render, where the user found them.
+        trial = cleanup(bars, trial, bearing, buttons.values())
         # ⚠ AND *THIS* IS THE SAME BUG ONE MORE TIME. A cut that severs a button from the anchors is
         # not a stopping condition either -- it is, again, a cut that was TOO BIG. Halve it and try
         # again. Only when even a 2% cut cannot be made is the pruner actually finished.
@@ -566,6 +570,14 @@ def size_and_prune(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, str
     # is STRUCTURE and not scaffolding: it is in the FEM, it carries load, and its mass is counted.
     # What is left over is what genuinely has to be propped off the bed and snapped away, and the
     # caller counts it with `unsupported(nodes, bars, live, build_dir)`.
+
+    # AND CLEAN THE ANSWER, not just the intermediates: the final re-size does not prune, so the
+    # design that is actually RETURNED has to be swept once more.
+    if best is not None:
+        lv = cleanup(bars, best[0], bearing, buttons.values())
+        if len(lv) != len(best[0]):
+            pos = {e: k for k, e in enumerate(best[0])}
+            best = (lv, best[1][[pos[e] for e in lv]], best[2], best[3])
 
     # ⚠ SAY WHY YOU STOPPED. A pruner that halts silently after four steps and reports a number is
     # indistinguishable from one that converged, and that is exactly how 20.28 g got quoted as an

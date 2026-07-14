@@ -222,6 +222,58 @@ def prune_dead_ends(bars, live, keep):
     return live
 
 
+def cleanup(bars, live, keep, buttons):
+    """ONE PIECE, AND NO LOOSE ENDS. Run to a fixed point, because each fix can cause the other.
+
+    ⚠ THE USER, LOOKING AT THE RENDER: "There are still a few stray elements and sharp open ended
+    elements." Both were real, and both were mine:
+
+      A STRAY COMPONENT -- 13 nodes floating completely free, touching no anchor and no button,
+      carrying nothing. `connected()` keeps everything reachable from ANY anchor, and an anchor is
+      just a node that bears on the flesh -- so a fragment hanging off one, connected to nothing
+      else, passed the test. The right rule is stricter: THE STRUCTURE IS THE PIECE THAT HOLDS THE
+      BUTTONS. Anything else is debris.
+
+      NINE LOOSE ENDS -- free-ended members that are neither a button nor an anchor. `prune_dead_ends`
+      ran BEFORE `repair_support`, and the repair ADDS STRUTS BACK to hold up orphaned nodes. Every
+      strut it puts back can land a new free end that the check has already walked past.
+
+    So: delete the debris, delete the dead ends, and repeat until neither changes.
+    """
+    live = list(live)
+    btn = {int(b) for b in buttons}
+    # ⚠ A BUTTON IS *ALWAYS* KEPT, whatever the caller said. A well legitimately ends at the
+    # fingertip with degree one -- that is what a well IS -- so a `keep` set that forgot to mention
+    # the buttons would have the dead-end sweep delete the very thing the structure exists to hold.
+    keep = set(int(i) for i in keep) | btn
+    for _ in range(40):
+        n0 = len(live)
+
+        # (1) keep only the component that holds the BUTTONS -- everything else is debris
+        adj: dict = {}
+        for e in live:
+            a, b = int(bars[e][0]), int(bars[e][1])
+            adj.setdefault(a, set()).add(b)
+            adj.setdefault(b, set()).add(a)
+        if btn & set(adj):
+            stack = [next(iter(btn & set(adj)))]
+            comp: set = set()
+            while stack:
+                n = stack.pop()
+                if n in comp:
+                    continue
+                comp.add(n)
+                stack += [m for m in adj[n] if m not in comp]
+            live = [e for e in live
+                    if int(bars[e][0]) in comp and int(bars[e][1]) in comp]
+
+        # (2) and no member may end in nothing
+        live = prune_dead_ends(bars, live, keep)
+        if len(live) == n0:
+            break
+    return live
+
+
 def protect_support(nodes, bars, live, build_dir):
     """The struts that are the ONLY thing holding some node up. Deleting one costs a pillar.
 
