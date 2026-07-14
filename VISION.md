@@ -931,6 +931,16 @@ printed part** — from the geometry, not from a liner.
 
 These bound every conclusion above.
 
+- ⚠ **`SKIN_R` = 1.5 mm is a GUESS, and it now sets 95% of the device's mass.** It is the smallest
+  convex radius any surface a hand can touch is allowed to have — the number that separates a
+  wearable from a knuckle-duster. Consumer-product edge rules put accessible edges in the region of
+  0.5 mm and edges that bear *pressure* rather higher, but **nothing here has been checked against a
+  standard, and nothing has been checked against a hand.** It is the single most load-bearing guess
+  in the project: 146 of the 153 members sit on it.
+- ⚠ **`ASPECT_MAX` = 3:1 is a GUESS** — the flattest a member may get. Unbounded, the optimiser would
+  drive a purely-bent member to a ribbon, which buckles laterally and prints badly on edge. It is
+  currently **inert** (the accepted section is a round tube, so nothing flattens), but it would bind
+  on a load-limited structure.
 - ⚠ **The load paths are CURVED by a guess, not by an optimiser.** `SPLINE_TENSION` (how hard a load
   path bows away from its own chord) and `MAX_TURN` (75° — beyond which two members at a node are a
   *branch*, not a continuing path, and are left as a corner) are both **GUESSES**. The tension is
@@ -938,12 +948,30 @@ These bound every conclusion above.
   curvature itself is **fitted, not optimised**: nothing moves the control points to minimise
   anything. A true spline-shape optimisation (form-finding on the interior points) has **not** been
   done.
+- ⚠ **THE MATERIALS ARE CHOSEN ON DATASHEET NUMBERS, AND IT IS THE *IN-SERVICE* BEHAVIOUR THAT
+  DECIDES.** Twice now the disqualifying property has not been stiffness or strength:
+  - **PLA creeps.** A long bridging span (which buys away the support props) is only reliable in PLA,
+    and PLA creeps under **sustained** load at Tg ≈ 60 °C. The strap holds this device in *permanent
+    tension* against a warm hand — which is exactly a sustained load. **A worn device that relaxes
+    its own preload stops registering keypresses.**
+  - **⚠ NYLON IS HYGROSCOPIC, and this thing lives against a sweaty hand all day.** Glass- or
+    carbon-filled nylon is the intended material (E ≈ 5–7 GPa, close to the 6.0 GPa modelled; glass
+    is **~15–25% denser** than carbon, so ~11 g → ~13 g). But saturated nylon's modulus drops
+    substantially, and **the entire design is stiffness-limited** — the 500 µm displacement gate is
+    the only active structural constraint. **NOT MEASURED. Measure the wet modulus before trusting
+    the gate in service.**
 - ⚠ **The printability model is a GEOMETRIC one, and nothing has been printed.** The
   self-support rule (45°), the bridging span (`BRIDGE_MAX`, 10 mm) and the bed-contact depth
   (**`BASE_T`, 3 mm — a GUESS**: how close to the lowest point a node must be to count as
   sitting on the bed, given a brim) are handbook/practice numbers, not measurements from *this*
   printer with *this* filament. The pillar counts in §8.15 move with all three. **Print it and
   count the supports** before any of those numbers is quoted as a result.
+- ⚠ **NOTHING ENFORCES A BEARING *AREA*.** The wells got a CRADLE — contact distributed along the
+  phalanx, centre of pressure free (§8.13). **The ANCHOR FEET did not.** A member standing on the
+  hand and ending in a 1.5 mm hemisphere, pressed into the flesh by the strap, is not a spike — but
+  it *is* a **pressure point**, and it is where the device's whole reaction load lands. The feet
+  need **pads**. This is the same omission as every other one in this project: a human-factors
+  requirement with no constraint behind it.
 - ⚠ **The minimum-pillar build direction leaves the part 185 mm tall on a 9-node,
   16 × 28 mm bed footprint.** The direction was optimised for support count ALONE. A real print
   also wants a low part on a broad base, and that trade has not been made.
@@ -1592,6 +1620,88 @@ A tube of outer radius `b` and wall `w`:
 
 retaining **94%** of the bending stiffness. **A long bone is a tube with a marrow cavity. That is not
 an analogy — it is the same optimisation under the same constraint.**
+
+### 8.15e The SPIKE, the DEBRIS, and the BEARING AREA — defects that are structurally invisible
+
+Disclosed as a class, because it is the one that has caught this project out most often:
+
+> **A feature that carries no load is invisible to every structural measure — and may be the first
+> thing a hand finds.**
+
+**(w) A MEMBER WITH A FREE END CARRIES ZERO LOAD, SO IT COSTS NOTHING AND NOTHING DELETES IT — AND
+IT IS A SPIKE.** Nothing is attached to a loose end, so there is nothing to react: the member is pure
+dead weight, the sizer drives it to the minimum feature, and every stress, mass and stiffness measure
+in the optimiser is perfectly happy. Measured on the shipped structure: **56 members ending in free
+0.4 mm POINTS**, on a device that goes on a hand.
+- ⚠ **AND THE SUPPORT REPAIR *PROTECTS* THEM, for a reason that is absurd once seen:** a rule of the
+  form *"never delete the last member holding a node up"* will refuse to delete a loose end, **because
+  it is the last thing holding up its own tip** — a node that only exists because the member exists,
+  and which would vanish with it.
+- Disclosed fix: delete every member with a free end, iterating (deleting one creates the next), with
+  the **load points exempt** — a well legitimately ends at the fingertip, and a bearing foot
+  legitimately stands on the flesh.
+
+**(x) THE STRUCTURE IS THE PIECE THAT HOLDS THE LOAD POINTS. EVERYTHING ELSE IS DEBRIS.** A
+connectivity rule of the form *"keep everything reachable from any support"* is **too weak**: a
+support is merely a node that bears on the body, so a fragment hanging off one and connected to
+nothing else **passes**. Measured: a **13-node component floating free**, touching no anchor and no
+well, carrying nothing — 1 g of dead weight that survived every prune.
+- Disclosed fix: keep only the component containing the **load points** (the wells), and run it to a
+  fixed point against the free-end sweep, **because each fix causes the other**.
+- ⚠ **And the order matters:** the free-end sweep must run **AFTER** the support repair, never before.
+  The repair *adds members back* to hold up orphaned nodes, and every member it puts back can land a
+  fresh free end that a check which has already run walks straight past.
+
+**(y) A SPIKE IS WORSE THAN A SACRIFICIAL PILLAR, and the trade is explicit.** A support member whose
+far end is loose holds a node up **for the printer** *and* is a rod ending in a point **on a device
+that is worn**. Delete it, and the node it was holding pays a **pillar** instead. **A pillar is
+snapped off and thrown away. A spike is worn.**
+
+**(z) BEARING AREA IS A CONSTRAINT, AND IT IS MISSING.** The wells are constructed as a **CRADLE** —
+contact distributed along the phalanx, centre of pressure free (§8.13). The **anchor feet**, where
+the device's entire reaction load is delivered into the hand, are **not**: a member standing on the
+flesh and ending in a `SKIN_R` hemisphere, pressed in by the strap, is a **pressure point**.
+Disclosed: **any surface through which a wearable delivers a sustained reaction into the body must be
+constrained on its bearing AREA, not merely on its surface radius.** *Not yet implemented.*
+
+### 8.15f The STRAP as a TENSIONED GEODESIC, and its printable form
+
+**(aa) A STRAP IN TENSION TRACES THE CONVEX HULL OF THE CROSS-SECTION IT WRAPS.** Disclosed, with the
+reason: a tensioned band takes the **shortest closed path** around the limb, and the shortest loop
+around a cross-section **is its convex hull**. It cannot enter a concavity; it **bridges** it. So the
+band's centreline is not a circle, not an offset of the skin, and not a fitted curve — it is a hull,
+and it is *derived*, not drawn.
+
+**(bb) ⚠ AND IT IS THE HULL OF (LIMB ∪ DEVICE), NOT OF THE LIMB.** The strap passes **over** the
+structure in order to pull it **down** onto the body. Hull the limb alone — as this project's own
+`strap_loop()` does — and the strap passes **straight through the device**. That is adequate for
+deciding *which nodes the strap pulls on* (which is all the FEM needs) and **wrong as a printable
+shape**. The gauntlet stands up to **~7 mm proud** of the skin.
+
+**(cc) COROLLARY — A HULLED STRAP PRESSES ONLY ON THE CONVEX HIGH POINTS.** Where the hull bridges a
+concavity the strap **does not touch**, so it delivers no pressure there; the load concentrates on
+the extremes of the hull, which on a hand are the **bony prominences** (2nd and 5th metacarpal heads,
+ulnar styloid) — exactly the places that hurt. Disclosed: the same **bearing-area** constraint of (z)
+applies to the strap, and a hulled band **must be padded or broadened where it crowns a prominence.**
+
+**(dd) MEASURED — AN ELASTOMERIC (TPU) STRAP, PRINTED RATHER THAN SOURCED.** The strap is the
+**compliant element of the whole anchor**: flesh can only *push*, so the strap supplies the entire
+*pull*, and without it this structure deflects **9178 µm** instead of 495. TPU is **~100× softer**
+than the nylon webbing assumed (E ≈ 12–30 MPa against 2.0 GPa). Same structure, same gate:
+
+| strap | E | worst well displacement |
+|---|---|---|
+| nylon webbing (assumed) | 2.0 GPa | **498 µm** ✓ |
+| **TPU 95A** | 30 MPa | **567 µm** (misses a 500 µm gate by 13%) |
+| TPU 85A | 12 MPa | 578 µm |
+
+- **A 100× softer strap costs only 13% of the gate — and THAT is the disclosed finding.** The
+  friendly, floor-bound structure (§8.15d) is **chunky, and therefore far less strap-dependent** than
+  the wire-thin one it replaced. **The ergonomic floor bought structural robustness it was never
+  asked for**, and it is what makes a printed elastomeric strap viable at all.
+- Disclosed: a **single-material-printable** wearable (rigid skeleton + printed elastomeric band)
+  needs **no webbing, no buckle, and no supplier** — which is the reproducibility constraint of
+  §5g.1 satisfied, not merely acknowledged.
 
 ### 8.16 Provenance
 

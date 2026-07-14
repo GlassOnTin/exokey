@@ -1,4 +1,5 @@
-<meta charset="utf-8"><title>ExoKey — what is being served</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>ExoKey — what is being served</title>
 <style>
  body{font:15px/1.7 -apple-system,Segoe UI,Roboto,sans-serif;max-width:44rem;margin:3rem auto;
       padding:0 1.5rem;color:#1a1a1a}
@@ -6,27 +7,32 @@
  .k{color:#666;font-size:.9em}
 </style>
 <h1>ExoKey</h1>
+<p class="k"><b>The bone.</b> 138 members → 552 curved sub-beams · <b>11.04 g</b> · hollow tubes
+   (0.8 mm wall) · every surface ≥ 1.5 mm · no spikes, no loose ends, one piece · 498 µm at the
+   wells against a 500 µm gate · 254 pillars, 0 props.</p>
 <ul>
-  <li><a href="typing.html">typing.html</a> — <b>watch it type</b>. The hand posed into every
-      wired press: the character, the direction, the muscle effort, and whether the digit can
-      actually balance the key (residual). Every pose derived from the pad Jacobian. The gauntlet
-      is the <b>FDM-printable</b> one, drawn at the radius the physics chose for each strut, with
-      the sacrificial support pillars marked in red.</li>
+  <li><a href="typing.html">typing.html</a> — <b>watch it type</b>. The hand posed into every wired
+      press: the character, the direction, the muscle effort, and whether the digit can actually
+      balance the key. Every pose derived from the pad <b>Jacobian</b>, not drawn. The gauntlet is
+      the real one, at the radius the physics chose for each member, with the wall <b>translucent so
+      you can see the marrow cavity</b> — and the sacrificial supports on a toggle.</li>
   <li><a href="sized.html">sized.html</a> — the gradient-sized structure, still: bone, skin, wells,
       straps, and the nodes the strap actually pulls on.</li>
   <li><a href="anim.html">anim.html</a> — <b>the whole optimisation, replayed</b>. Scrub or play
       through every generation: the front forming, and the knee design's structure growing with it.</li>
-  <li><a href="progress.html">progress.html</a> — <b>the optimiser, live</b>. Pareto front + the
-      knee design's grown gauntlet, streaming off the cloud box.</li>
-  <li><a href="final.html">final.html</a> — the ESO structure (superseded by the sized one, kept
-      for comparison: binary keep/delete, so every strut is forced to the same thickness).</li>
+  <li><a href="progress.html">progress.html</a> — <b>the optimiser, live</b>.</li>
+  <li><a href="final.html">final.html</a> — the ESO structure (superseded: it is binary keep/delete,
+      so every member is forced to the same thickness. Kept for comparison).</li>
   <li><a href="pareto.html">pareto.html</a> — the co-optimised front, as landed.</li>
 </ul>
-<p class="k">Artefacts: <code>gauntlet.stl</code> (the printable solid — 20.3 g, watertight,
-   clears the skin by 3.09 mm), <code>printable.npz</code> (921 struts, 6.93 g in the beam model,
-   every strut ≥ the 0.4 mm nozzle, 499 µm at the wells against a 500 µm gate),
+<p class="k">Artefacts, newest first:
+   <code>bone.npz</code> (the answer — friendly, curved, hollow),
+   <code>gauntlet.stl</code> (the printable solid; <b>slice it with 2 perimeters and 0% infill</b> —
+   that is what makes the members hollow, and the printer was going to do it anyway),
+   <code>friendly.npz</code> (the ergonomic floor, solid rods),
+   <code>smooth.npz</code> (the spline study),
+   <code>printable.npz</code> (the nozzle floor — the thin one nobody could bear to wear),
    <code>wire.npz</code> (the welded-wire build), <code>sized.npz</code>, <code>final.npz</code>,
-   <code>pareto.pkl</code>, <code>surrogate.npz</code> / <code>tier2.pkl</code> (the evidence the
-   coarse growth ranks the real one).</p>
+   <code>pareto.pkl</code>.</p>
 <p class="k">Superseded renders were deleted (all regenerable from <code>scripts/</code>).
    Invalidated <em>results</em> were archived, not deleted — see <code>out_archive/</code>.</p>

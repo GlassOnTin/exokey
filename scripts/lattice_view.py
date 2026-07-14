@@ -131,6 +131,22 @@ def tubes(nodes, bars, live, se, r, n=7, caps=True):
                      name="bone", hoverinfo="skip")
 
 
+def _mobile(path):
+    """A viewport tag and a full-height plot. Without the first, a phone renders the page at 980 px
+    and pinch-zoom maps onto the wrong coordinates; without the second, the plot gets 450 px of a
+    390 px screen."""
+    h = open(path).read()
+    if "name=\"viewport\"" not in h:
+        h = h.replace("<head>",
+                      '<head><meta name="viewport" '
+                      'content="width=device-width,initial-scale=1,viewport-fit=cover">', 1)
+    h = h.replace("</head>",
+                  "<style>html,body{margin:0;height:100%}"
+                  ".plotly-graph-div{width:100%!important;height:100vh!important;"
+                  "touch-action:none}</style></head>", 1)
+    open(path, "w").write(h)
+
+
 def main():
     d = pickle.load(open("out/pareto.pkl", "rb"))
     X, Fp = d["X"], np.atleast_2d(d["F"])
@@ -246,7 +262,12 @@ def main():
     # hand) is the thing that makes the device legible, and a full orbit throws it away. Dragging
     # still works and pauses it.
     orbit = open("scripts/_orbit.js").read()
-    fig.write_html("out/final.html", include_plotlyjs="cdn", post_script=orbit)
+    # ⚠ `responsive` IS OFF BY DEFAULT, AND THAT IS WHAT MAKES THESE PAGES UNUSABLE ON A PHONE: the
+    # WebGL canvas keeps the pixel size it was first created at, and a smaller screen CLIPS it. It
+    # looks like the view is "too zoomed in"; it is simply cropped.
+    fig.write_html("out/final.html", include_plotlyjs="cdn", post_script=orbit,
+                   config={"responsive": True, "displayModeBar": False})
+    _mobile("out/final.html")
     print(f"  {len(live)} struts, {mass*1000:.1f} g, buttons {w*1e6:.0f} um, "
           f"strap {tension:.2f} N")
     print("\nbrowser view: out/final.html")

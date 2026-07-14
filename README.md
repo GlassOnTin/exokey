@@ -1,10 +1,18 @@
 # ExoKey
 
 **A wearable Svalboard.** One adjustable finger well per digit, each a 5-direction joystick,
-on a body strapped into the palm. Types QWERTY. Designed by optimising the device and the
-hand *together* against a musculoskeletal model.
+carried on a **topology-optimised gauntlet over the back of the hand** and held down by a strap.
+Types QWERTY. Designed by optimising the device and the hand *together* against a musculoskeletal
+model.
 
 DataHand / Svalboard geometry, made wearable — you can stand up and walk away with it on.
+
+**The whole exercise is a human-factors design, and that is the point.** Nearly every constraint
+here is a fact about *people* — a key that moves feels mushy (500 µm), what a finger can press
+(0.30 N), what a hand can sustain (Σaᵢ³), what a palm can bear (1.5 mm), what fits the 5th–95th
+percentile, what you are willing to carry all day. Only three are facts about a *machine*: the
+nozzle, the overhang, the bridging span. **Every large error in this project has been the model
+failing to represent the human, wearing a technical costume.**
 
 > **Status: research. Nothing has been built.** Everything here is simulation.
 >
@@ -51,7 +59,28 @@ co-designs a wearable keyboard by multi-objective optimisation:
 | A pointer can only go on the **thumb or index** (only they manage 4 tilts) | and it belongs on the **index**: 1.9× vs the thumb's **6.1×** |
 | A well is a **cup**, not a cap: the fingertip *bone* slides in along its own axis | so the wells need a **spread, open** hand — gripping converges the fingertips |
 | QWERTY's *top* row is the most-used, not "home" | 30.2% vs 23.0% |
-| A palm-strapped body vs an articulated exoskeleton | **3× stiffer, 35% lighter** |
+| A palm-strapped body vs an articulated exoskeleton | **3× stiffer, 35% lighter** — *and then the palmar body was abandoned too: an open frame cannot reach into the palm without crossing the hand. The load path wants to go over the **back** of the hand.* |
+| The structure is **grown, not drawn** — Wolff's law on a free-form lattice, 17 wired load cases, each digit-direction pressed alone | 2184 candidates → **138 members** |
+| **The device is TOUCH-limited, not load-limited** | **95%** of its members are as thick as they are because a *hand* must bear them, not because a force demands it |
+| So the bone is **hollow**, exactly as a real one is | −19% mass, **identical to the touch** |
+| An **ergonomic** minimum feature (1.5 mm), not the nozzle's (0.4 mm), is what makes a structure **trabecular** | 867 members → **153**, and 56 spikes → **0** |
+
+### Where it is now
+
+The gauntlet, optimised under every constraint at once — **friendly, curved, hollow, printable**:
+
+| | |
+|---|---|
+| members | **138** (→ 552 curved sub-beams) |
+| mass | **11.04 g** (beam model) |
+| section | **hollow tubes**, 0.8 mm wall = *two perimeters of a 0.4 mm nozzle* |
+| worst well displacement | **498 µm** against a 500 µm gate |
+| sharpest surface anywhere | **1.50 mm** — no spikes, no loose ends, one piece |
+| support to print it | 254 pillars, **0 props** |
+
+Watch it type: [`out/typing.html`](out/typing.html) — the hand posed into every wired press from
+the pad Jacobian, the gauntlet drawn at the radius the physics chose for each member, the wall
+translucent so you can see the marrow cavity, and the sacrificial supports on a toggle.
 
 ### And some things it got wrong, and had to retract
 
@@ -72,7 +101,21 @@ That is [v1's disease](#a-note-on-how-this-was-built) one level deeper: v1 let t
 Equilibrium is now a hard constraint, and an unperformable action is **unavailable**, not
 expensive.
 
-Full numbers, gates and caveats: **[VISION.md](VISION.md)**.
+**And two justifications that failed their own measurement** — recorded because a reason that does
+not survive its own test is not a reason:
+
+> ~~Curve the load paths because a straight chord dips toward the flesh~~ — it does, but it **does
+> not bind** (0 of 669 members sit at the clearance floor).
+>
+> ~~Curve them because a kink is a stress riser and this thing takes millions of keystrokes~~ —
+> peak stress is **10% of yield**. The structure is stiffness-limited. The kinks were never going
+> to crack it.
+
+The actual reason was the user's, and it was sufficient: **bones have no sharp edges.** It costs
+nothing, so there is nothing to trade it against.
+
+Full numbers, gates and caveats: **[VISION.md](VISION.md)**. The disclosure is Bitcoin-anchored —
+see [TIMESTAMP.md](TIMESTAMP.md).
 
 ---
 
@@ -84,18 +127,24 @@ cd exokey
 python3 -m venv .venv
 .venv/bin/pip install mujoco numpy scipy pymoo PyNiteFEA plotly pytest
 
-# the gates. 64 of them. each one caught a real bug.
+# the gates. 91 of them. each one caught a real bug.
 PYTHONPATH=. OMP_NUM_THREADS=1 .venv/bin/python -m pytest tests/ -q
 
-# the effort landscape over a finger's reachable workspace -> out/stage2_field.html
-PYTHONPATH=. .venv/bin/python scripts/stage2_field.py
+# --- the structure, in the order it is built -------------------------------------------------
+# grow the printable gauntlet: nozzle floor, self-support, sacrificial supports counted
+PYTHONPATH=. OMP_NUM_THREADS=1 .venv/bin/python scripts/printable.py     # -> out/printable.npz
 
-# the device on the hand, loaded, members coloured by stress -> out/stage3.html
-PYTHONPATH=. .venv/bin/python scripts/stage3_view.py
+# the price of not being a knuckle-duster: sweep the ERGONOMIC minimum feature
+PYTHONPATH=. OMP_NUM_THREADS=1 .venv/bin/python scripts/ergonomic.py     # -> out/friendly.npz
 
-# the optimiser (this is the slow one)
-PYTHONPATH=. OMP_NUM_THREADS=1 .venv/bin/python -m opt.run --pop 200 --gen 150
-PYTHONPATH=. .venv/bin/python scripts/stage4_view.py --pick knee   # -> out/stage4.html
+# the bone: friendly + curved load paths + hollow tubes, all at once
+PYTHONPATH=. OMP_NUM_THREADS=1 .venv/bin/python scripts/bone.py          # -> out/bone.npz
+
+# watch it type  ->  out/typing.html
+PYTHONPATH=. .venv/bin/python scripts/typing_view.py
+
+# and the printable solid: SDF smooth-min -> marching cubes -> STL. No booleans.
+PYTHONPATH=. .venv/bin/python scripts/export_stl.py                      # -> out/gauntlet.stl
 ```
 
 `OMP_NUM_THREADS=1` is **not optional** for the optimiser: N worker processes × N BLAS

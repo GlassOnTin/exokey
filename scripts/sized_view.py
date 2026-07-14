@@ -26,6 +26,22 @@ from viz.scene import skin_trace, strap_traces, well_traces
 from scripts.lattice_view import tubes
 
 
+def _mobile(path):
+    """A viewport tag and a full-height plot. Without the first, a phone renders the page at 980 px
+    and pinch-zoom maps onto the wrong coordinates; without the second, the plot gets 450 px of a
+    390 px screen."""
+    h = open(path).read()
+    if "name=\"viewport\"" not in h:
+        h = h.replace("<head>",
+                      '<head><meta name="viewport" '
+                      'content="width=device-width,initial-scale=1,viewport-fit=cover">', 1)
+    h = h.replace("</head>",
+                  "<style>html,body{margin:0;height:100%}"
+                  ".plotly-graph-div{width:100%!important;height:100vh!important;"
+                  "touch-action:none}</style></head>", 1)
+    open(path, "w").write(h)
+
+
 def main():
     H = hands()
     h = H[50]
@@ -121,7 +137,9 @@ def main():
         margin=dict(l=0, r=0, t=70, b=0), template="plotly_white", showlegend=False)
 
     orbit = open("scripts/_orbit.js").read()
-    fig.write_html("out/sized.html", include_plotlyjs="cdn", post_script=orbit)
+    fig.write_html("out/sized.html", include_plotlyjs="cdn", post_script=orbit,
+                   config={"responsive": True, "displayModeBar": False})
+    _mobile("out/sized.html")
     print(f"  {len(live)} struts, {mass*1000:.1f} g, buttons {w*1e6:.0f} um")
     print(f"  radii {radii.min()*1e3:.2f}-{radii.max()*1e3:.2f} mm  "
           f"(p10 {np.percentile(radii,10)*1e3:.2f}, p90 {np.percentile(radii,90)*1e3:.2f})")

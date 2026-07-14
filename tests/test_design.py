@@ -251,6 +251,30 @@ def test_every_constant_declares_where_it_came_from():
     """
     from design.params import REGISTRY, Source, guesses
 
+    # ⚠ AND THE GUARD ITSELF HAD A HOLE, WHICH IS THE WORST PLACE TO HAVE ONE.
+    #
+    # `REGISTRY` only contains the parameters of modules that happen to have been IMPORTED. This
+    # test imported `design.params` and whatever the test file dragged in -- so a parameter declared
+    # in a module nobody had touched was simply not in the registry, and the tripwire walked straight
+    # past it. Measured: ASPECT_MAX, a GUESS in `structure.section`, was undisclosed and this test
+    # passed anyway.
+    #
+    # A guard that only guards the code you remembered to import is not a guard. So: WALK THE WHOLE
+    # PACKAGE. If a module registers a parameter, it gets checked, whether anyone imported it or not.
+    import importlib
+    import pkgutil
+
+    for pkg in ("design", "hand", "structure", "manufacture", "opt", "effort", "viz", "chords"):
+        try:
+            m = importlib.import_module(pkg)
+        except Exception:
+            continue
+        for _f, name, _p in pkgutil.iter_modules(m.__path__, pkg + "."):
+            try:
+                importlib.import_module(name)
+            except Exception:
+                pass          # a module that will not import is another test's problem, not this one
+
     assert REGISTRY, "no parameters registered"
     for p in REGISTRY:
         assert p.why, f"{p.name} has no stated provenance"

@@ -1,9 +1,15 @@
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>ExoKey — watch it type</title>
 <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
 <style>
+  /* ⚠ NO MAGIC PIXEL OFFSETS. The header WRAPS on a narrow screen -- measured, 52 -> 85 px the
+     moment the buttons fall to a second line -- so any calc(100vh - <constant>) pushes the render
+     below the fold. A flex column derives the remaining height, whatever the header does. */
+  html, body { height:100%; }
   body { margin:0; font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif; color:#1a1a1a;
-         background:#fff; }
+         background:#fff; display:flex; flex-direction:column; overflow:hidden; }
+  header, .note { flex:0 0 auto; }
   header { padding:10px 18px; border-bottom:1px solid #e5e5e5; display:flex; gap:16px;
            align-items:center; flex-wrap:wrap; }
   h1 { font-size:15px; margin:0 10px 0 0; font-weight:600; }
@@ -14,8 +20,12 @@
   #keycap { font:700 40px/1 ui-monospace,Menlo,monospace; width:64px; height:64px;
             display:flex; align-items:center; justify-content:center; border-radius:10px;
             border:2px solid #ddd; background:#fafafa; color:#111; text-transform:uppercase; }
-  #wrap { display:grid; grid-template-columns: 300px 1fr; height:calc(100vh - 108px); }
-  @media (max-width:820px){ #wrap { grid-template-columns:1fr; } }
+  #wrap { display:grid; grid-template-columns: 300px 1fr; flex:1 1 auto; min-height:0;
+          position:relative; }   /* the mobile drawer positions against THIS, not the page */
+
+  #keys { display:none; }
+  /* the render must own its touches: pinch and drag belong to the 3-D scene, not to the page */
+  #dev { touch-action:none; }
   #side { padding:16px 18px; border-right:1px solid #eee; overflow:auto; }
   table { border-collapse:collapse; width:100%; font-size:13px; }
   td { padding:3px 6px; border-bottom:1px solid #f2f2f2; }
@@ -24,6 +34,23 @@
   tr.on { background:#fff4e6; }
   .note { padding:6px 18px; color:#666; font-size:12px; border-bottom:1px solid #f0f0f0; }
   .bar { height:5px; background:#e8590c; border-radius:3px; }
+  /* ⚠ A LANDSCAPE PHONE HAS ~250 px OF HEIGHT ONCE THE CHROME IS OFF, AND THE HAND IS TALL.
+     So on a small screen: drop the key table out of the flow entirely (it becomes a drawer),
+     shrink the header, hide the prose, and give the whole viewport to the render. The camera
+     and Plotly's own `responsive` config resizes the canvas to whatever area is left. */
+  @media (max-width:900px), (max-height:560px) {
+    header { padding:5px 10px; gap:8px; font-size:12px; }
+    h1 { font-size:12px; margin:0 4px 0 0; }
+    #keycap { width:36px; height:36px; font-size:22px; border-radius:7px; }
+    button { padding:3px 8px; font-size:11px; }
+    .note { display:none; }
+    #wrap { grid-template-columns:1fr; }
+    #side { position:absolute; top:0; left:0; bottom:0; width:min(260px, 78vw); z-index:5;
+            background:#fff; border-right:1px solid #ddd; box-shadow:2px 0 12px #0002;
+            transform:translateX(-102%); transition:transform .18s ease; }
+    #side.open { transform:none; }
+    #keys { display:inline-block; }
+  }
 </style>
 <header>
   <h1>ExoKey — watch it type</h1>
@@ -35,7 +62,8 @@
   <span class="k" id="dev-info" style="margin-left:auto"></span>
   <button id="play">⏸ pause</button>
   <button id="rock">⏸ rotation</button>
-  <button id="sup">show supports</button>
+  <button id="sup">supports</button>
+  <button id="keys">☰ keys</button>
 </header>
 <div class="note">
   Each pose is <b>derived</b>, not drawn: the fingertip is pushed one switch-travel along that
@@ -55,6 +83,20 @@
 <script>
 let D = null, i = 0, playing = true, timer = null;
 let rocking = true, rockT = 0, dragged = 0, cam0 = null;
+
+// ⚠ "TOO ZOOMED IN TO FIT THE HAND ON A LANDSCAPE MOBILE SCREEN" WAS *NOT* A CAMERA PROBLEM,
+// AND MY FIRST FIX -- PULLING THE EYE BACK ON SMALL SCREENS -- WAS WRONG.
+//
+// MEASURED: at the SAME eye distance, in an 844 x 338 plot, the hand fits with room to spare.
+// Plotly's 3-D scene already scales to its container. Pulling the camera back only made it tiny.
+//
+// The actual bug was `responsive: false`, which is Plotly's default. The WebGL canvas keeps the
+// pixel size it was FIRST created at -- a desktop one -- and a smaller div simply CLIPS it. The hand
+// was never zoomed in. It was CROPPED. The fix is one word in the config, and the camera is left
+// exactly alone.
+//
+// A phone rotating does not always fire `resize` in time for Plotly's own handler, so nudge it.
+addEventListener('orientationchange', () => setTimeout(() => Plotly.Plots.resize('dev'), 300));
 
 function rot(v, k, a) {
   const c = Math.cos(a), s = Math.sin(a);
@@ -142,7 +184,7 @@ function draw(k) {
               camera:{ eye:{x:D.camera.eye[0], y:D.camera.eye[1], z:D.camera.eye[2]},
                        up:{x:D.camera.up[0], y:D.camera.up[1], z:D.camera.up[2]},
                        center:{x:0,y:0,z:0} } }
-    }, {displayModeBar:false});
+    }, {displayModeBar:false, responsive:true});
     return;
   }
   Plotly.restyle('dev', {
@@ -163,6 +205,7 @@ fetch('typing.json?_=' + Date.now()).then(r => r.json()).then(d => {
   for (const tr of t.querySelectorAll('tr'))
     tr.onclick = () => { playing = false;
                          document.getElementById('play').textContent = '▶ play';
+                         document.getElementById('side').classList.remove('open');
                          draw(i = +tr.dataset.i); };
   document.getElementById('dev-info').innerHTML =
     `<b>${D.struts}</b> struts` + (D.mass_g ? ` · <b>${D.mass_g.toFixed(1)} g</b>` : '') +
@@ -198,9 +241,12 @@ document.getElementById('rock').onclick = () => {
   document.getElementById('rock').textContent = rocking ? '⏸ rotation' : '↻ rotation';
 };
 let sup = false;
+document.getElementById('keys').onclick = () => {
+  document.getElementById('side').classList.toggle('open');
+};
 document.getElementById('sup').onclick = () => {
   sup = !sup;
-  document.getElementById('sup').textContent = sup ? 'hide supports' : 'show supports';
+  document.getElementById('sup').textContent = sup ? 'hide supports' : 'supports';
   Plotly.restyle('dev', {visible: sup}, [2]);
 };
 </script>
