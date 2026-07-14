@@ -8,12 +8,33 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
+The disclosure has been **extended and re-anchored**. Both stamps stand: the first proves what
+was disclosed on 12 July, the second proves the (much larger) disclosure as it stands now. An
+earlier proof is not invalidated by a later one — it is a *floor* on the date, and floors do not
+move.
+
+### Current — the dorsal gauntlet, the structure, the anchor, the manufacture (§8.8–8.14)
+
 | file | sha256 |
 |---|---|
-| `VISION.md` (the disclosure) | `a1d7c32e743780be7fee98dccf2ef727d4ea26fda8d2b970862b7357f91232be` |
-| `MANIFEST.sha256` (hashes of all 27 source + doc files) | `4c45f8cdd21e1f5b48e0ad9852ad195cf5c4a07d89d1b46ba3262ef52367c1e4` |
+| `VISION.md` (the disclosure) | `a327fa03b832e334dff709dabfccf7fb8dc01ca760da70f380d64b1930cebb14` |
+| `MANIFEST.sha256` (hashes of all 53 source + doc files) | `e16f938ae7641e1758f625408e21ca4b6269a8b2893b2205da22a168bf0ebf4b` |
 
-Stamped: **2026-07-12T22:50:22Z** (UTC, submission time).
+Stamped: **2026-07-14T15:24:50Z** (UTC, submission time). Proofs: `VISION.md.ots`, `MANIFEST.sha256.ots`.
+
+### Original — the palmar body and the layout method (§8.1–8.7)
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (as of 2026-07-12) | `a1d7c32e743780be7fee98dccf2ef727d4ea26fda8d2b970862b7357f91232be` |
+| `MANIFEST.sha256` (27 files) | `4c45f8cdd21e1f5b48e0ad9852ad195cf5c4a07d89d1b46ba3262ef52367c1e4` |
+
+Stamped: **2026-07-12T22:50:22Z**. Proofs: `timestamps/VISION.md.2026-07-12.ots`,
+`timestamps/MANIFEST.sha256.2026-07-12.ots`.
+
+⚠ The original proofs cover the *original* file contents. To verify them you need that version of
+`VISION.md` — `git show <commit>:VISION.md`. This is why the manifest is hashed separately: the
+manifest pins the whole tree at that instant.
 
 ## How the proof works
 

@@ -745,3 +745,40 @@ def test_the_live_render_actually_renders():
     assert s["traces"], "the live scene has no traces -- it is drawing nothing"
     assert s["struts"] > 0, "the live scene grew no structure"
     json.dumps(s)                      # it has to survive the trip to the browser, too
+
+
+def test_the_adjoint_gradient_is_exact():
+    """A WRONG GRADIENT CONVERGES CONFIDENTLY TO THE WRONG ANSWER, and every number downstream
+    looks perfectly self-consistent. This is the one check that cannot be skipped.
+
+    d(q.u)/dr_e = -lambda^T (dK/dr_e) u  with  K lambda = q. One extra back-substitution gives the
+    derivative with respect to EVERY strut at once -- which is the only reason a gradient method is
+    affordable here. Finite differences would need one solve per strut: 2184 instead of 1.
+    """
+    import numpy as np
+
+    from structure.sizing import Sizer
+
+    nodes = np.array([[0, 0, 0], [0.04, 0, 0], [0.02, 0.035, 0],
+                      [0.02, 0.012, 0.03], [0.06, 0.012, 0.02]], float)
+    bars = [(0, 1), (1, 2), (2, 0), (0, 3), (1, 3), (2, 3), (3, 4), (1, 4)]
+    S = Sizer(nodes, bars, r0=9e-4)
+    spring = {0: 1e6, 1: 1e6, 2: 1e6}
+    cases = [("index", "click", {4: np.array([0.3, -0.2, 0.5])})]
+    rng = np.random.default_rng(3)
+    r = 9e-4 * (0.6 + 0.8 * rng.random(len(bars)))
+
+    U, lu, _ = S.solve(r, spring, cases)
+    u = U[0][6 * S.fr.idx[4]:6 * S.fr.idx[4] + 3]
+    d = u / np.linalg.norm(u)
+    g = S.grad_disp(r, U, lu, 4, 0, d)
+
+    h = 1e-9
+    for e in range(len(bars)):
+        rp = r.copy()
+        rp[e] += h
+        Up, _lu, _k = S.solve(rp, spring, cases)
+        up = Up[0][6 * S.fr.idx[4]:6 * S.fr.idx[4] + 3]
+        fd = float((up - u) @ d / h)
+        assert abs(g[e] - fd) <= 1e-3 * abs(fd) + 1e-12, (
+            f"strut {e}: adjoint {g[e]:.6e} vs finite difference {fd:.6e}")

@@ -127,6 +127,24 @@ def scene(h, x, gen: int = -1, note: str = "") -> dict:
                            mode="lines", line=dict(color="#b03060", width=7),
                            hoverinfo="skip", name="strap"))
 
+    # ⚠ THE CAMERA IS A HUMAN EYE LOOKING AT ITS OWN HAND, and that must be defined in the HAND's
+    # frame, not the world's. MyoHand's figure is STANDING, and its arm is not in a typing pose
+    # relative to the world -- measured, the back of the hand faces DOWN (e_o . world_up = -0.24),
+    # so "above the hand" in world terms is nowhere near where your eye is.
+    #
+    # What you actually see when you look at your own hand is the DORSUM, from slightly PROXIMAL
+    # (your eye is back toward the wrist), with the fingers pointing away from you and therefore
+    # appearing at the TOP of the view. So the eye sits along +dorsal and -distal, and "up" is the
+    # distal axis.
+    _o2, e_d2, e_r2, e_o2 = hand_axes(h, q_on)
+    eye = 1.65 * e_o2 - 0.88 * e_d2 + 0.22 * e_r2
+    layout = dict(scene=dict(
+        aspectmode="data",
+        xaxis=dict(visible=False), yaxis=dict(visible=False), zaxis=dict(visible=False),
+        camera=dict(eye=dict(x=float(eye[0]), y=float(eye[1]), z=float(eye[2])),
+                    up=dict(x=float(e_d2[0]), y=float(e_d2[1]), z=float(e_d2[2])),
+                    center=dict(x=0, y=0, z=0))))
+
     bone_g = hist[-1][2] * 1000.0
     return dict(
         gen=int(gen),
@@ -134,38 +152,45 @@ def scene(h, x, gen: int = -1, note: str = "") -> dict:
               f"buttons {hist[-1][1]*1e6:.0f} µm, strap {hist[-1][3]:.2f} N "
               f"through {len(pulled)} nodes"),
         traces=traces,
-        layout=dict(scene=dict(aspectmode="data", xaxis_visible=False,
-                               yaxis_visible=False, zaxis_visible=False)),
+        layout=layout,
         bone_g=float(bone_g), struts=len(live),
         button_um=float(hist[-1][1] * 1e6), strap_N=float(hist[-1][3]),
     )
 
 
 def _bone_segments(h, q):
-    """The hand as a stick skeleton -- 20 segments, not a 4 MB mesh. It redraws instantly and
-    it is enough to see whether the device is inside the hand, which is the only question the
-    picture has ever had to answer in a hurry."""
+    """The HAND as a stick skeleton -- 20 segments, not a 4 MB mesh. It redraws instantly and it is
+    enough to see whether the device is inside the hand, which is the only question the picture has
+    ever had to answer in a hurry.
+
+    ⚠ THE HAND, NOT THE SCENE. `myohand.xml` ships A ROOM, FURNITURE AND A FULL HUMAN FIGURE, and
+    iterating every body in the model draws all of it: the "hand" trace came out 1476 mm tall --
+    floor to head height -- so the plot auto-scaled to a metre and a half and squashed the actual
+    hand to a dot. The user: "there are some stray nodes significantly outside of the hands
+    expected bounding box. The stray nodes are breaking the plots."
+
+    This is the SAME bug that was caught at Stage 0 ("the visualisation rendered the entire MuJoCo
+    scene"), reappearing in a file written afterwards that never learned it. The fix is to name the
+    bones we mean -- the same set hand/flesh.py uses to build the skin -- rather than to take
+    whatever the model happens to contain.
+    """
     import mujoco
+
+    from hand.flesh import CARPUS, METACARPALS, PHALANGES
 
     m = h.model
     h.fk(q)
+    keep = {mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, b)
+            for b in CARPUS + METACARPALS + PHALANGES}
+    keep.discard(-1)
+
     out = []
-    for b in range(m.nbody):
+    for b in keep:
         p = m.body_parentid[b]
-        if p <= 0 or b == 0:
+        if p <= 0:
             continue
         a, c = h.data.xpos[p], h.data.xpos[b]
-        if np.linalg.norm(c - a) > 1e-4:
+        if np.linalg.norm(c - a) > 1e-4 and (p in keep or True):
             out.append(a)
             out.append(c)
     return out
-
-
-def publish(h, x, gen: int = -1, note: str = "") -> None:
-    """Write the current design where the browser can see it. Atomic, so a poll never reads a
-    half-written file."""
-    os.makedirs("out", exist_ok=True)
-    tmp = LIVE + ".tmp"
-    with open(tmp, "w") as fh:
-        json.dump(scene(h, x, gen, note), fh)
-    os.replace(tmp, LIVE)

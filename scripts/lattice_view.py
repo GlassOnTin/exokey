@@ -20,9 +20,22 @@ from viz.scene import skin_trace, strap_traces, well_traces
 
 
 def tubes(nodes, bars, live, se, r, n=7):
-    """Each surviving strut as a round tube, coloured by its strain-energy density."""
+    """Each surviving strut as a round tube, coloured by how hard it is working.
+
+    ⚠ COLOUR BY RANK, NOT BY VALUE. The strain-energy density spans ~1e15 across these struts, so
+    a LINEAR colour map over it paints everything below the top few per cent flat black -- which
+    is what made the structure look like a dead tangle and made the user ask why so many elements
+    "carry no load". They do carry load: only 1 of 434 is genuinely idle, and 309 of them carry
+    1-10% of the peak. THE RENDER WAS LYING, not the optimiser.
+    #
+    So the colour is the strut's PERCENTILE among its peers. Every hue is then used, the
+    distribution is legible, and "brighter = working harder" means something.
+    """
     V, F, C = [], [], []
-    lo, hi = np.percentile([se[e] for e in live], [5, 95])
+    vals = np.array([se[e] for e in live])
+    rank = np.empty(len(vals))
+    rank[np.argsort(vals)] = np.arange(len(vals)) / max(len(vals) - 1, 1)
+    rank_of = {e: float(rank[k]) for k, e in enumerate(live)}
     for e in live:
         a, b = nodes[bars[e][0]], nodes[bars[e][1]]
         ax = b - a
@@ -40,8 +53,7 @@ def tubes(nodes, bars, live, se, r, n=7):
             th = 2 * np.pi * k / n
             d = r * (np.cos(th) * u + np.sin(th) * v)
             V += [a + d, b + d]
-        c = float(np.clip((se[e] - lo) / (hi - lo + 1e-30), 0, 1))
-        C += [c] * (2 * n)
+        C += [rank_of[e]] * (2 * n)
         for k in range(n):
             p, qq = base + 2 * k, base + 2 * ((k + 1) % n)
             F += [(p, p + 1, qq + 1), (p, qq + 1, qq)]
@@ -49,9 +61,20 @@ def tubes(nodes, bars, live, se, r, n=7):
     F = np.array(F)
     return go.Mesh3d(x=V[:, 0], y=V[:, 1], z=V[:, 2],
                      i=F[:, 0], j=F[:, 1], k=F[:, 2],
-                     intensity=C, colorscale="Inferno", cmin=0, cmax=1,
+                     # Plasma, not Inferno: Inferno's low end is BLACK, and a structure whose
+                     # quieter half is black is a structure you cannot see.
+                     intensity=C, colorscale="Plasma", cmin=0, cmax=1,
                      showscale=True, flatshading=True,
-                     colorbar=dict(title="load<br>carried", thickness=12, len=0.5, x=0.93),
+                     # DEPTH CUE 1: real shading. A specular highlight travelling along a tube is
+                     # what tells the eye the tube is round and which way it is going. Default
+                     # Plotly lighting is almost purely ambient, which renders the structure as a
+                     # flat tangle of coloured ribbons -- and then the only way to read the depth
+                     # is to spin it by hand, which is exactly what the user found themselves doing.
+                     lighting=dict(ambient=0.48, diffuse=0.75, specular=0.40,
+                                   roughness=0.35, fresnel=0.15),
+                     lightposition=dict(x=2000, y=-1200, z=1800),
+                     colorbar=dict(title="load carried<br>(percentile)", thickness=12, len=0.5,
+                                   x=0.93),
                      name="bone", hoverinfo="skip")
 
 
@@ -137,8 +160,11 @@ def main():
         # structure deflects 9178 um instead of 485. They go ALL THE WAY ROUND the hand.
         traces += strap_traces(h, q, A)
 
-    _o, _e_d, e_r, e_o = hand_axes(h, q)
-    eye = 1.55 * e_o + 0.62 * e_r
+    # A HUMAN EYE LOOKING AT ITS OWN HAND: the dorsum, from slightly proximal, fingers pointing
+    # away and therefore appearing at the top. Defined in the HAND's frame -- the model's figure is
+    # standing and its arm is not in a typing pose relative to the world.
+    _o, e_d, e_r, e_o = hand_axes(h, q)
+    eye = 1.65 * e_o - 0.88 * e_d + 0.22 * e_r
     fig = go.Figure(traces)
     fig.update_layout(
         title=f"ExoKey — the layout and the gauntlet, CO-OPTIMISED.  "
@@ -152,9 +178,54 @@ def main():
         scene=dict(aspectmode="data", xaxis_visible=False, yaxis_visible=False,
                    zaxis_visible=False,
                    camera=dict(eye=dict(x=eye[0], y=eye[1], z=eye[2]),
-                               up=dict(x=e_r[0], y=e_r[1], z=e_r[2]))),
+                               up=dict(x=e_d[0], y=e_d[1], z=e_d[2]))),
         margin=dict(l=0, r=0, t=70, b=0), template="plotly_white", showlegend=False)
-    fig.write_html("out/final.html", include_plotlyjs="cdn")
+    # DEPTH CUE 2 -- and it is the one that actually matters. The user: "I can only make sense of
+    # the render by rotating it dynamically to infer the depth info."
+    #
+    # Quite right, and it is not a failure of the viewer -- it is a missing cue. MOTION PARALLAX is
+    # the strongest depth cue the human visual system has, far stronger than shading or occlusion,
+    # and a static projection of a tangle of tubes simply does not carry the information. They were
+    # supplying the cue by hand.
+    #
+    # So the render supplies it: a slow ROCK about the view's own up-axis, +/-18 deg. A rock rather
+    # than a full spin, because the first-person framing (looking down at the back of your own
+    # hand) is the thing that makes the device legible, and a full orbit throws it away. Dragging
+    # still works and pauses it.
+    orbit = """
+    var gd = document.getElementById('{plot_id}');
+    var base = gd.layout.scene.camera, t = 0, spinning = true, paused = 0;
+    var e0 = base.eye, up = base.up;
+    var u = [up.x, up.y, up.z];
+    var n = Math.hypot(u[0], u[1], u[2]); u = [u[0]/n, u[1]/n, u[2]/n];
+    function rot(v, k, a) {   // Rodrigues: rotate v about unit axis k by angle a
+      var c = Math.cos(a), s = Math.sin(a);
+      var kd = k[0]*v[0] + k[1]*v[1] + k[2]*v[2];
+      var kx = [k[1]*v[2]-k[2]*v[1], k[2]*v[0]-k[0]*v[2], k[0]*v[1]-k[1]*v[0]];
+      return [v[0]*c + kx[0]*s + k[0]*kd*(1-c),
+              v[1]*c + kx[1]*s + k[1]*kd*(1-c),
+              v[2]*c + kx[2]*s + k[2]*kd*(1-c)];
+    }
+    gd.on('plotly_relayouting', function() { paused = Date.now(); });
+    setInterval(function() {
+      if (!spinning || Date.now() - paused < 2500) return;
+      t += 0.012;
+      var a = 0.315 * Math.sin(t);                       // +/- 18 degrees
+      var e = rot([e0.x, e0.y, e0.z], u, a);
+      Plotly.relayout(gd, {'scene.camera.eye': {x: e[0], y: e[1], z: e[2]}});
+    }, 60);
+    var b = document.createElement('button');
+    b.textContent = 'pause rotation';
+    b.style.cssText = 'position:absolute;top:8px;right:16px;z-index:9;font:13px sans-serif;' +
+                      'padding:4px 10px;border:1px solid #ccc;border-radius:5px;background:#fff;' +
+                      'cursor:pointer';
+    b.onclick = function() {
+      spinning = !spinning;
+      b.textContent = spinning ? 'pause rotation' : 'resume rotation';
+    };
+    document.body.appendChild(b);
+    """
+    fig.write_html("out/final.html", include_plotlyjs="cdn", post_script=orbit)
     print(f"  {len(live)} struts, {mass*1000:.1f} g, buttons {w*1e6:.0f} um, "
           f"strap {tension:.2f} N")
     print("\nbrowser view: out/final.html")
