@@ -184,13 +184,17 @@ def _bone_segments(h, q):
             for b in CARPUS + METACARPALS + PHALANGES}
     keep.discard(-1)
 
+    # ⚠ BOTH ENDS MUST BE HAND BONES. A segment is parent -> child, and the parent of a CARPAL is
+    # the FOREARM -- which is not in `keep`, and whose origin is at the ELBOW. Drawing that segment
+    # puts a bone from the elbow to the wrist straight through the render. (I wrote
+    # `p in keep or True` here, which is not a check at all. It is a check with the safety off.)
     out = []
     for b in keep:
-        p = m.body_parentid[b]
-        if p <= 0:
+        p = int(m.body_parentid[b])
+        if p <= 0 or p not in keep:
             continue
         a, c = h.data.xpos[p], h.data.xpos[b]
-        if np.linalg.norm(c - a) > 1e-4 and (p in keep or True):
+        if np.linalg.norm(c - a) > 1e-4:
             out.append(a)
             out.append(c)
     return out
