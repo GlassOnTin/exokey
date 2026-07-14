@@ -1531,6 +1531,68 @@ reason that does not survive its own test is not a reason:**
 but nothing moves the control points to minimise anything. A true spline-shape optimisation
 (form-finding on the interior points, subject to the flesh constraint) has **not** been done.
 
+### 8.15d The SECTION — and the finding that the device is TOUCH-limited, not load-limited
+
+**THE USER:** *"I think the thickness of struts should be a spline too, with a major and minor
+radius, and principal orientation as a spline."*
+
+**(r) A CIRCLE IS THE WORST SECTION FOR A MEMBER THAT BENDS IN ONE PLANE.** For an ellipse of
+semi-axes a, b: mass `A = πab`, but `I = πa³b/4` one way and `πab³/4` the other. **At constant mass**,
+material can be moved out of the direction nothing pushes and into the direction that is bent.
+Disclosed, and **locked by a test**: an oriented 2:1 ellipse is **2× stiffer than a circle of the
+same mass**, and **4× stiffer than the same ellipse turned the wrong way**.
+- Disclosed construction: separate `Iy`/`Iz` per element plus a **ROLL**; and **neither the roll nor
+  the aspect needs a gradient** — both are read off the solved moments. **Roll = the principal moment
+  direction. Aspect = the ratio of the two moments** (minimising `M₁²/k + M₂²k` gives exactly that).
+  Solve → align → re-solve. *This is literally Wolff's law.*
+
+**(s) ⚠ AND AN ELLIPSE FAILS, BECAUSE FOR AN ELLIPSE *FLAT MEANS SHARP*.** Its tightest convex
+curvature is at the ends of the major axis, radius `b²/a` — so flattening drives it to a **point**,
+and a 2:1 ellipse is *sharper* than the circle of equal area. Against the ergonomic floor (§5g) the
+constraint becomes `b²/a ≥ SKIN_R`, i.e. `s ≥ SKIN_R·k^1.5` — a 3:1 ellipse would need a 7.8 mm
+member. **Measured: the aspect capped out at 1.41:1 and the section bought nothing (+4% mass).**
+
+**(t) A STADIUM IS BOTH FLAT AND BLUNT** — a rectangle with semicircular ends; the sweep of a circle
+of radius `b` along a segment. **Its minimum surface radius is simply `b`.** So the friendly
+constraint becomes a plain lower bound, *uncoupled from the flatness*: it can be as flat as it likes
+and stay blunt. Measured: a 3:1 stadium is **6.96× stiffer in its flat plane and exactly as blunt.**
+`A = 4bc + πb²`, `I_flat = 4bc³/3 + πb⁴/4 + πb²c²`, `I_thin = 4cb³/3 + πb⁴/4`, and
+`J = 4·I_flat·I_thin/(I_flat + I_thin)` — **exact for both a circle and an ellipse**, so well-founded
+for a stadium. `c = 0` recovers the circle exactly.
+
+**(u) ⚠ AND THE STADIUM BOUGHT NOTHING EITHER — WHICH IS THE MOST USEFUL RESULT IN THIS SECTION.**
+Measured: **0 of 153 members flattened.** Every one of them *wants* to (the moment ratio is 1.9
+median, up to 11), but:
+
+> **146 of the 153 members (95%) sit ON the ergonomic floor.**
+
+Their size is set by a **HAND**, not by a force — they are already **thicker than their load
+requires**. A clever section can only pay where the section is set by the **LOAD**, and here almost
+none of it is. Flattening a floor-bound member raises its area to buy stiffness it does not need.
+
+> **THE FRIENDLY GAUNTLET IS NOT STIFFNESS-LIMITED OR STRENGTH-LIMITED. IT IS TOUCH-LIMITED.**
+> Its mass is set by the human, not by the physics.
+
+**(v) WHICH HANDS US THE ANSWER, AND IT IS THE ONE A BONE ALREADY USES: MAKE IT HOLLOW.** If the
+**outer** surface is what must be friendly, and the inside is doing nothing — **take the inside out.**
+A tube of outer radius `b` and wall `w`:
+- **its outer radius is still `b`** → *exactly* as blunt, *exactly* as friendly. Hollowing changes
+  **nothing** about how it feels.
+- it loses almost no stiffness, because **bending stiffness lives in the outer fibres** — the
+  material near the axis was contributing almost nothing.
+- and **it is free to print**: a **0.8 mm wall is two perimeters of a 0.4 mm nozzle**. *A hollow strut
+  is a strut printed with no infill.* The printer was going to do this anyway.
+
+**Measured, same members, same outer radii, same gate:**
+
+| the friendly structure | mass | worst well | sharpest surface |
+|---|---|---|---|
+| solid rods | 14.90 g | 500 µm | 1.50 mm |
+| **hollow tubes (0.8 mm wall)** | **12.00 g (−19%)** | 496 µm | **1.50 mm — unchanged** |
+
+retaining **94%** of the bending stiffness. **A long bone is a tube with a marrow cavity. That is not
+an analogy — it is the same optimisation under the same constraint.**
+
 ### 8.16 Provenance
 
 The **five-direction finger well** derives from the **DataHand** keyboard (patents filed early
