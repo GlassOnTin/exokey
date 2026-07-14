@@ -1,6 +1,8 @@
 """The outer problem's evaluation. Stage 4's gates."""
 from __future__ import annotations
 
+import os
+
 import numpy as np
 import pytest
 
@@ -571,3 +573,29 @@ def test_scattered_spare_slots_cannot_host_a_pointer(hands):
         f"...but none on a single digit: {free_tilts}. A pointer needs 4 tilts on ONE digit. "
         "Freeing SHIFT to a hold/chord is what makes it fit."
     )
+
+
+def test_no_undefined_names_anywhere():
+    """A NAME THAT DOES NOT EXIST IS A BUG NO IMPORT-TEST CAN SEE.
+
+    opt/run.py has now broken TWICE in a way the suite could not catch:
+
+      1. a SyntaxError that 57 passing tests never saw, because nothing imported the file. Fixed
+         by having a test import it -- which was not enough, because:
+      2. `NameError: name 'evaluate' is not defined`. Importing a module does not RUN main(), so
+         a name that is missing INSIDE a function is invisible to an import test. The GA died on
+         its first line, and the cloud box sat idle and BILLING for an hour before anyone noticed.
+
+    A linter sees it instantly. F821 = a name that does not exist -- which is EXACTLY the bug, and
+    it is a real defect wherever it appears. (Not F811/redundant-import: that is style, and this
+    test is for bugs, not tidiness. A test that fails on style gets muted, and then it is not
+    there when it matters.)
+
+    Costs a fraction of a second, and it covers every file -- including the ones nothing imports.
+    """
+    import subprocess
+
+    r = subprocess.run(
+        ["uv", "tool", "run", "ruff", "check", "--select", "F821", "--quiet", "."],
+        capture_output=True, text=True, cwd=os.path.dirname(os.path.dirname(__file__)))
+    assert r.returncode == 0, f"UNDEFINED NAMES:\n{r.stdout}{r.stderr}"

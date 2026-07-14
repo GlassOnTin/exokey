@@ -59,6 +59,8 @@ def main():
     from pymoo.optimize import minimize
     from pymoo.parallelization import StarmapParallelization
 
+    from design.vector import evaluate
+
     class Live(Callback):
         """THE OPTIMISER STREAMS INTO THE RENDER -- AND KEEPS EVERY FRAME.
 
@@ -236,8 +238,6 @@ def report_cornered(X: list) -> None:
     Telling them apart needs judgement, but NOTICING them does not — so notice them here
     rather than leaving it to whether somebody happens to eyeball the design vectors.
     """
-    from design.vector import REAL_BOUNDS
-
     print("\ncornered variables (pinned to a bound => not a decision):")
     any_ = False
     for k, (lo, hi) in REAL_BOUNDS.items():
