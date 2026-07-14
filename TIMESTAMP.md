@@ -8,19 +8,39 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored**. Both stamps stand: the first proves what
-was disclosed on 12 July, the second proves the (much larger) disclosure as it stands now. An
-earlier proof is not invalidated by a later one — it is a *floor* on the date, and floors do not
-move.
+The disclosure has been **extended and re-anchored** twice. **All three stamps stand**, and each one
+proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one — it
+is a *floor* on the date, and floors do not move.
 
-### Current — the dorsal gauntlet, the structure, the anchor, the manufacture (§8.8–8.14)
+### Current — MANUFACTURABILITY as a constraint on the design space (§8.15, §8.15b)
+
+Adds the printability method and its measured results: the minimum-feature bound imposed by
+**delete-then-fatten-then-re-size**; **support-reachability** as a topological constraint on the
+member graph; the **bridge/self-support distinction**; that **sacrificial support is exempt from the
+wearer-clearance constraint, because the wearer is not in the printer**; the **build direction as a
+design variable minimised on support VOLUME, not support COUNT**; and the finding that a shell which
+conforms to a curved limb **cannot be FDM-printed support-free in any orientation**.
 
 | file | sha256 |
 |---|---|
-| `VISION.md` (the disclosure) | `a327fa03b832e334dff709dabfccf7fb8dc01ca760da70f380d64b1930cebb14` |
-| `MANIFEST.sha256` (hashes of all 53 source + doc files) | `e16f938ae7641e1758f625408e21ca4b6269a8b2893b2205da22a168bf0ebf4b` |
+| `VISION.md` (the disclosure) | `a7083e4f9049d69f641db0ed965934efd156b16a37a2a4dbefb427e452f61033` |
+| `MANIFEST.sha256` (hashes of all 57 source + doc files) | `d4afa5da4362d683287b4029aa2cc0a8ea08561154676eac89ef20ecad385032` |
 
-Stamped: **2026-07-14T15:24:50Z** (UTC, submission time). Proofs: `VISION.md.ots`, `MANIFEST.sha256.ots`.
+Stamped: **2026-07-14T16:48:19Z** (UTC, submission time). Proofs: `VISION.md.ots`,
+`MANIFEST.sha256.ots`.
+
+⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
+the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+
+### Second — the dorsal gauntlet, the structure, the anchor, the manufacture (§8.8–8.14)
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (as of 2026-07-14, 15:24Z) | `a327fa03b832e334dff709dabfccf7fb8dc01ca760da70f380d64b1930cebb14` |
+| `MANIFEST.sha256` (53 files) | `e16f938ae7641e1758f625408e21ca4b6269a8b2893b2205da22a168bf0ebf4b` |
+
+Stamped: **2026-07-14T15:24:50Z**. Proofs: `timestamps/VISION.md.2026-07-14a.ots`,
+`timestamps/MANIFEST.sha256.2026-07-14a.ots`.
 
 ### Original — the palmar body and the layout method (§8.1–8.7)
 

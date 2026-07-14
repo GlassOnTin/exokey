@@ -66,10 +66,16 @@ def field(struts, boxes, r, voxel=VOXEL, blend=BLEND, pad=0.006):
     Two consequences, both handled: k is small (0.6 mm, still a real fillet), and the caller
     MEASURES the solid's mass and clearance rather than trusting the wire diagram.
     """
+    # r may be ONE radius or ONE PER STRUT, and the difference is the whole point: a gradient-sized
+    # structure has a thick trunk tapering into thin braces, and melting them all to a single radius
+    # throws away the hierarchy the optimiser worked out -- and prints a different device.
+    R = np.broadcast_to(np.asarray(r, float), (len(struts),)) if len(struts) else np.zeros(0)
+    rmax = float(R.max()) if len(R) else float(np.asarray(r, float).max())
+
     pts = np.array([p for s in struts for p in s]
                    + [c for c, _R, _h in boxes] or [[0, 0, 0]])
-    lo = pts.min(axis=0) - (r + pad)
-    hi = pts.max(axis=0) + (r + pad)
+    lo = pts.min(axis=0) - (rmax + pad)
+    hi = pts.max(axis=0) + (rmax + pad)
     n = np.ceil((hi - lo) / voxel).astype(int) + 1
     acc = np.zeros(tuple(n), np.float64)
 
@@ -82,21 +88,23 @@ def field(struts, boxes, r, voxel=VOXEL, blend=BLEND, pad=0.006):
         P = lo + np.stack(g, axis=-1) * voxel
         return (slice(i0[0], i1[0]), slice(i0[1], i1[1]), slice(i0[2], i1[2])), P
 
-    reach = 8.0 * blend + r        # beyond this, exp(-d/k) is < 1e-3 of the peak: nothing
-    for a, b in struts:
+    for e, (a, b) in enumerate(struts):
+        re = float(R[e])
+        reach = 8.0 * blend + re   # beyond this, exp(-d/k) is < 1e-3 of the peak: nothing
         w = window(np.minimum(a, b), np.maximum(a, b), reach)
         if w is None:
             continue
         sl, P = w
-        acc[sl] += np.exp(-(_seg_dist(P, a, b) - r) / blend)
+        acc[sl] += np.exp(-(_seg_dist(P, a, b) - re) / blend)
 
-    for c, R, h in boxes:
-        ext = np.abs(R).T @ h
-        w = window(c - ext, c + ext, reach)
+    breach = 8.0 * blend
+    for c, Rb, h in boxes:
+        ext = np.abs(Rb).T @ h
+        w = window(c - ext, c + ext, breach)
         if w is None:
             continue
         sl, P = w
-        acc[sl] += np.exp(-_box_sdf(P, c, R, h) / blend)
+        acc[sl] += np.exp(-_box_sdf(P, c, Rb, h) / blend)
 
     f = np.where(acc > 1e-300, -blend * np.log(np.maximum(acc, 1e-300)), 10.0 * blend)
     # ⚠ THE FIELD MUST BE POSITIVE ON EVERY FACE OF THE GRID, or the surface runs off the edge and

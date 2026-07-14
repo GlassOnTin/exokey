@@ -868,6 +868,16 @@ where MyoHand had nothing anyway.
 
 These bound every conclusion above.
 
+- ⚠ **The printability model is a GEOMETRIC one, and nothing has been printed.** The
+  self-support rule (45°), the bridging span (`BRIDGE_MAX`, 10 mm) and the bed-contact depth
+  (**`BASE_T`, 3 mm — a GUESS**: how close to the lowest point a node must be to count as
+  sitting on the bed, given a brim) are handbook/practice numbers, not measurements from *this*
+  printer with *this* filament. The pillar counts in §8.15 move with all three. **Print it and
+  count the supports** before any of those numbers is quoted as a result.
+- ⚠ **The minimum-pillar build direction leaves the part 185 mm tall on a 9-node,
+  16 × 28 mm bed footprint.** The direction was optimised for support count ALONE. A real print
+  also wants a low part on a broad base, and that trade has not been made.
+
 - ⚠ **The thumb still cannot press, even with ADP added.** Stock MyoHand has no adductor at
   all and the thumb exerts **0.0 N**; we add adductor pollicis (`hand/thenar.py`) and the
   irreducible torque residual falls 45.6% → **11.9%**, against **≤0.6%** for every finger.
@@ -1244,7 +1254,150 @@ Disclosed:
   closed fist can barely press), so a device must hold the hand in a **narrow band of postures** —
   open enough that the wells do not collide, closed enough that the digits can press.
 
-### 8.15 Provenance
+### 8.15 MANUFACTURABILITY as a constraint on the DESIGN SPACE — printing the structure
+
+Disclosed as a method, and as any device bearing a structure so generated: making a
+topology-optimised **wearable** structure printable by imposing the process limits **on the design
+domain and on the deletion rule**, never as a penalty on the objective.
+
+**(a) The MINIMUM FEATURE is imposed by DELETE-then-FATTEN-then-RE-SIZE — and each of the three
+obvious shortcuts fails in its own way.** An unconstrained minimum-mass truss over a conforming
+shell puts most of its material below the process's minimum feature: **788 of 921 struts (86%) came
+out thinner than a 0.4 mm nozzle**. Disclosed method, and the reasoning that forces it:
+
+- **A member thinner than the nozzle is NOT a member the optimiser is asking to delete.** Those 788
+  sub-nozzle struts **carry 53% of the mass**. They are not numerical dust — they are a **fine net
+  doing real work**, which is exactly what a minimum-mass *shell* wants to be. *Delete them and the
+  structure collapses:* the survivors must then be pinned at the maximum radius to hold the same
+  displacement gate, and the mass goes from **38 g to 284 g**.
+- **DELETE by a fixed RATE, thinnest-first** (the classical size → prune → re-size alternation),
+  ranked by radii that were sized against a floor *below* the minimum feature.
+- **FATTEN every survivor up to the minimum feature.** This can only ADD material, therefore only
+  STIFFEN, therefore the displacement gate **still holds by construction**. **Measured cost: 1.6×
+  (4.79 g → 7.54 g).** The minimum feature is cheap; deleting to satisfy it is ruinous.
+- **RE-SIZE the converged topology with the minimum feature as the true lower bound**, so the
+  optimality criteria can redistribute *around* the floor and give the slack back.
+- **THE SIZING FLOOR IS NOT THE PRINTING FLOOR**, and each of the three obvious shortcuts fails in
+  its own characteristic way. All three measured:
+  - *Size against the minimum feature (`r_min = r_nozzle`)* → every idle member parks at **exactly**
+    the floor, the radii stop spanning decades, and the ranking the pruning depends on is destroyed.
+    **The pruner then deletes at random**: cutting a quarter of the members made the structure
+    *heavier* (19.97 g → 30.0 g), and 13 g of a 20 g answer was floor material under members doing
+    no work.
+  - *Delete everything below the minimum feature* → **collapse**, as above (38 g → 284 g).
+  - *Delete only what the sizer drove to its numerical floor* → **nothing is ever deleted.** The
+    sizer does not abandon members; it just makes them thin. The whole 4283-member domain survived,
+    and with a floor under every one the answer was **22.35 g of uniform 0.40 mm strut: pure floor.**
+    **With a minimum-feature bound, DELETION IS THE ONLY THING THAT REDUCES MASS** — the sizer cannot
+    express "I want this gone", so the pruner must, and must keep doing it.
+- Disclosed for any minimum feature size and any process (FDM ~0.4 mm, SLS ~0.8 mm, DMLS, resin).
+
+**(a2) Disclosed corollary — the minimum feature is what gives the structure its hierarchy.** A
+minimum-mass truss **wants** many equally thin members; what forces **few, thick, graded** members
+is MANUFACTURE. Printability is not a compromise against the optimisation; it is the thing that
+makes the answer trabecular.
+
+**(b) The ground-structure PITCH is tied to the printer's BRIDGING SPAN.** Choose lattice
+`pitch × reach ≤ bridge_max` (≈ **10 mm** for a thin FDM strut with part cooling) so that every
+candidate member is one the printer can lay. Costs nothing, and removes a whole class of
+unbuildable answers from the domain before any solving happens.
+
+**(c) SUPPORT-REACHABILITY as a TOPOLOGICAL constraint on the member graph.** Disclosed:
+- A member is **self-supporting** iff `|u·d| ≥ sin(45°)` for build direction `d` — only such a
+  member can **hold something up**.
+- A member shallower than that but **shorter than the bridge span** is a **BRIDGE**: it *prints*,
+  and it *holds nothing up*. **These are different properties and conflating them is fatal in both
+  directions** (see (g)).
+- **A node prints iff it lies on the bed, OR at least one self-supporting member arrives at it from
+  a STRICTLY LOWER node.** Height falls strictly along such a chain, so this purely **local** test
+  implies the **global** property by induction: every node is reachable from the bed through
+  already-printed material, and the part prints with no support anywhere.
+- Enforced through the **pruner**: a member may be deleted unless it is a node's **last down-strut**.
+  Printability is therefore a hard property of **every design the optimiser can reach**, and is
+  **repaired, not priced**.
+
+**(d) A SUPPORT MEMBER THAT STAYS IS STRUCTURE, NOT SCAFFOLDING.** A strut that holds a node up is
+in the FEM, carries load, and its mass is counted. Support is therefore **free** wherever the design
+domain can supply it, and only what the domain cannot hold up needs a sacrificial pillar.
+
+**(e) SACRIFICIAL SUPPORT IS EXEMPT FROM THE WEARER-CLEARANCE CONSTRAINT — because the wearer is
+not in the printer.** Disclosed as a general principle for printed wearables: **structure** must
+clear the flesh (by the measured soft-tissue map of §8.9); a **sacrificial support pillar may pass
+straight through the volume the anatomy will later occupy**, because that volume is air at print
+time and the support is removed before the part is ever worn. Structure and support are subject to
+**different constraints because they exist at different times**.
+- **Measured:** conflating them declares a printable part unprintable. Requiring every node to be
+  held up by a *structural* member — which must clear the skin — orphaned **all five finger wells**,
+  in every one of 1000+ build directions tried.
+
+**(f) The BUILD DIRECTION is a DESIGN VARIABLE, and the thing to minimise is SUPPORT VOLUME — NOT
+SUPPORT COUNT.** It is 2 DOF of pure geometry, so it is swept exhaustively for nothing.
+- **The support bill has two terms.** A node with nothing under it needs a **pillar** off the bed; a
+  member that is shallow *and* longer than the bridging span needs a **prop** under its midpoint.
+- ⚠ **COUNTING THEM IS THE WRONG OBJECTIVE, AND IT PICKS ALMOST THE WORST ORIENTATION.** The
+  fewest-support-points direction stands the part **on end** — so every pillar then has to climb the
+  part's whole height. **Measured** on the printable gauntlet (921 members, 333 nodes):
+
+  | chosen by | pillars | props | **support column** | part height | bed contact |
+  |---|---|---|---|---|---|
+  | fewest support POINTS | **123** | 411 | 39 846 mm | 172 mm | 3 nodes, 27 × 29 mm |
+  | least support VOLUME | 179 | 484 | **21 342 mm** | **92 mm** | 7 nodes, 63 × 48 mm |
+
+  Minimising the count needs **1.9× more support plastic**, on a part twice as tall standing on a
+  third of the footprint. So the objective is the **total length of column that must be printed and
+  snapped off** — over every unsupported node and every un-bridgeable member's midpoint.
+- The best direction is **not** any of the six natural hand axes (best axis, palm-up: 23 687 mm).
+  It prints **on its side** (distal +0.03 / radial −0.92 / dorsal −0.40).
+
+**(g) MEASURED FINDING — a shell that CONFORMS TO A CURVED LIMB cannot be FDM-printed support-free
+in one piece, in ANY orientation.** Its underside is an overhang whichever way it is turned.
+Verified over 1000+ build directions at three domain resolutions: **no orientation reaches zero
+pillars**, and under a strict self-support rule none even leaves a structure that reaches all five
+wells (the best reaches four). **So the objective is MINIMUM SUPPORT COUNT, not support-freedom** —
+which is also the only thing a maker actually asks for.
+- Corollary, disclosed: *nothing is unprintable.* A steep member self-supports; a short shallow one
+  bridges; a **long** shallow one takes a prop under its middle, which is exactly what a slicer
+  does. **The one rule that cannot be bought out of with support is the minimum feature** — no
+  amount of scaffolding lets a 0.4 mm nozzle lay a 0.26 mm bead. Every other process limit is a
+  **cost**, denominated in support points.
+
+**(h) Disclosed diagnostic.** In a ground-structure FEM on **elastic (soft-tissue) supports**, a
+load point severed from the anchored component presents as a **rigid-body mode — a deflection of
+order 10⁴ m**, not as a singular matrix. Prune the domain to the anchor-connected component
+**before the first solve**, or a modelling failure will present as a finding about the device.
+
+### 8.15b The printable gauntlet — measured
+
+The disclosed structure of §8.10, made printable by the method above (CF-PA12/CF-nylon,
+E = 6.0 GPa; 17 wired load cases, each digit-direction pressed alone at 0.196 N; gate 500 µm):
+
+| | unconstrained | **printable (FDM)** |
+|---|---|---|
+| members | 921 | **921** |
+| member radii | 0.26 – 1.55 mm | **0.40 – 1.29 mm** (none below the nozzle) |
+| mass, beam model | 4.79 g | **6.93 g** (1.45×) |
+| mass, the actual filleted SOLID | — | **20.3 g** |
+| worst well displacement | 499 µm | **499 µm** (gate 500) |
+| self-supporting members | — | **~37%**; ~165 more print as bridges |
+| sacrificial support | — | **179 pillars** (of 333 nodes) + **484 props** = **21.3 m** of column |
+| build orientation | — | **on its side**, 92 mm tall, 63 × 48 mm bed footprint |
+
+- **The cost of the nozzle is 1.45×**, and it is paid by *fattening*: fatten-only gives 7.54 g
+  (1.6×), and re-sizing against the floor recovers it to 6.93 g.
+- ⚠ **The beam model is a WIRE DIAGRAM and it is not the part.** The solid — SDF smooth-min,
+  marching cubes, watertight, clearing the skin by 3.09 mm — is **20.3 g, +193%** on the beam
+  model's 6.93 g. A wire diagram double-counts the volume where members overlap at a node and
+  **misses the fillets entirely**, and neither error is small when a third of the members meet at a
+  node. **Only the solid is the truth.**
+- ⚠ **The prop count is hostage to the bridging span, which is a GUESS.** Measured sensitivity, same
+  structure: **561 props at an 8 mm span → 484 at 10 mm → 177 at 15 mm → 20 at 18 mm.** The longest
+  member is 28.8 mm. So "how many supports" is largely a statement about *the printer*, not about
+  the design, and it is the one number a real print would settle in an afternoon.
+- ⚠ **The props are also an artefact of the 8 mm lattice pitch** (longest candidate bar 17.6 mm). A
+  ground structure whose `pitch × reach` sits inside the bridging span has **no props at all, by
+  construction** — but that is a much larger domain and it has **not** been re-optimised here.
+
+### 8.16 Provenance
 
 The **five-direction finger well** derives from the **DataHand** keyboard (patents filed early
 1990s, now **expired**) and its open modern reimplementation

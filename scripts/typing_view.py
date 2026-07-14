@@ -142,15 +142,54 @@ def main():
                 ch = row                       # "space" / "shift"
             char_of[(fng, act)] = str(ch)
 
-    z = np.load("out/final.npz", allow_pickle=True)
+    # THE GAUNTLET THE HAND IS PRESSING AGAINST -- at its REAL thicknesses.
+    #
+    # THE USER: "note you've switch render type from the animation of each key press to a static
+    # hand now." Quite so: the printable structure was going into a still and the typing animation
+    # was still showing the OLD uniform-thickness ESO frame. They are the same picture and there is
+    # no reason to have to choose. So the animation loads whichever structure is newest, and draws
+    # it as TUBES at their own radii -- because in a SIZED structure the radius IS the load, and a
+    # thick trunk tapering into thin braces is the hierarchy the eye reads as bone.
+    import os
+
+    from scripts.lattice_view import tubes
+
+    src = next(p for p in ("out/printable.npz", "out/sized.npz", "out/final.npz")
+               if os.path.exists(p))
+    z = np.load(src, allow_pickle=True)
     nodes, bars = z["nodes"], [tuple(b) for b in z["bars"]]
     live = [int(e) for e in z["live"]]
-    gx, gy, gz = [], [], []
-    for e in live:
-        a, b = nodes[bars[e][0]], nodes[bars[e][1]]
-        gx += [float(a[0]), float(b[0]), None]
-        gy += [float(a[1]), float(b[1]), None]
-        gz += [float(a[2]), float(b[2]), None]
+    radii = z["radii"] if "radii" in z.files else np.full(len(live), 9e-4)
+    # colour by radius RANK: in a sized structure the fat struts ARE the ones carrying the load,
+    # so this is the load map, and it needs no second FEM solve to draw.
+    order = np.empty(len(radii))
+    order[np.argsort(radii)] = np.arange(len(radii))
+    g = tubes(nodes, bars, live, {e: float(order[k]) for k, e in enumerate(live)}, radii)
+    gauntlet = dict(x=[float(v) for v in g.x], y=[float(v) for v in g.y],
+                    z=[float(v) for v in g.z],
+                    i=[int(v) for v in g.i], j=[int(v) for v in g.j], k=[int(v) for v in g.k],
+                    intensity=[float(v) for v in g.intensity])
+    # WHERE THE PRINTER NEEDS A PILLAR -- and DRAWN AS A PILLAR, not as a dot.
+    #
+    # A dot at the node says nothing: the whole question the user asked is "how many supports, and
+    # can I live with them", and the answer is the COLUMN OF PLASTIC that has to run from the bed up
+    # to that node and then be snapped off. So draw that column. A forest of them is the honest
+    # picture of "too many supports"; a handful is the honest picture of "fine".
+    props = [int(i) for i in z["pillars"]] if "pillars" in z.files else []
+    px, py, pz = [], [], []
+    if props and "build_dir" in z.files:
+        d = np.asarray(z["build_dir"], float)
+        d = d / np.linalg.norm(d)
+        used = sorted({i for e in live for i in bars[e]})
+        bed = min(float(nodes[i] @ d) for i in used)
+        for i in props:
+            a = nodes[i]
+            foot = a - (float(a @ d) - bed) * d          # straight down the build direction, to the bed
+            px += [float(a[0]), float(foot[0]), None]
+            py += [float(a[1]), float(foot[1]), None]
+            pz += [float(a[2]), float(foot[2]), None]
+    print(f"  gauntlet: {src}, {len(live)} struts, "
+          f"{radii.min()*1e3:.2f}-{radii.max()*1e3:.2f} mm, {len(props)} pillars")
 
     frames = []
     print(f"posing the hand into each of the {sum(len(v) for v in wired.values())} wired presses\n")
@@ -181,7 +220,11 @@ def main():
     payload = dict(
         frames=frames,
         rest=[rest_b[0], rest_b[1], rest_b[2]],
-        gauntlet=[gx, gy, gz],
+        gauntlet=gauntlet,
+        pillars=[px, py, pz],
+        n_pillars=len(props),
+        mass_g=float(z["mass"]) if "mass" in z.files else None,
+        struts=len(live),
         camera=dict(eye=[float(v) for v in eye], up=[float(v) for v in e_d]),
     )
     with open("out/typing.json", "w") as fh:

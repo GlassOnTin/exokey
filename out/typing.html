@@ -1,0 +1,174 @@
+<meta charset="utf-8">
+<title>ExoKey — watch it type</title>
+<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+<style>
+  body { margin:0; font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif; color:#1a1a1a;
+         background:#fff; }
+  header { padding:10px 18px; border-bottom:1px solid #e5e5e5; display:flex; gap:16px;
+           align-items:center; flex-wrap:wrap; }
+  h1 { font-size:15px; margin:0 10px 0 0; font-weight:600; }
+  button { font:inherit; padding:4px 12px; border:1px solid #ccc; background:#fff;
+           border-radius:5px; cursor:pointer; }
+  button:hover { background:#f2f2f2; }
+  .k { color:#666; } .v { font-variant-numeric:tabular-nums; font-weight:600; }
+  #keycap { font:700 40px/1 ui-monospace,Menlo,monospace; width:64px; height:64px;
+            display:flex; align-items:center; justify-content:center; border-radius:10px;
+            border:2px solid #ddd; background:#fafafa; color:#111; text-transform:uppercase; }
+  #wrap { display:grid; grid-template-columns: 300px 1fr; height:calc(100vh - 108px); }
+  @media (max-width:820px){ #wrap { grid-template-columns:1fr; } }
+  #side { padding:16px 18px; border-right:1px solid #eee; overflow:auto; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  td { padding:3px 6px; border-bottom:1px solid #f2f2f2; }
+  td.c { font:700 15px ui-monospace,monospace; text-transform:uppercase; width:24px; }
+  td.n { text-align:right; font-variant-numeric:tabular-nums; color:#666; }
+  tr.on { background:#fff4e6; }
+  .note { padding:6px 18px; color:#666; font-size:12px; border-bottom:1px solid #f0f0f0; }
+  .bar { height:5px; background:#e8590c; border-radius:3px; }
+</style>
+<header>
+  <h1>ExoKey — watch it type</h1>
+  <div id="keycap">–</div>
+  <span class="k"><span class="v" id="fng">–</span> <span id="act"></span></span>
+  <span class="k">effort <span class="v" id="eff">–</span></span>
+  <span class="k">travel <span class="v" id="trv">–</span></span>
+  <span class="k">residual <span class="v" id="res">–</span></span>
+  <span class="k" id="dev-info" style="margin-left:auto"></span>
+  <button id="play">⏸ pause</button>
+  <button id="rock">⏸ rotation</button>
+</header>
+<div class="note">
+  Each pose is <b>derived</b>, not drawn: the fingertip is pushed one switch-travel along that
+  action's own direction, and the joint angles come from the pad <b>Jacobian</b> — the same one the
+  effort model uses. <b>Residual</b> is how much of the required joint torque the muscles fail to
+  produce; 0% means the digit can really do it. The gauntlet is drawn at <b>the radius the physics
+  chose for each strut</b> — thick where the load runs, thin where it does not. The red lines are the
+  <b>sacrificial pillars</b> — the columns the printer has to run up from the bed and you snap
+  off. Everything else holds itself up.
+</div>
+<div id="wrap">
+  <div id="side"><table id="tbl"></table></div>
+  <div id="dev"></div>
+</div>
+<script>
+let D = null, i = 0, playing = true, timer = null;
+let rocking = true, rockT = 0, dragged = 0, cam0 = null;
+
+function rot(v, k, a) {
+  const c = Math.cos(a), s = Math.sin(a);
+  const kd = k[0]*v[0] + k[1]*v[1] + k[2]*v[2];
+  const kx = [k[1]*v[2]-k[2]*v[1], k[2]*v[0]-k[0]*v[2], k[0]*v[1]-k[1]*v[0]];
+  return [v[0]*c + kx[0]*s + k[0]*kd*(1-c),
+          v[1]*c + kx[1]*s + k[1]*kd*(1-c),
+          v[2]*c + kx[2]*s + k[2]*kd*(1-c)];
+}
+
+// ⚠ DO NOT RE-PLOT THE SCENE TO CHANGE ONE HAND.
+//
+// draw() used to call Plotly.react with the full layout -- INCLUDING scene.camera. That RESETS the
+// camera to its base angle on every pose change, undoing whatever the rock had done, and the rock
+// then moves it again 60 ms later. The result is a camera snap-back twelve times a cycle, plus a
+// full re-plot of the WebGL scene: the user saw it immediately as "a big flicker as each pose
+// changes".
+//
+// Only ONE trace changes between poses -- the pressed hand. The gauntlet does not move (it is the
+// fixed thing being pressed against) and neither does the rest posture. So restyle THAT ONE TRACE
+// and leave the layout, and therefore the camera, entirely alone.
+let plotted = false;
+
+function draw(k) {
+  const f = D.frames[k];
+  document.getElementById('keycap').textContent = f.char;
+  document.getElementById('keycap').style.borderColor = f.colour;
+  document.getElementById('fng').textContent = f.finger;
+  document.getElementById('act').textContent = '· ' + f.action;
+  document.getElementById('eff').textContent = f.effort.toExponential(2);
+  document.getElementById('trv').textContent = f.travel_mm.toFixed(2) + ' mm';
+  document.getElementById('res').textContent = (f.residual * 100).toFixed(1) + '%';
+  for (const tr of document.querySelectorAll('#tbl tr'))
+    tr.className = (+tr.dataset.i === k) ? 'on' : '';
+
+  if (!plotted) {
+    plotted = true;
+    const G = D.gauntlet;
+    Plotly.newPlot('dev', [
+      // THE GAUNTLET, AT ITS REAL THICKNESSES. It does NOT move -- it is the fixed thing the
+      // finger presses against. Drawn as tubes rather than lines because in a SIZED structure the
+      // radius IS the load: a thick trunk tapering into thin braces is the hierarchy the eye reads
+      // as bone, and drawing every strut the same width throws that away.
+      { type:'mesh3d', x:G.x, y:G.y, z:G.z, i:G.i, j:G.j, k:G.k,
+        intensity:G.intensity, colorscale:[[0,'#0d0887'],[0.1,'#46039f'],[0.2,'#7201a8'],[0.3,'#9c179e'],[0.4,'#bd3786'],[0.5,'#d8576b'],[0.6,'#ed7953'],[0.7,'#fb9f3a'],[0.8,'#fdca26'],[1,'#f0f921']], cmin:0, cmax:1,
+        showscale:false, flatshading:true,
+        lighting:{ambient:0.48, diffuse:0.75, specular:0.40, roughness:0.35, fresnel:0.15},
+        lightposition:{x:2000, y:-1200, z:1800}, hoverinfo:'skip' },
+      // WHERE THE PRINTER NEEDS A PROP. Not hidden -- the whole point is that you can see how few
+      // there are and where they land.
+      { type:'scatter3d', x:D.pillars[0], y:D.pillars[1], z:D.pillars[2], mode:'lines',
+        line:{color:'#e03131', width:1}, opacity:0.45, hoverinfo:'skip' },
+      // where the hand RESTS -- so you can see how far the pressing digit has actually moved
+      { type:'scatter3d', x:D.rest[0], y:D.rest[1], z:D.rest[2], mode:'lines',
+        line:{color:'#e6ded6', width:7}, hoverinfo:'skip' },
+      // the hand, pressed -- the ONLY thing that changes
+      { type:'scatter3d', x:f.bones[0], y:f.bones[1], z:f.bones[2], mode:'lines',
+        line:{color:f.colour, width:9}, hoverinfo:'skip' },
+    ], {
+      margin:{t:6,l:0,r:0,b:0}, template:'plotly_white', showlegend:false, uirevision:'keep',
+      scene:{ aspectmode:'data',
+              xaxis:{visible:false}, yaxis:{visible:false}, zaxis:{visible:false},
+              camera:{ eye:{x:D.camera.eye[0], y:D.camera.eye[1], z:D.camera.eye[2]},
+                       up:{x:D.camera.up[0], y:D.camera.up[1], z:D.camera.up[2]},
+                       center:{x:0,y:0,z:0} } }
+    }, {displayModeBar:false});
+    return;
+  }
+  Plotly.restyle('dev', {
+    x: [f.bones[0]], y: [f.bones[1]], z: [f.bones[2]], 'line.color': [f.colour],
+  }, [3]);
+}
+
+fetch('typing.json?_=' + Date.now()).then(r => r.json()).then(d => {
+  D = d;
+  const t = document.getElementById('tbl');
+  const emax = Math.max(...D.frames.map(f => f.effort));
+  t.innerHTML = D.frames.map((f, k) =>
+    `<tr data-i="${k}"><td class="c" style="color:${f.colour}">${f.char}</td>` +
+    `<td>${f.finger}<br><span style="color:#999">${f.action}</span></td>` +
+    `<td class="n">${f.effort.toExponential(1)}` +
+    `<div class="bar" style="width:${Math.max(3, 100*f.effort/emax)}%;background:${f.colour}">` +
+    `</div></td></tr>`).join('');
+  for (const tr of t.querySelectorAll('tr'))
+    tr.onclick = () => { playing = false;
+                         document.getElementById('play').textContent = '▶ play';
+                         draw(i = +tr.dataset.i); };
+  document.getElementById('dev-info').innerHTML =
+    `<b>${D.struts}</b> struts` + (D.mass_g ? ` · <b>${D.mass_g.toFixed(1)} g</b>` : '') +
+    ` · <span style="color:#e03131">${D.n_pillars} pillars</span>`;
+  draw(0);
+  cam0 = { eye:{x:D.camera.eye[0], y:D.camera.eye[1], z:D.camera.eye[2]},
+           up:{x:D.camera.up[0], y:D.camera.up[1], z:D.camera.up[2]} };
+  timer = setInterval(() => { if (playing) draw(i = (i + 1) % D.frames.length); }, 900);
+
+  // DEPTH COMES FROM MOTION. A static projection of a tangle of tubes does not carry the depth;
+  // the eye needs parallax. A rock, not a spin -- the first-person framing is the thing that makes
+  // the device legible.
+  document.getElementById('dev').addEventListener('mousedown', () => { dragged = Date.now(); });
+  setInterval(() => {
+    const gd = document.getElementById('dev');
+    if (!rocking || !cam0 || !gd || !gd.layout) return;
+    if (Date.now() - dragged < 2500) return;
+    const u0 = [cam0.up.x, cam0.up.y, cam0.up.z];
+    const n = Math.hypot(...u0), u = u0.map(v => v / n);
+    rockT += 0.012;
+    const e = rot([cam0.eye.x, cam0.eye.y, cam0.eye.z], u, 0.315 * Math.sin(rockT));
+    Plotly.relayout(gd, {'scene.camera.eye': {x:e[0], y:e[1], z:e[2]}});
+  }, 60);
+});
+
+document.getElementById('play').onclick = () => {
+  playing = !playing;
+  document.getElementById('play').textContent = playing ? '⏸ pause' : '▶ play';
+};
+document.getElementById('rock').onclick = () => {
+  rocking = !rocking;
+  document.getElementById('rock').textContent = rocking ? '⏸ rotation' : '↻ rotation';
+};
+</script>

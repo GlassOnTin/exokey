@@ -20,7 +20,18 @@ from viz.scene import skin_trace, strap_traces, well_traces
 
 
 def tubes(nodes, bars, live, se, r, n=7):
-    """Each surviving strut as a round tube, coloured by how hard it is working.
+    """Each surviving strut as a round tube, AT ITS OWN RADIUS, coloured by how hard it is working.
+
+    ⚠ `r` MAY BE A SINGLE RADIUS OR ONE PER STRUT, AND THAT DISTINCTION IS THE WHOLE POINT.
+    The user: "The current best skeleton still looks a bit unnatural (zig-zaggy and
+    not-natural-intuitive-entropy) which is my guide to say we can still further converge."
+
+    They were looking at an ESO structure. ESO is BINARY -- a strut is in or out -- so every
+    surviving strut is forced to the SAME thickness. There is no hierarchy: no thick trunk tapering
+    into thin braces. That hierarchy IS the "natural entropy" the eye is looking for in a bone, and
+    ESO has no radius to vary. The gradient sizer does, and spreads them ~6x. Drawing them all the
+    same width threw that away and made a properly-optimised structure look like a badly-optimised
+    one.
 
     ⚠ COLOUR BY RANK, NOT BY VALUE. The strain-energy density spans ~1e15 across these struts, so
     a LINEAR colour map over it paints everything below the top few per cent flat black -- which
@@ -36,7 +47,10 @@ def tubes(nodes, bars, live, se, r, n=7):
     rank = np.empty(len(vals))
     rank[np.argsort(vals)] = np.arange(len(vals)) / max(len(vals) - 1, 1)
     rank_of = {e: float(rank[k]) for k, e in enumerate(live)}
-    for e in live:
+    radii = np.asarray(r, float)
+    per_strut = radii.ndim > 0 and radii.size == len(live)
+    for kk, e in enumerate(live):
+        rr = float(radii[kk]) if per_strut else float(radii)
         a, b = nodes[bars[e][0]], nodes[bars[e][1]]
         ax = b - a
         L = np.linalg.norm(ax)
@@ -51,7 +65,7 @@ def tubes(nodes, bars, live, se, r, n=7):
         base = len(V)
         for k in range(n):
             th = 2 * np.pi * k / n
-            d = r * (np.cos(th) * u + np.sin(th) * v)
+            d = rr * (np.cos(th) * u + np.sin(th) * v)
             V += [a + d, b + d]
         C += [rank_of[e]] * (2 * n)
         for k in range(n):
@@ -192,39 +206,7 @@ def main():
     # than a full spin, because the first-person framing (looking down at the back of your own
     # hand) is the thing that makes the device legible, and a full orbit throws it away. Dragging
     # still works and pauses it.
-    orbit = """
-    var gd = document.getElementById('{plot_id}');
-    var base = gd.layout.scene.camera, t = 0, spinning = true, paused = 0;
-    var e0 = base.eye, up = base.up;
-    var u = [up.x, up.y, up.z];
-    var n = Math.hypot(u[0], u[1], u[2]); u = [u[0]/n, u[1]/n, u[2]/n];
-    function rot(v, k, a) {   // Rodrigues: rotate v about unit axis k by angle a
-      var c = Math.cos(a), s = Math.sin(a);
-      var kd = k[0]*v[0] + k[1]*v[1] + k[2]*v[2];
-      var kx = [k[1]*v[2]-k[2]*v[1], k[2]*v[0]-k[0]*v[2], k[0]*v[1]-k[1]*v[0]];
-      return [v[0]*c + kx[0]*s + k[0]*kd*(1-c),
-              v[1]*c + kx[1]*s + k[1]*kd*(1-c),
-              v[2]*c + kx[2]*s + k[2]*kd*(1-c)];
-    }
-    gd.on('plotly_relayouting', function() { paused = Date.now(); });
-    setInterval(function() {
-      if (!spinning || Date.now() - paused < 2500) return;
-      t += 0.012;
-      var a = 0.315 * Math.sin(t);                       // +/- 18 degrees
-      var e = rot([e0.x, e0.y, e0.z], u, a);
-      Plotly.relayout(gd, {'scene.camera.eye': {x: e[0], y: e[1], z: e[2]}});
-    }, 60);
-    var b = document.createElement('button');
-    b.textContent = 'pause rotation';
-    b.style.cssText = 'position:absolute;top:8px;right:16px;z-index:9;font:13px sans-serif;' +
-                      'padding:4px 10px;border:1px solid #ccc;border-radius:5px;background:#fff;' +
-                      'cursor:pointer';
-    b.onclick = function() {
-      spinning = !spinning;
-      b.textContent = spinning ? 'pause rotation' : 'resume rotation';
-    };
-    document.body.appendChild(b);
-    """
+    orbit = open("scripts/_orbit.js").read()
     fig.write_html("out/final.html", include_plotlyjs="cdn", post_script=orbit)
     print(f"  {len(live)} struts, {mass*1000:.1f} g, buttons {w*1e6:.0f} um, "
           f"strap {tension:.2f} N")

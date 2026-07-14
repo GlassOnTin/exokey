@@ -161,7 +161,7 @@ class Sizer:
 
 def size(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, strap_k,
          gate=0.5e-3, mat="cf_pa12", r_min=1e-6, r_max=2.5e-3, r0=9e-4,
-         steps=40, pnorm=8.0, eta=0.5, on_step=None):
+         steps=22, pnorm=8.0, eta=0.5, on_step=None):
     """Minimise mass subject to the deflection gate. Returns (radii, mass, worst, live).
 
     OPTIMALITY CRITERIA, derived rather than invented. At a KKT point, for any strut not sitting on
@@ -298,8 +298,11 @@ def size(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, strap_k,
             return max(float(np.linalg.norm(Un[c][6 * idx[buttons[f]]:6 * idx[buttons[f]] + 3]))
                        for c, (f, _a, _l) in enumerate(cases))
 
+        # 14 steps, not 24: this is a LOG bisection over 28 decades, so 14 halvings already pins
+        # mu to 0.002 of a decade. The extra ten were ten full factorisations per outer step, for
+        # precision nobody could use.
         lo, hi = 1e-14, 1e14
-        for _ in range(24):
+        for _ in range(14):
             mid = np.sqrt(lo * hi)
             if true_worst(trial(mid)) > gate:
                 lo = mid                    # too floppy: needs more material
@@ -318,7 +321,8 @@ def size(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, strap_k,
 
 
 def size_and_prune(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, strap_k,
-                   gate=0.5e-3, mat="cf_pa12", r_print=2.5e-4, rate=0.25, on_step=None):
+                   gate=0.5e-3, mat="cf_pa12", r_print=2.5e-4, rate=0.25, on_step=None,
+                   build_dir=None):
     """SIZE, THEN PRUNE, THEN RE-SIZE. The only version of this that yields a buildable structure.
 
     ⚠ PURE SIZING DOES NOT PRODUCE A TOPOLOGY. It produces a CONTINUUM of radii: the run that
@@ -336,35 +340,128 @@ def size_and_prune(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, str
     and stop when deletion can no longer be paid for. Every intermediate design meets the gate by
     construction, so there is never a moment where the answer depends on something unbuildable.
     """
-    from structure.lattice import connected
+    from structure.lattice import connected, protect_support, repair_support
 
-    live = list(range(len(bars)))
+    # ⚠ PRUNE THE DOMAIN TO THE ANCHORED COMPONENT *BEFORE* THE FIRST SOLVE, NOT AFTER IT.
+    # `connected` only ran inside the prune loop, so the very first size() saw whatever ground()
+    # handed over. Dropping the ~100 bars a printer cannot lay severed one button from the anchors,
+    # and a floating button is a RIGID-BODY MODE: it deflected 10 km, the gate was "missed", and
+    # the run reported "no printable structure meets the gate" -- a modelling failure dressed up as
+    # a finding about the device.
+    live, ok = connected(bars, list(range(len(bars))), anchor_k, buttons, len(nodes))
+    if not ok:
+        raise ValueError("a button is not connected to any anchor -- the DOMAIN is broken")
+    if build_dir is not None:
+        live = repair_support(nodes, bars, live, build_dir)
     best = None
 
+    rho = MATERIALS[mat]["rho"]
+    nodes = np.asarray(nodes, float)
+    LEN = np.linalg.norm(nodes[[b[1] for b in bars]] - nodes[[b[0] for b in bars]], axis=1)
+    # THE SIZING FLOOR IS NOT THE PRINTING FLOOR. The sizer needs a floor low enough that the radii
+    # still span decades (or `argsort(r)` has nothing to rank and the pruner deletes at random), and
+    # high enough not to be numerical dust. 0.25 mm is the value that produced the known-good
+    # 921-strut / 4.79 g answer. The NOZZLE is applied to what gets BUILT, not to what gets SIZED.
+    r_size = min(2.5e-4, r_print)
+
+    # ⚠ THE NOZZLE BOUND MUST BE A *DELETION THRESHOLD*, NOT A FLOOR THE SIZER SIZES AGAINST, AND
+    # NOT A CLAMP APPLIED AFTERWARDS. I got this wrong in both directions, and each way failed in
+    # its own characteristic manner:
+    #
+    #   r_min = r_print  ->  every idle strut parks at EXACTLY 0.4 mm. The radii stop spanning
+    #                        decades and pile up on the floor, so `argsort(r)` has nothing left to
+    #                        sort by and the pruner DELETES AT RANDOM among the idle struts.
+    #                        Deleting a quarter of them made the structure HEAVIER (19.97 -> 30.0 g),
+    #                        and 13 g of the 20 g "answer" was floor material under struts doing no
+    #                        work. This file's own docstring had already warned about it: "r_min MUST
+    #                        BE ESSENTIALLY ZERO, OR THERE IS NO TOPOLOGY."
+    #
+    #   size at 1e-5,     -> the sizer minimises the UNCLAMPED mass, so its optimum is precisely a
+    #   then clamp up        haze of thousands of hairs -- which the clamp then fattens to 0.4 mm
+    #                        each. It optimised one objective and paid for another: 66.7 g.
+    #
+    # The resolution is that a strut the sizer drives to 10 um is not a thin strut. IT IS A STRUT
+    # THE SIZER IS ASKING TO DELETE. So: size against the numerical floor (the radii span decades,
+    # the ranking is real), and DELETE what comes out below the nozzle. Converged, every surviving
+    # strut is at or above 0.4 mm BECAUSE THE PHYSICS PUT IT THERE -- nothing is clamped, nothing is
+    # parked, and the mass is honest. That is also what finally forces the FEW, THICK, CHUNKY
+    # members that manufacture was supposed to force all along.
     for step in range(40):
         sb = [bars[e] for e in live]
         r, m, w, _ = size(nodes, sb, buttons, cases, anchor_k, anchor_n, strap_n, strap_k,
-                          gate=gate, mat=mat, r_min=r_print, r0=max(9e-4, r_print * 2))
+                          gate=gate, mat=mat, r_min=r_size, r0=max(9e-4, 2 * r_size))
         if not np.isfinite(w) or w > gate:
             break
+
+        # THE PRINTABLE MASS OF THIS TOPOLOGY: what it costs with every sub-nozzle strut fattened UP
+        # to the nozzle. Fattening only ADDS material, so it only STIFFENS, so the gate still holds
+        # by construction -- and it is what you would actually build.
+        #
+        # ⚠ FATTEN. DO NOT DELETE. On the known-good 4.79 g answer, 788 of its 921 struts (86%) are
+        # thinner than the 0.4 mm nozzle AND THEY CARRY 53% OF THE MASS. They are not numerical dust
+        # for the pruner to sweep up -- they are a FINE NET DOING REAL WORK, which is exactly what a
+        # minimum-mass shell wants to be. Delete them and the survivors have to be pinned at r_max to
+        # hold the same gate: 284 g, from a 38 g start. Fatten them and it costs 1.6x: 7.54 g.
+        rp = np.maximum(r, r_print)
+        mp = float(rho * np.pi * np.sum(rp ** 2 * LEN[live]))
         # ⚠ KEEP THE LIGHTEST, NOT THE LAST. Pruning is not monotone in mass -- the sizing
         # sub-problem lands in a different place each time the topology changes -- so the last
         # design is very often NOT the best one. Overwriting unconditionally reported 12.89 g
         # when 4.79 g was sitting three steps back.
-        if best is None or m < best[2]:
-            best = (list(live), r.copy(), m, w)
+        if best is None or mp < best[2]:
+            best = (list(live), rp.copy(), mp, w)
         if on_step:
-            on_step(step, len(live), m, w)
+            on_step(step, len(live), mp, w)
 
-        # delete the thinnest -- but never one the buttons still need
+        # ⚠ AND THE DELETION MUST STAY RATE-BASED, on the THINNEST, unconditionally.
+        # I tried making it "delete only what the sizer drove to its numerical floor" -- and the
+        # sizer never drives ANYTHING there. It does not abandon struts; it just makes them thin.
+        # So nothing was ever deleted, the whole 4283-bar domain survived, and with a nozzle floor
+        # under every one of them the answer was 22.35 g of UNIFORM 0.40 mm strut: pure floor.
+        #
+        # With a nozzle floor, DELETION IS THE ONLY THING THAT REDUCES MASS -- the sizer cannot
+        # express "I want this gone", it can only make a strut as thin as the floor allows. So the
+        # pruner has to do it, and it has to keep doing it.
         order = np.argsort(r)
         n_cut = max(1, int(rate * len(live)))
-        drop = {live[int(i)] for i in order[:n_cut]}
+        keep = protect_support(nodes, bars, live, build_dir) if build_dir is not None else set()
+        drop = set()
+        for i in order:
+            if len(drop) >= n_cut:
+                break
+            if live[int(i)] not in keep:
+                drop.add(live[int(i)])
         trial = [e for e in live if e not in drop]
         trial, ok = connected(bars, trial, anchor_k, buttons, len(nodes))
-        if not ok or len(trial) < 12 or len(trial) == len(live):
+        if build_dir is not None and ok:
+            # give back only struts THIS cut removed, so the trial can never grow -- the
+            # `len(trial) == len(live)` guard below then still terminates the loop.
+            trial = repair_support(nodes, bars, trial, build_dir, pool=live)
+            trial, ok = connected(bars, trial, anchor_k, buttons, len(nodes))
+        if not ok or len(trial) < 12 or len(trial) >= len(live):
             break
         live = trial
+
+    # ⚠ AND FINALLY: RE-SIZE THE CONVERGED TOPOLOGY *WITH THE NOZZLE AS THE REAL LOWER BOUND*.
+    # The clamp above is only a projection of the unconstrained optimum -- it is feasible (fatter =
+    # stiffer, so the gate still holds) but it is not OPTIMAL for the bounded problem. Now that the
+    # topology has stopped moving, the OC can redistribute AROUND the floor and give the slack back.
+    # Whichever is lighter wins, and the clamp is always there as a guaranteed fallback.
+    if best is not None:
+        sb = [bars[e] for e in best[0]]
+        r2, m2, w2, _ = size(nodes, sb, buttons, cases, anchor_k, anchor_n, strap_n, strap_k,
+                             gate=gate, mat=mat, r_min=r_print, r0=max(9e-4, 2 * r_print))
+        if np.isfinite(w2) and w2 <= gate and m2 < best[2]:
+            best = (best[0], r2, m2, w2)
+            if on_step:
+                on_step(99, len(best[0]), m2, w2)
+
+    # A NODE WITH NOTHING UNDER IT IS NOT AN ERROR -- IT IS A SACRIFICIAL PILLAR, and pillars are
+    # the currency the user actually named ("without too many supports"). The pruner has already
+    # kept every down-strut the DOMAIN could offer, for free, because a strut that holds a node up
+    # is STRUCTURE and not scaffolding: it is in the FEM, it carries load, and its mass is counted.
+    # What is left over is what genuinely has to be propped off the bed and snapped away, and the
+    # caller counts it with `unsupported(nodes, bars, live, build_dir)`.
 
     if best is None:
         return [], np.zeros(0), float("inf"), float("inf")

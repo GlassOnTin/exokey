@@ -111,7 +111,148 @@ def _allowed(h, V, N, L, e_o):
     return ~(is_palm & ((N @ e_o) < PALMAR_CUTOFF))
 
 
-def ground(h, q, hug=0.004, layer=None, pitch=0.004, reach=2.2, press_N=0.196):
+NOZZLE_R = P("NOZZLE_R", 4.0e-4, "m", Source.SPEC,
+             "Minimum printable strut radius on FDM: 0.4 mm radius = 0.8 mm across = two perimeter "
+             "passes with a 0.4 mm nozzle. NOT a preference -- a 0.4 mm nozzle cannot lay a thinner "
+             "bead. Measured, the unconstrained sized structure had 86% of its struts BELOW this, "
+             "carrying 53% of the material: it was not marginally unprintable, most of it could "
+             "not exist.")
+
+OVERHANG = P("OVERHANG", 45.0, "deg", Source.LITERATURE,
+             "The classic FDM self-support limit. For a strut of unit axis u built along d that is "
+             "|u.d| >= sin(45 deg) = 0.707 -- a strut lying within 45 deg of the build PLANE is an "
+             "overhang and CANNOT hold anything up. It may still be printed as a BRIDGE (below).")
+
+BRIDGE_MAX = P("BRIDGE_MAX", 0.010, "m", Source.SPEC,
+               "The longest shallow strut FDM will span with nothing underneath it. A bridge is an "
+               "extrusion laid between two already-printed anchors, and with part cooling a thin "
+               "one holds to ~10 mm before it sags. This is what makes the rule TOPOLOGICAL rather "
+               "than DIRECTIONAL, and getting it wrong cost a whole run: banning every shallow "
+               "strut outright banned all lateral bracing, and a bundle of parallel columns has no "
+               "shear stiffness at all -- the gate went unmet by any structure in the domain. FDM "
+               "does not forbid horizontal material. It forbids UNSUPPORTED material.")
+
+BASE_T = P("BASE_T", 0.003, "m", Source.GUESS,
+           "How deep the 'first layer' is: nodes within this of the lowest point are taken to sit "
+           "on the bed (a brim/raft holds them). Print the gauntlet STANDING ON ITS WRIST, fingers "
+           "up, so the base is the wrist band -- which is also where it anchors and where the strap "
+           "goes. Nothing else in the part touches the bed.")
+
+
+def _tilt(nodes, bars, build_dir):
+    """Per-bar |cos| to the build direction, per-bar length, per-node height along it."""
+    d = np.asarray(build_dir, float)
+    d = d / np.linalg.norm(d)
+    nodes = np.asarray(nodes, float)
+    v = nodes[[b[1] for b in bars]] - nodes[[b[0] for b in bars]]
+    L = np.linalg.norm(v, axis=1)
+    return np.abs(v @ d) / np.maximum(L, 1e-12), L, nodes @ d
+
+
+def _steep(nodes, bars, build_dir):
+    """Which bars are steep enough to HOLD SOMETHING UP (>= 45 deg from the build plane)."""
+    tilt, _L, _h = _tilt(nodes, bars, build_dir)
+    return tilt >= np.sin(np.pi / 2 - np.radians(float(OVERHANG)))
+
+
+def buildable(nodes, bars, build_dir):
+    """The bars FDM can lay down without support: steep enough to self-support, OR short enough to
+    bridge between two anchors that the layers below have already built.
+
+    ⚠ THIS IS A WEAKER RULE THAN "EVERY STRUT MUST BE STEEP", AND THE WEAKER RULE IS THE TRUE ONE.
+    """
+    tilt, L, _h = _tilt(nodes, bars, build_dir)
+    steep = tilt >= np.sin(np.pi / 2 - np.radians(float(OVERHANG)))
+    return steep | (L <= float(BRIDGE_MAX))
+
+
+def unsupported(nodes, bars, live, build_dir):
+    """The nodes of `live` the nozzle could never reach: nothing already-printed beneath them.
+
+    THE PRINTABILITY CONSTRAINT, STATED AS A TOPOLOGICAL ONE. A node can be printed iff it is on
+    the bed, OR at least one LIVE steep bar arrives at it from a STRICTLY LOWER node. Height falls
+    strictly along such a chain, so this purely LOCAL test implies the GLOBAL property by induction:
+    every node is reachable from the bed through already-printed material, and therefore the whole
+    part prints with no support anywhere.
+
+    That is why it can be enforced as a HARD CONSTRAINT and not a penalty -- it is a property of the
+    graph, checkable in O(bars), and repairable (put a down-strut back) rather than merely priced.
+    """
+    steep = _steep(nodes, bars, build_dir)
+    _t, _L, hh = _tilt(nodes, bars, build_dir)
+    used = {i for e in live for i in bars[e]}
+    if not used:
+        return []
+    bed = min(hh[i] for i in used) + float(BASE_T)
+    held = {i for i in used if hh[i] <= bed}
+    for e in live:
+        if steep[e]:
+            a, b = bars[e]
+            held.add(a if hh[a] > hh[b] else b)      # a steep bar holds up its UPPER end
+    return sorted(used - held)
+
+
+def protect_support(nodes, bars, live, build_dir):
+    """The struts that are the ONLY thing holding some node up. Deleting one costs a pillar.
+
+    ⚠ WITHOUT THIS THE PRUNER STALLS, and it stalls silently. It offers up its thinnest struts, the
+    support repair gives back the ones that were somebody's last down-strut, the trial does not
+    shrink, and the loop halts on its own "no progress" guard -- after FOUR steps. The structure
+    then still carries 1685 members, nearly all parked at the nozzle floor, and 9 of its 19.6 g is
+    nothing but that floor. The pruner was not choosing to keep them; it was never able to let go.
+
+    So the deletion candidates are drawn from the struts that are NOT holding anything up. The
+    pruner then makes real progress every step, and what it converges to is the thing manufacture
+    was supposed to force in the first place: FEWER, THICKER members.
+    """
+    steep = _steep(nodes, bars, build_dir)
+    _t, _L, hh = _tilt(nodes, bars, build_dir)
+    used = {i for e in live for i in bars[e]}
+    if not used:
+        return set()
+    bed = min(hh[i] for i in used) + float(BASE_T)
+    holders: dict = {}
+    for e in live:
+        if not steep[e]:
+            continue
+        a, b = bars[e]
+        up = a if hh[a] > hh[b] else b
+        if hh[up] > bed:
+            holders.setdefault(up, []).append(e)
+    return {v[0] for v in holders.values() if len(v) == 1}
+
+
+def repair_support(nodes, bars, live, build_dir, pool=None):
+    """Put back the cheapest down-strut that lets each orphaned node print.
+
+    Exactly the shape of the connectivity repair: the pruner is free to delete anything EXCEPT the
+    last thing holding a node up. So every design it can reach is printable by construction, and
+    there is never an intermediate the answer depends on that nobody could make.
+    """
+    steep = _steep(nodes, bars, build_dir)
+    _t, L, hh = _tilt(nodes, bars, build_dir)
+    pool = range(len(bars)) if pool is None else pool
+    down = {}
+    for e in pool:
+        if not steep[e]:
+            continue
+        a, b = bars[e]
+        up, lo = (a, b) if hh[a] > hh[b] else (b, a)
+        down.setdefault(up, []).append((L[e], e, lo))
+
+    live = set(live)
+    for _ in range(8):
+        orph = unsupported(nodes, bars, sorted(live), build_dir)
+        if not orph:
+            break
+        add = {min(down[i])[1] for i in orph if down.get(i)}
+        if not add - live:
+            break                                     # nothing left to give back
+        live |= add
+    return sorted(live)
+
+
+def ground(h, q, hug=0.004, layer=None, pitch=0.004, reach=2.2, press_N=0.196, build_dir=None):
     """The free-form design space: (nodes, bars, buttons, loads, anchor_k, anchor_n).
 
     `buttons` maps finger -> node index; `loads` maps that node to the force vector the digit
@@ -226,8 +367,62 @@ def ground(h, q, hug=0.004, layer=None, pitch=0.004, reach=2.2, press_N=0.196):
     mid = (a[:, None, :] * (1 - s)[None, :, None] + b[:, None, :] * s[None, :, None])
     clear = skin_tree.query(mid.reshape(-1, 3))[0].reshape(len(pairs), -1).min(axis=1)
     blen = np.linalg.norm(a - b, axis=1)
-    bars = [tuple(p) for p, c, ln in zip(pairs, clear, blen)
-            if c >= 0.8 * hug and ln >= 0.4 * pitch]
+    keep_bar = (clear >= 0.8 * hug) & (blen >= 0.4 * pitch)
+
+    bars = [tuple(p) for p in pairs[keep_bar]]
+
+    # ⚠ MANUFACTURABILITY AS A HARD CONSTRAINT ON THE DOMAIN, NOT A PENALTY ON THE OBJECTIVE.
+    #
+    # THE USER: "the point is to make a structure that can self support as FDM printer layers
+    # aligned with some convenient plane." And, of the same structure: "still looks a bit unnatural
+    # (zig-zaggy and not-natural-intuitive-entropy)."
+    #
+    # THOSE ARE THE SAME PROBLEM. A minimum-mass truss WANTS many thin members -- that is what is
+    # efficient, and it is why the sized structure came out as a net of 0.26 mm hairs (86% of them
+    # thinner than a 0.4 mm nozzle can print). What forces a structure into FEW, THICK, CHUNKY
+    # members is MANUFACTURE. Printability is not a compromise against the optimisation; it is the
+    # thing that makes the answer look like a bone.
+    #
+    # ⚠ AND MY FIRST STATEMENT OF THE RULE WAS WRONG IN A WAY WORTH KEEPING ON THE PAGE. I banned
+    # every strut within 45 deg of the build plane -- and NO STRUCTURE IN THAT DOMAIN COULD MEET THE
+    # DEFLECTION GATE, at any mass. Of course not: a truss whose every member points along one axis
+    # is a bundle of parallel columns, and a bundle of parallel columns has no shear stiffness. I
+    # had not discovered something about the device; I had banned lateral bracing.
+    #
+    # FDM DOES NOT FORBID HORIZONTAL MATERIAL. IT FORBIDS UNSUPPORTED MATERIAL. A short shallow
+    # strut between two nodes the layers below have already built is a BRIDGE, and bridges print.
+    # So the domain drops only the bars that can never be laid at all (shallow AND longer than a
+    # bridge will span), and the real rule -- every node must have something under it -- is a
+    # TOPOLOGICAL one enforced through the pruning (`unsupported`, `repair_support`).
+    # ⚠ AND THE SECOND AND THIRD WRONG VERSIONS, WHICH ARE THE INTERESTING ONES -- BOTH WERE ME
+    # BANNING SOMETHING THAT IS MERELY EXPENSIVE.
+    #
+    # (2) I deleted from the domain every node that no DOMAIN BAR could hold up. It ate all five
+    #     finger wells, in every one of 1000 build directions tried, because a bar reaching a
+    #     fingertip from below would have to pass through the finger, and bars must clear the skin.
+    #
+    #     THE HAND IS NOT IN THE PRINTER. A sacrificial pillar may rise straight through the volume
+    #     the hand will later occupy: it is air at print time and it is snapped off before the hand
+    #     ever arrives. STRUCTURE must clear the flesh; SUPPORT need not. They are subject to
+    #     different constraints because they exist at different times, and conflating the two
+    #     declared a printable part unprintable.
+    #
+    # (3) I then deleted the bars that were shallow AND too long to bridge -- and that severed a
+    #     button's own stalk from the anchors, which the FEM duly reported as a 10 KM deflection
+    #     and the run reported as "no printable structure meets the gate". A modelling failure
+    #     dressed up as a finding about the device.
+    #
+    #     A LONG SHALLOW BAR IS NOT UNPRINTABLE EITHER. It is a bridge that would sag, so you put a
+    #     pillar under it -- which is precisely what a slicer does.
+    #
+    # SO NOTHING IS BANNED FOR PRINTABILITY, BECAUSE NOTHING NEEDS TO BE. Everything is printable
+    # with enough support, and the only honest currency is HOW MANY PILLARS. The one printing rule
+    # that IS binary -- and it is the one that reshapes the answer -- is the nozzle: you cannot lay
+    # a bead thinner than 0.4 mm, however much support you add. That stays a hard bound (r_print).
+    #
+    # `build_dir` is therefore kept for the callers that want to COUNT pillars (`unsupported`,
+    # `buildable`); it no longer removes anything from the design space.
+    _ = build_dir
 
     # THE ANCHOR. The tissue springs (structure/anchor.py) land on their nearest lattice node.
     Pb, Nb, Kb, _Tb = bearing_surface(h, q)

@@ -26,15 +26,24 @@ def main():
     q = h.compose({f: posture(h, f, tp_of(x, f), tm_of(x, f), float(x.get(f"ab_{f}", 0.0)))
                    for f in FINGERS})
 
-    z = np.load("out/final.npz", allow_pickle=True)
+    import os
+
+    src = next(p for p in ("out/printable.npz", "out/sized.npz", "out/final.npz")
+               if os.path.exists(p))
+    z = np.load(src, allow_pickle=True)
     nodes, bars = z["nodes"], [tuple(b) for b in z["bars"]]
     live = [int(e) for e in z["live"]]
-    r = float(BAR_R)
+    # PER-STRUT RADII, not one radius for all of them. A gradient-sized structure has a thick trunk
+    # tapering into thin braces; melting them to a single rod prints a DIFFERENT DEVICE from the one
+    # that was analysed -- and throws away the very hierarchy that makes it look like bone.
+    r = z["radii"] if "radii" in z.files else float(BAR_R)
 
     struts = [(nodes[bars[e][0]], nodes[bars[e][1]]) for e in live]
     boxes = well_boxes(h, q, FINGERS)
-    print(f"  {len(struts)} struts + {len(boxes)} well plates  "
-          f"(rod r = {r*1000:.1f} mm, fillet = {BLEND*1000:.1f} mm, voxel = {VOXEL*1000:.1f} mm)")
+    rr = np.atleast_1d(np.asarray(r, float))
+    print(f"  {src}: {len(struts)} struts + {len(boxes)} well plates")
+    print(f"  rod r = {rr.min()*1000:.2f}-{rr.max()*1000:.2f} mm, fillet = {BLEND*1000:.1f} mm, "
+          f"voxel = {VOXEL*1000:.1f} mm")
 
     f, o, v = field(struts, boxes, r)
     print(f"  field {f.shape} = {f.size/1e6:.1f} M voxels")
@@ -53,7 +62,7 @@ def main():
     # the beam model is a wire diagram -- it counts A*L per strut and knows nothing about the
     # MATERIAL AT THE JOINTS, where three or four rods meet and their volumes overlap. It
     # double-counts the overlaps (making it heavy) and it misses the fillets (making it light).
-    bone = float(z["bone_g"])
+    bone = float(z["bone_g"]) if "bone_g" in z.files else float(z["mass"])
     print(f"\n  the beam model said {bone:.1f} g. The solid is {m.volume*rho*1000:.1f} g "
           f"({100*(m.volume*rho*1000/bone - 1):+.0f}%).")
     print(f"  A wire diagram counts A*L per strut. It DOUBLE-COUNTS the volume where rods overlap")

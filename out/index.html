@@ -1,0 +1,32 @@
+<meta charset="utf-8"><title>ExoKey — what is being served</title>
+<style>
+ body{font:15px/1.7 -apple-system,Segoe UI,Roboto,sans-serif;max-width:44rem;margin:3rem auto;
+      padding:0 1.5rem;color:#1a1a1a}
+ h1{font-size:1.15rem} a{color:#12639b} li{margin:.35rem 0} code{color:#666;font-size:.85em}
+ .k{color:#666;font-size:.9em}
+</style>
+<h1>ExoKey</h1>
+<ul>
+  <li><a href="typing.html">typing.html</a> — <b>watch it type</b>. The hand posed into every
+      wired press: the character, the direction, the muscle effort, and whether the digit can
+      actually balance the key (residual). Every pose derived from the pad Jacobian. The gauntlet
+      is the <b>FDM-printable</b> one, drawn at the radius the physics chose for each strut, with
+      the sacrificial support pillars marked in red.</li>
+  <li><a href="sized.html">sized.html</a> — the gradient-sized structure, still: bone, skin, wells,
+      straps, and the nodes the strap actually pulls on.</li>
+  <li><a href="anim.html">anim.html</a> — <b>the whole optimisation, replayed</b>. Scrub or play
+      through every generation: the front forming, and the knee design's structure growing with it.</li>
+  <li><a href="progress.html">progress.html</a> — <b>the optimiser, live</b>. Pareto front + the
+      knee design's grown gauntlet, streaming off the cloud box.</li>
+  <li><a href="final.html">final.html</a> — the ESO structure (superseded by the sized one, kept
+      for comparison: binary keep/delete, so every strut is forced to the same thickness).</li>
+  <li><a href="pareto.html">pareto.html</a> — the co-optimised front, as landed.</li>
+</ul>
+<p class="k">Artefacts: <code>gauntlet.stl</code> (the printable solid — 20.3 g, watertight,
+   clears the skin by 3.09 mm), <code>printable.npz</code> (921 struts, 6.93 g in the beam model,
+   every strut ≥ the 0.4 mm nozzle, 499 µm at the wells against a 500 µm gate),
+   <code>wire.npz</code> (the welded-wire build), <code>sized.npz</code>, <code>final.npz</code>,
+   <code>pareto.pkl</code>, <code>surrogate.npz</code> / <code>tier2.pkl</code> (the evidence the
+   coarse growth ranks the real one).</p>
+<p class="k">Superseded renders were deleted (all regenerable from <code>scripts/</code>).
+   Invalidated <em>results</em> were archived, not deleted — see <code>out_archive/</code>.</p>

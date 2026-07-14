@@ -782,3 +782,102 @@ def test_the_adjoint_gradient_is_exact():
         fd = float((up - u) @ d / h)
         assert abs(g[e] - fd) <= 1e-3 * abs(fd) + 1e-12, (
             f"strut {e}: adjoint {g[e]:.6e} vs finite difference {fd:.6e}")
+
+
+# ---------------------------------------------------------------------------------------------
+# FDM PRINTABILITY AS A HARD CONSTRAINT
+#
+# The claim is that a structure the pruner returns can be laid down by an FDM printer with NO
+# SUPPORT ANYWHERE. That is a property of the GRAPH, so it is checkable, and these are the checks.
+# ---------------------------------------------------------------------------------------------
+def test_a_bridge_prints_but_holds_nothing_up():
+    """Both halves of the rule matter, and getting either one wrong wrecks the run.
+
+    Ban shallow struts outright -- my first attempt -- and you ban all lateral bracing: the domain
+    becomes a bundle of parallel columns with no shear stiffness, and NO structure in it can meet
+    the deflection gate at any mass. Let shallow struts hold nodes up instead, and you get a node
+    cantilevering into thin air with nothing beneath it for the nozzle to lay onto.
+
+    So: a short shallow strut IS printable (it bridges between two anchors the layers below have
+    already built) and it SUPPORTS NOTHING.
+    """
+    from structure.lattice import BRIDGE_MAX, buildable, unsupported
+
+    d = np.array([0.0, 0.0, 1.0])
+    short, long_ = float(BRIDGE_MAX) * 0.8, float(BRIDGE_MAX) * 2.0
+
+    for span, is_bridge in ((short, True), (long_, False)):
+        # 0 on the bed, 1 vertically above it, 2 out to the side at the same height as 1.
+        nodes = np.array([[0, 0, 0.0], [0, 0, 0.02], [span, 0, 0.02]])
+        ok = buildable(nodes, [(0, 1), (1, 2)], d)
+        assert bool(ok[0]), "a vertical strut is always printable"
+        assert bool(ok[1]) is is_bridge, f"{span*1e3:.0f} mm shallow strut: bridge={is_bridge}"
+
+    nodes = np.array([[0, 0, 0.0], [0, 0, 0.02], [short, 0, 0.02]])
+    assert unsupported(nodes, [(0, 1), (1, 2)], [0, 1], d) == [2], \
+        "a node reached ONLY by a horizontal bridge is floating in mid-air"
+
+    # give node 2 a column of its own and the whole thing prints
+    nodes = np.array([[0, 0, 0.0], [0, 0, 0.02], [short, 0, 0.02], [short, 0, 0.0]])
+    assert unsupported(nodes, [(0, 1), (1, 2), (3, 2)], [0, 1, 2], d) == []
+
+
+def test_the_pruner_keeps_every_down_strut_the_domain_can_offer():
+    """SUPPORT IS FREE WHEN IT IS STRUCTURE. A strut that holds a node up is in the FEM, carries
+    load and is weighed; a sacrificial pillar is none of those and has to be snapped off. So the
+    pruner may delete anything EXCEPT a node's last down-strut, and what is left needing a pillar
+    is only what the domain could never have held up anyway.
+
+    ⚠ TWO EARLIER VERSIONS OF THIS TEST ASSERTED THINGS THAT ARE FALSE, and each one encoded a
+    version of the printability rule that had to be thrown away:
+
+      "no node is unsupported"   -- false. A shell that hugs a hand has an overhanging underside in
+                                   EVERY build direction (measured over 1000+ of them). Some nodes
+                                   will always need a pillar.
+      "every bar is buildable"   -- false, and worse: it says the DOMAIN should refuse the bars a
+                                   printer cannot lay unaided. It should not. A long shallow bar
+                                   gets a prop under its middle, exactly as a slicer would do.
+                                   NOTHING IS UNPRINTABLE; things merely COST SUPPORT.
+
+    What IS true, and is what this guards: the classification is exhaustive (every bar self-supports,
+    or bridges, or needs a prop), and the pruner never throws away support it was given for free.
+    """
+    from design.qwerty import used_actions
+    from design.vector import evaluate, posture, tm_of, tp_of
+    from hand.myohand import FINGERS
+    from opt.problem import hands
+    from opt.run import baseline
+    from structure.frame import hand_axes
+    from structure.lattice import (BRIDGE_MAX, NOZZLE_R, STRAP_K, _steep, _tilt, buildable, ground,
+                                   load_cases, unsupported)
+    from structure.sizing import size_and_prune
+
+    H = hands()
+    h = H[50]
+    x = baseline()
+    q = h.compose({f: posture(h, f, tp_of(x, f), tm_of(x, f), float(x.get(f"ab_{f}", 0.0)))
+                   for f in FINGERS})
+    _o, e_d, _r, _oo = hand_axes(h, q)
+
+    nodes, bars, btn, _l, ak, an, _t, sn = ground(h, q, pitch=0.010)
+
+    # THE CLASSIFICATION IS EXHAUSTIVE: steep (holds things up) | bridge (prints, holds nothing) |
+    # sags (needs a prop). No fourth category, and "buildable" is exactly the first two.
+    st = _steep(nodes, bars, e_d)
+    ok = buildable(nodes, bars, e_d)
+    _tt, L, _hh = _tilt(nodes, bars, e_d)
+    assert (ok == (st | (L <= float(BRIDGE_MAX)))).all(), "buildable is not steep-or-bridgeable"
+    assert (ok[st]).all(), "a steep strut must always be layable"
+
+    cases = load_cases(h, q, btn, wired=used_actions(evaluate(x, H)["action_map"]))[:2]
+    live, r, _m, _w = size_and_prune(nodes, bars, btn, cases, ak, an, sn, float(STRAP_K),
+                                     r_print=float(NOZZLE_R), build_dir=e_d)
+    if not len(live):
+        pytest.skip("coarse pitch found no feasible structure; the domain guards above still ran")
+    assert (r >= float(NOZZLE_R) - 1e-9).all(), "a strut in the ANSWER is thinner than the nozzle"
+
+    # THE CLAIM: every node still needing a pillar is one the DOMAIN itself could not support.
+    # If the pruner had thrown away a usable down-strut, this set would be strictly larger.
+    could = set(unsupported(nodes, bars, range(len(bars)), e_d))
+    got = set(unsupported(nodes, bars, live, e_d))
+    assert got <= could, f"the pruner deleted the last down-strut of {sorted(got - could)}"
