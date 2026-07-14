@@ -110,15 +110,21 @@ def scene(h, x, gen: int = -1, note: str = "") -> dict:
                            mode="markers", marker=dict(size=7, color="#b03060",
                                                        symbol="diamond"),
                            hoverinfo="skip", name="strap pulls here"))
-    o, e_d, e_r, e_o = hand_axes(h, q_on)
+    # ⚠ THE BAND IS THE HAND'S OWN CROSS-SECTION, not a circle I made up.
+    # This used to draw a FIXED 55 mm ring about the hand axis. The hand is ~25 mm across at the
+    # wrist, so the ring floated at twice the radius of the hand and the nodes the strap pulls on
+    # sat well inside it -- the user: "I still don't see any nodes on the wrist strap." The nodes
+    # were there; the ring was nowhere near the hand. viz.scene.strap_loop is now the ONE
+    # definition of where a band physically is, and the static render reads it too.
+    from viz.scene import strap_loop
+
     for st in strap_bands(h, q_on, np.array(A)):
-        c = o + st * e_d
-        ring = [c + 0.055 * (np.cos(t) * e_r + np.sin(t) * e_o)
-                for t in np.linspace(0, 2 * np.pi, 40)]
-        R = np.array(ring)
+        R = strap_loop(h, q_on, st)
+        if R is None:
+            continue
         traces.append(dict(type="scatter3d", x=[float(v) for v in R[:, 0]],
                            y=[float(v) for v in R[:, 1]], z=[float(v) for v in R[:, 2]],
-                           mode="lines", line=dict(color="#b03060", width=6),
+                           mode="lines", line=dict(color="#b03060", width=7),
                            hoverinfo="skip", name="strap"))
 
     bone_g = hist[-1][2] * 1000.0

@@ -294,6 +294,51 @@ def skin_trace(h, q, opacity: float = 0.35, colour: str = "#e8c4a8"):
     )
 
 
+def strap_loop(h, q, station, width=0.016, standoff=0.0012):
+    """THE BAND'S ACTUAL CENTRELINE: the hand's own cross-section at that station, hulled.
+
+    ⚠ ONE DEFINITION. The live view used to draw the band as a FIXED 55 mm CIRCLE about the hand
+    axis. The hand is ~25 mm across at the wrist, so the ring floated at twice the radius of the
+    hand and the nodes the strap pulls on sat well INSIDE it -- the user: "I still don't see any
+    nodes on the wrist strap." The nodes were there. The ring was nowhere near the hand.
+
+    Two renderers, two geometries, and the picture stopped telling the truth. Now there is one.
+    """
+    import mujoco
+
+    from hand.flesh import skin
+    from structure.frame import hand_axes
+
+    V, _, L = skin(h, q, labels=True)
+    tid = {mujoco.mj_name2id(h.model, mujoco.mjtObj.mjOBJ_BODY, b)
+           for b in ("firstmc", "proximal_thumb", "distal_thumb", "trapezium")}
+    V = V[~np.isin(L, list(tid))]
+    o, e_d, e_r, e_o = hand_axes(h, q)
+
+    sel = np.abs((V - o) @ e_d - station) < width / 2
+    if sel.sum() < 30:
+        return None
+    P = V[sel]
+    c = P.mean(axis=0)
+    u = (P - c) @ e_r
+    v = (P - c) @ e_o
+    ang = np.arctan2(v, u)
+    loop = []
+    NB = 96
+    for k in range(NB):
+        lo, hi = -np.pi + 2 * np.pi * k / NB, -np.pi + 2 * np.pi * (k + 1) / NB
+        m = (ang >= lo) & (ang < hi)
+        if not m.any():
+            continue
+        rr = np.hypot(u[m], v[m])
+        a = 0.5 * (lo + hi)
+        loop.append(c + (rr.max() + standoff) * (np.cos(a) * e_r + np.sin(a) * e_o))
+    if len(loop) < 8:
+        return None
+    loop.append(loop[0])
+    return np.array(loop)
+
+
 def strap_traces(h, q, anchor_pts, n_bands=2, width=0.016, standoff=0.0012):
     """THE STRAPS, drawn as the bands they are -- around the WHOLE hand, not just over the top.
 
@@ -350,31 +395,9 @@ def strap_traces(h, q, anchor_pts, n_bands=2, width=0.016, standoff=0.0012):
 
     traces = []
     for st in stations:
-        sel = np.abs((V - o) @ e_d - st) < width / 2
-        if sel.sum() < 30:
+        loop = strap_loop(h, q, st, width=width, standoff=standoff)
+        if loop is None:
             continue
-        P = V[sel]
-        c = P.mean(axis=0)
-        u = (P - c) @ e_r
-        v = (P - c) @ e_o
-        ang = np.arctan2(v, u)
-        # the outline of the cross-section: the furthest point in each angular bin
-        loop = []
-        NB = 96
-        for k in range(NB):
-            lo, hi = -np.pi + 2 * np.pi * k / NB, -np.pi + 2 * np.pi * (k + 1) / NB
-            m = (ang >= lo) & (ang < hi)
-            if not m.any():
-                continue
-            rr = np.hypot(u[m], v[m])
-            j = np.argmax(rr)
-            a = 0.5 * (lo + hi)
-            R = rr[j] + standoff
-            loop.append(c + R * (np.cos(a) * e_r + np.sin(a) * e_o))
-        if len(loop) < 8:
-            continue
-        loop.append(loop[0])
-        loop = np.array(loop)
 
         Vv, Ff = [], []
         for k in range(len(loop) - 1):
