@@ -8,29 +8,47 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** six times. **All seven stamps stand**, and each
+The disclosure has been **extended and re-anchored** seven times. **All eight stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — the KNOCK RE-SIZES THE BONE (§8.15k)
+### Current — the IMPACT STRUCTURE, SHAPE-CONVERGED (§8.15k, revised)
+
+The impact re-optimisation, taken to convergence in *shape*, not only topology. The co-sized skeleton
+came off the lattice **staircased** — ~8% of its nodes turned a load path past 75° — and never got the
+**form-finding** pass every reported structure gets (grow runs it during the search, but the dense
+impact grow *starved* it). Adding `relax_nodes` after the sizing straightens it (**kinks > 75°:
+40 → 11**) and, because a starved dense lattice had members sized thick to resist *bending* at their
+kinks, lets them carry *axially* instead: **29.3 g → 24.2 g**. So in-the-loop is now **34% lighter**
+than the bolt-on (was 19%), and no longer jagged — the mass was hiding in the un-converged shape.
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) | `4f47c62663c1ba702823088afec7c7c8eb2132a387af54e230daa0fa70c58a7a` |
+| `MANIFEST.sha256` (hashes of all 86 source + doc files) | `5d233591b2dde6ac48746c70fb97b96dac2239a40d4074c3ae6427af0b967d54` |
+
+Stamped: **2026-07-15T19:23:27Z** (UTC, submission time). Proofs: `VISION.md.ots`,
+`MANIFEST.sha256.ots`.
+
+⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
+the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+
+### Seventh — the KNOCK RE-SIZES THE BONE (§8.15k, as first disclosed)
 
 Impact is the binding structural load, not the keypress. A 50 N knock breaks the deflection-optimised
 bone (**348 MPa** against a 70 MPa yield), while fatigue has a 16× margin. And the knock wants a
 *different* skeleton — broad and load-sharing, not the sparse keypress one thickened: grown with the
 knock in the load set, the two topologies share only **20% of their members** (Jaccard 0.20). Growing
 WITH the knock and co-sizing for the gate AND the stress is **19% lighter** than bolting the impact on
-afterward, and reaches a safety factor the bolt-on cannot (it saturates at the radius ceiling first).
+afterward (before the shape-convergence pass above took it to 34%).
 
 | file | sha256 |
 |---|---|
-| `VISION.md` (the disclosure) | `037c9c00e9f3bd4f68e1d06ee1fa05405a1fb20e6fafd45f1a98e5fa1872a215` |
-| `MANIFEST.sha256` (hashes of all 84 source + doc files) | `391d83a5a57ad04690d6f63e44d1c59ab7ca95e8ad9d24b308ae2d0240db1507` |
+| `VISION.md` (as of 2026-07-15, 17:57Z) | `037c9c00e9f3bd4f68e1d06ee1fa05405a1fb20e6fafd45f1a98e5fa1872a215` |
+| `MANIFEST.sha256` (84 files) | `391d83a5a57ad04690d6f63e44d1c59ab7ca95e8ad9d24b308ae2d0240db1507` |
 
-Stamped: **2026-07-15T17:57:47Z** (UTC, submission time). Proofs: `VISION.md.ots`,
-`MANIFEST.sha256.ots`.
-
-⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
-the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+Stamped: **2026-07-15T17:57:47Z** (UTC, submission time). Proofs:
+`timestamps/VISION.md.2026-07-15d.ots`, `timestamps/MANIFEST.sha256.2026-07-15d.ots`.
 
 ### Sixth — the GAUNTLET ON THE OUTSIDE OF THE STRAP (§8.15j)
 
