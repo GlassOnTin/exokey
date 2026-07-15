@@ -8,30 +8,47 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** seven times. **All eight stamps stand**, and each
+The disclosure has been **extended and re-anchored** eight times. **All nine stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — the IMPACT STRUCTURE, SHAPE-CONVERGED (§8.15k, revised)
+### Current — FORM-FINDING BELONGS IN THE WHOLE PIPELINE (§8.15k, generalised)
 
-The impact re-optimisation, taken to convergence in *shape*, not only topology. The co-sized skeleton
-came off the lattice **staircased** — ~8% of its nodes turned a load path past 75° — and never got the
-**form-finding** pass every reported structure gets (grow runs it during the search, but the dense
-impact grow *starved* it). Adding `relax_nodes` after the sizing straightens it (**kinks > 75°:
-40 → 11**) and, because a starved dense lattice had members sized thick to resist *bending* at their
-kinks, lets them carry *axially* instead: **29.3 g → 24.2 g**. So in-the-loop is now **34% lighter**
-than the bolt-on (was 19%), and no longer jagged — the mass was hiding in the un-converged shape.
+The shape-convergence pass generalised, and a correction. The **decoupled** pipelines that make the
+definitive structures — size-then-prune-then-curve for the keypress bone, grow-then-co-size for the
+impact one — curved their load paths but **never moved the nodes**, leaving them staircased on the
+grid. `relax_nodes` (form-finding) belongs in *both*, not only in the render: added to the keypress
+bone it drops the flagship **11.05 g → 8.51 g (−23%)**, gate still 499 µm (A/B verified: relaxation
+off reproduces 11.05 g exactly). This **corrects** the `relax_nodes` note that the pass is "cosmetic,
+not where the grams are" — true only of the grow-front designs it was measured on, which are already
+relaxed; on a never-relaxed definitive structure it is worth a fifth of the mass.
 
 | file | sha256 |
 |---|---|
-| `VISION.md` (the disclosure) | `4f47c62663c1ba702823088afec7c7c8eb2132a387af54e230daa0fa70c58a7a` |
-| `MANIFEST.sha256` (hashes of all 86 source + doc files) | `5d233591b2dde6ac48746c70fb97b96dac2239a40d4074c3ae6427af0b967d54` |
+| `VISION.md` (the disclosure) | `9b106711890b9cb4c91b1b2070a493d9ace1517838a3c20c346573bb5cb6fe58` |
+| `MANIFEST.sha256` (hashes of all 86 source + doc files) | `6003414c039f78efd4b3cdf86229bceb814f80117e7b44ce6ce1069ea8e320d2` |
 
-Stamped: **2026-07-15T19:23:27Z** (UTC, submission time). Proofs: `VISION.md.ots`,
+Stamped: **2026-07-15T19:44:25Z** (UTC, submission time). Proofs: `VISION.md.ots`,
 `MANIFEST.sha256.ots`.
 
 ⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
 the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+
+### Eighth — the IMPACT STRUCTURE, SHAPE-CONVERGED (§8.15k, revised)
+
+The impact re-optimisation, taken to convergence in *shape*, not only topology. The co-sized skeleton
+came off the lattice **staircased** — ~8% of its nodes turned a load path past 75° — and never got the
+**form-finding** pass. Adding `relax_nodes` after the sizing straightens it (**kinks > 75°: 40 → 11**)
+and, because a starved dense lattice had members sized thick to resist *bending* at their kinks, lets
+them carry *axially* instead: **29.3 g → 24.2 g**, so in-the-loop is **34% lighter** than the bolt-on.
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (as of 2026-07-15, 19:23Z) | `4f47c62663c1ba702823088afec7c7c8eb2132a387af54e230daa0fa70c58a7a` |
+| `MANIFEST.sha256` (86 files) | `5d233591b2dde6ac48746c70fb97b96dac2239a40d4074c3ae6427af0b967d54` |
+
+Stamped: **2026-07-15T19:23:27Z** (UTC, submission time). Proofs:
+`timestamps/VISION.md.2026-07-15e.ots`, `timestamps/MANIFEST.sha256.2026-07-15e.ots`.
 
 ### Seventh — the KNOCK RE-SIZES THE BONE (§8.15k, as first disclosed)
 
