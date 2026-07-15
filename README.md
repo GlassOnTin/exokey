@@ -1,121 +1,68 @@
 # ExoKey
 
-**A wearable Svalboard.** One adjustable finger well per digit, each a 5-direction joystick,
-carried on a **topology-optimised gauntlet over the back of the hand** and held down by a strap.
-Types QWERTY. Designed by optimising the device and the hand *together* against a musculoskeletal
-model.
+**A wearable Svalboard.** One adjustable finger well per digit — each a five-direction joystick —
+carried on a **topology-optimised gauntlet over the back of the hand**, held on by a soft strap.
+It types QWERTY, and it is designed by optimising the device and the hand *together* against a
+musculoskeletal model. DataHand / Svalboard geometry, made wearable: you can stand up and walk
+away with it on.
 
-DataHand / Svalboard geometry, made wearable — you can stand up and walk away with it on.
+> **Status — research. Nothing has been built; everything here is simulation.** The model says the
+> device is feasible, and its numbers come with their gates and caveats in **[VISION.md](VISION.md)**.
+> The disclosure is Bitcoin-anchored — see **[TIMESTAMP.md](TIMESTAMP.md)**.
 
-**The whole exercise is a human-factors design, and that is the point.** Nearly every constraint
-here is a fact about *people* — a key that moves feels mushy (500 µm), what a finger can press
-(0.30 N), what a hand can sustain (Σaᵢ³), what a palm can bear (1.5 mm), what fits the 5th–95th
-percentile, what you are willing to carry all day. Only three are facts about a *machine*: the
-nozzle, the overhang, the bridging span. **Every large error in this project has been the model
-failing to represent the human, wearing a technical costume.**
-
-> **Status: research. Nothing has been built.** Everything here is simulation.
->
-> The current model says the device is **feasible**, but only after a correction that
-> overturned an earlier negative result. We had modelled the finger well as a **pin** — a point
-> force at the pad, with the finger's own muscles required to balance the whole joint torque —
-> and concluded that an open hand *cannot press*. That is contradicted by everyone who types on
-> a flat keyboard. A well is a **cradle**: it supports the distal phalanx along its length, so
-> the finger acts as a **strut** (piano technique names this exactly). Fixing it dissolved the
-> contradiction. See [VISION.md §5](VISION.md#5-what-we-already-learned-by-failing).
->
-> **Stock MyoHand's thumb cannot press at all** (0.0 N, every direction, every posture) — it
-> has *no adductor*, and pressing a key is pushing *against* something. We add the thenar group
-> (`hand/thenar.py`: ADP, FPB, APB) and the thumb reaches a **66.8 N pinch — inside the
-> published human band of 45–70 N**, a number that was *never fitted*. It is now the cheapest
-> digit on the hand.
+**See it move → the live gallery: [glassontin.github.io/exokey](https://glassontin.github.io/exokey/out/)**
+— the hand posed into every keypress, the gauntlet drawn at the radius the physics chose for each
+member, the strap, and the optimiser converging.
 
 ---
 
-## What it does
+## Why it looks like this
 
-Given a musculoskeletal hand (MyoSuite **MyoHand**: 23 DOF, 39 Hill-type muscles), it
-co-designs a wearable keyboard by multi-objective optimisation:
+Nearly every constraint in this project is a fact about **people**, not machines: a key that moves
+more than **500 µm** feels mushy; a finger can comfortably press about **0.30 N**; effort is muscle
+activation (**Σaᵢ³**); a palm can bear a feature down to about **1.5 mm** before it hurts; the device
+must fit the **5th–95th percentile** hand and be light enough to wear all day. Only three constraints
+are about the printer — nozzle, overhang, bridging. That balance *is* the thesis, and every large
+error in the project has been the model failing to represent the human while wearing a technical
+costume.
 
-- **Effort** = muscle activation, Σaᵢ³ (Crowninshield–Brand). A physical quantity, not a
-  geometric proxy.
-- **Feasibility** = hard constraints (11 of them, including *"the digit must actually be able to perform the action"*). NSGA-II's constrained tournament means the
-  optimiser cannot *buy* an unreachable key by paying a penalty.
-- **Objectives** = effort per character, device mass, key deflection. They genuinely conflict.
-- **Population** = the 5th–95th percentile hand, with the finger wells *adjusting* to fit.
+The result is grown, not drawn — Wolff's law on a free-form lattice — so it comes out looking like an
+anatomy rather than a bracket:
 
-### Some things it found
-
-| | |
+| the gauntlet, optimised under every constraint at once | |
 |---|---|
-| **MyoHand's thumb cannot press a key.** Not "weakly" — **at all** | **0.0 N**, at every posture, in all 600 directions sampled |
-| ...because it has **no adductor**. FPL flexes, EPL/EPB extend, APL abducts, OP opposes | pressing a key is pushing *against* something |
-| Adding the thenar group ([`hand/thenar.py`](hand/thenar.py)) took **all three** muscles | ADP 45.6%→11.9%, FPB →7.0%, **APB →0.0%** |
-| The resulting pinch force **was never fitted** — the moment arms were fitted to anatomy | **66.8 N** vs a published human **45–70 N** |
-| `click`/`forward`/`back` work on every finger = 3 rows × 4 fingers | = 15 letters, exactly QWERTY's left half |
-| **Space** — 22% of the left hand's keystrokes — was not in the objective at all | it now sits on `thumb/click`, the cheapest slot on the hand |
-| Handing the thumb the modifiers is **free to learn** | **1.36×** cheaper (nobody's muscle memory encodes *direction*→*row*) |
-| What QWERTY itself costs, vs. a free (exact, Hungarian) assignment | **3.86×** |
-| Any finger can be a 2-axis pointer (every well is 5-way; the "ulnar can't tilt" limit was a cradle artefact) | but it belongs on the **index**: 1.9× typing cost vs the thumb's **6.1×** |
-| A well is a **cup**, not a cap: the fingertip *bone* slides in along its own axis | so the wells need a **spread, open** hand — gripping converges the fingertips |
-| QWERTY's *top* row is the most-used, not "home" | 30.2% vs 23.0% |
-| A palm-strapped body vs an articulated exoskeleton | **3× stiffer, 35% lighter** — *and then the palmar body was abandoned too: an open frame cannot reach into the palm without crossing the hand. The load path wants to go over the **back** of the hand.* |
-| The structure is **grown, not drawn** — Wolff's law on a free-form lattice, 17 wired load cases, each digit-direction pressed alone | 2184 candidates → **138 members** |
-| **The device is TOUCH-limited, not load-limited** | **95%** of its members are as thick as they are because a *hand* must bear them, not because a force demands it |
-| So the bone is **hollow**, exactly as a real one is | −19% mass, **identical to the touch** |
-| An **ergonomic** minimum feature (1.5 mm), not the nozzle's (0.4 mm), is what makes a structure **trabecular** | 867 members → **153**, and 56 spikes → **0** |
-
-### Where it is now
-
-The gauntlet, optimised under every constraint at once — **friendly, curved, hollow, printable**:
-
-| | |
-|---|---|
-| members | **138** (→ 552 curved sub-beams) |
+| members | **138** (drawn as 552 curved sub-beams) |
 | mass | **11.04 g** (beam model) |
-| section | **hollow tubes**, 0.8 mm wall = *two perimeters of a 0.4 mm nozzle* |
+| section | **hollow tubes**, 0.8 mm wall — two perimeters of a 0.4 mm nozzle |
 | worst well displacement | **498 µm** against a 500 µm gate |
 | sharpest surface anywhere | **1.50 mm** — no spikes, no loose ends, one piece |
+| survives a **50 N knock** | re-sized for impact, not just crispness (§8.15k) |
 | support to print it | 254 pillars, **0 props** |
 
-Watch it type: [`out/typing.html`](out/typing.html) — the hand posed into every wired press from
-the pad Jacobian, the gauntlet drawn at the radius the physics chose for each member, the wall
-translucent so you can see the marrow cavity, and the sacrificial supports on a toggle.
+---
 
-### And some things it got wrong, and had to retract
+## What the optimisation found
 
-Two headline numbers that used to be in this table are **withdrawn**. They were artifacts.
+A musculoskeletal hand (MyoSuite **MyoHand**: 23 DOF, 39 Hill-type muscles) drives a multi-objective
+search (pymoo **NSGA-II**): **effort** (Σaᵢ³) and **mass** and **key deflection** as objectives that
+genuinely conflict, **feasibility** as hard constraints the optimiser cannot buy its way out of. Some
+of what fell out:
 
-> ~~The five finger directions differ in muscle cost by **1.9 million×**~~
-> ~~`click` is the cheapest, everywhere, on every finger~~
+| | |
+|---|---|
+| **Stock MyoHand's thumb cannot press a key** — 0.0 N, every posture, every direction | it has **no adductor**; pressing a key is pushing *against* something |
+| Adding the thenar group ([`hand/thenar.py`](hand/thenar.py): ADP, FPB, APB) | thumb reaches a **66.8 N pinch — inside the human 45–70 N band, never fitted** |
+| **The device is TOUCH-limited, not load-limited** | **95%** of members are as thick as they are because a *hand* must bear them, not a force |
+| ...so the bone is **hollow**, exactly as a real one is | −19% mass, identical to the touch |
+| The **ergonomic** minimum feature (1.5 mm), not the nozzle's (0.4 mm), makes it trabecular | 867 members → 153, and 56 spikes → **0** |
+| A palm-strapped body beats an articulated exoskeleton — then *it* was dropped too | the load path wants to go over the **back** of the hand, not around it |
+| Every well is a five-way joystick, on every finger | the "ulnar can't tilt" limit was a modelling artefact, not muscle |
+| A **50 N knock**, not the keypress, is what sizes the structure | and it wants a *broad* skeleton — growing with it in the loop is 19% lighter than bolting it on (§8.15k) |
 
-`solve_activations` never enforced equilibrium: it least-squares-fitted the required joint
-torque, settled for the closest **achievable** one, and returned the shortfall as `residual`
-— **which no caller ever read**. So an action a digit *cannot perform* produces a small
-achievable torque, hence small activations, hence **low effort**. Impossible actions looked
-*cheap*, and the optimiser was systematically drawn to them. The cheapest number in the whole
-model (middle/`click`, 4e-08) was an **unbalanced press**.
-
-That is [v1's disease](#a-note-on-how-this-was-built) one level deeper: v1 let the optimiser
-*buy its way out* of a soft constraint; here the constraint **was never checked at all**.
-Equilibrium is now a hard constraint, and an unperformable action is **unavailable**, not
-expensive.
-
-**And two justifications that failed their own measurement** — recorded because a reason that does
-not survive its own test is not a reason:
-
-> ~~Curve the load paths because a straight chord dips toward the flesh~~ — it does, but it **does
-> not bind** (0 of 669 members sit at the clearance floor).
->
-> ~~Curve them because a kink is a stress riser and this thing takes millions of keystrokes~~ —
-> peak stress is **10% of yield**. The structure is stiffness-limited. The kinks were never going
-> to crack it.
-
-The actual reason was the user's, and it was sufficient: **bones have no sharp edges.** It costs
-nothing, so there is nothing to trade it against.
-
-Full numbers, gates and caveats: **[VISION.md](VISION.md)**. The disclosure is Bitcoin-anchored —
-see [TIMESTAMP.md](TIMESTAMP.md).
+Full findings, the retracted ones included (a headline "1.9-million×" number that turned out to be an
+unbalanced-press artefact, and two design justifications that failed their own measurement), are in
+**[VISION.md](VISION.md)** — the failures are the most valuable thing in the repo, and each is now a
+regression test.
 
 ---
 
@@ -127,97 +74,49 @@ cd exokey
 python3 -m venv .venv
 .venv/bin/pip install mujoco numpy scipy pymoo PyNiteFEA plotly pytest
 
-# the gates. 91 of them. each one caught a real bug.
-PYTHONPATH=. OMP_NUM_THREADS=1 .venv/bin/python -m pytest tests/ -q
+# the gates. 109 of them. each one caught a real bug.
+PYTHONPATH=. OMP_NUM_THREADS=1 .venv/bin/python -m pytest -q
 
-# --- the structure, in the order it is built -------------------------------------------------
-# grow the printable gauntlet: nozzle floor, self-support, sacrificial supports counted
-PYTHONPATH=. OMP_NUM_THREADS=1 .venv/bin/python scripts/printable.py     # -> out/printable.npz
-
-# the price of not being a knuckle-duster: sweep the ERGONOMIC minimum feature
-PYTHONPATH=. OMP_NUM_THREADS=1 .venv/bin/python scripts/ergonomic.py     # -> out/friendly.npz
-
-# the bone: friendly + curved load paths + hollow tubes, all at once
-PYTHONPATH=. OMP_NUM_THREADS=1 .venv/bin/python scripts/bone.py          # -> out/bone.npz
-
-# watch it type  ->  out/typing.html
-PYTHONPATH=. .venv/bin/python scripts/typing_view.py
-
-# and the printable solid: SDF smooth-min -> marching cubes -> STL. No booleans.
-PYTHONPATH=. .venv/bin/python scripts/export_stl.py                      # -> out/gauntlet.stl
+# the bone, in the order it is built:
+PYTHONPATH=. OMP_NUM_THREADS=1 .venv/bin/python scripts/printable.py   # nozzle floor  -> out/printable.npz
+PYTHONPATH=. OMP_NUM_THREADS=1 .venv/bin/python scripts/ergonomic.py   # 1.5 mm floor  -> out/friendly.npz
+PYTHONPATH=. OMP_NUM_THREADS=1 .venv/bin/python scripts/bone.py        # curved+hollow -> out/bone.npz
+PYTHONPATH=. .venv/bin/python scripts/typing_view.py                   # watch it type -> out/typing.html
+PYTHONPATH=. .venv/bin/python scripts/export_stl.py                    # printable solid -> out/gauntlet.stl
 ```
 
-`OMP_NUM_THREADS=1` is **not optional** for the optimiser: N worker processes × N BLAS
-threads oversubscribes the machine and the "parallel" run comes out slower than serial.
+`OMP_NUM_THREADS=1` is **not optional** for the optimiser: N worker processes × N BLAS threads
+oversubscribes the machine, and the "parallel" run comes out slower than serial. Every stage writes a
+self-contained browser view on purpose — two of the worst bugs here were caught by *looking at the
+render*, and would have survived any table of numbers.
 
-Every stage writes a self-contained browser view. That is deliberate — two of the worst bugs
-in this project were caught by *looking at the render*, and would have survived any table of
-numbers.
-
-### Bursting it onto a cloud box
-
-```bash
-echo "$HCLOUD_TOKEN" > ~/hetzner.api && chmod 600 ~/hetzner.api
-./cloud/hetzner.sh price          # real prices, from the API
-./cloud/hetzner.sh up cpx62       # create + install + run the test suite on it
-./cloud/hetzner.sh burn --pop 200 --gen 150   # run, fetch results, DELETE the box
-```
-
-⚠ **Hetzner bills for a server while it *exists*.** Powering it off changes nothing — only
-deleting stops the meter. There is deliberately no `stop` subcommand, because a "stop" that
-keeps charging you is a trap. Use `burn`: it tears the box down when the run ends, and its
-trap fires on crash and interrupt too, so a failed run cannot leave a machine billing.
-
-Take a **dedicated-vCPU** tier only if you have quota for a big one. Measured on this
-workload: a 16-vCPU *shared* box (`cpx62`) beat an 8-vCPU *dedicated* one (`ccx33`) by
-**2.3×** for the same money — shared cores deliver ~77% of a dedicated core, but you get
-twice as many.
+To burst the optimisation onto a cloud box and tear it down when done, see
+[`cloud/hetzner.sh`](cloud/hetzner.sh) (`burn` deletes the box on exit, crash, and interrupt — because
+a "stop" that keeps billing is a trap).
 
 ---
 
 ## Prior art, and the patent question
 
-**We are not designing around anyone's patent. We are on an older road.**
+**We are not designing around anyone's patent — we are on an older road.**
 
-- The 5-direction finger well is **DataHand**, whose patents (early 1990s) have **expired**.
-- [**Svalboard**](https://svalboard.com/) is an open, modern implementation of that idea
-  (Vial/QMK), and the direct inspiration here. This project is a *wearable* form of it.
-- [**Typeware**](https://typeware.tech/) build a wearable keyboard with a **patented "twin
-  key"** — two switches on one stem, to pack more physical keys in. **We need no such thing.**
-  The extra states come from *sensing more muscle groups*, not from more hardware.
+- The five-direction finger well is **DataHand**, whose patents (early 1990s) have **expired**.
+- [**Svalboard**](https://svalboard.com/) is an open, modern implementation of that idea, and the
+  direct inspiration; this is a *wearable* form of it.
+- [**Typeware**](https://typeware.tech/) ship a wearable keyboard with a patented "twin key" (two
+  switches on one stem). We need no such thing — the extra states come from *sensing more muscle
+  groups*, not more hardware.
 
-⚠ None of this is legal advice. A patent is not copyright: writing your own code and CAD does
-not help, and an open-source licence grants nothing against one. If you intend to *build and
-sell*, read the claims.
+⚠ Not legal advice. A patent is not copyright: writing your own code and CAD does not help, and an
+open-source licence grants nothing against one. If you intend to build and sell, read the claims.
 
 ---
 
 ## Licence
 
-**[AGPL-3.0](LICENSE).** If you run a modified version as a network service, you owe your
-users the source.
+**[AGPL-3.0](LICENSE).** Run a modified version as a network service and you owe your users the source.
 
-Third-party components, all permissively licensed and AGPL-compatible:
-
-| | |
-|---|---|
-| [MyoSuite](https://github.com/MyoHub/myo_sim) `myo_sim` hand model (`data/`, git submodule, version-pinned) | Apache-2.0 |
-| [MuJoCo](https://mujoco.org/) | Apache-2.0 |
-| [pymoo](https://pymoo.org/) | Apache-2.0 |
-| [PyNite](https://github.com/JWock82/PyNite) | MIT |
-| NumPy / SciPy / Plotly | BSD / BSD / MIT |
-
-The muscle-effort model, the population scaling and the co-design loop are ours.
-
----
-
-## A note on how this was built
-
-The commit history is mostly **failures**, and they are the most valuable thing in the repo.
-The "finger pad" was the fingernail for a week — every key sat behind the nail, a "keypress"
-recruited an *extensor*, and nothing failed, because the physics stayed perfectly
-self-consistent while answering the wrong question. The thumb's joint signs are not
-self-consistent with each other. And a units mismatch (metres² against a normalised penalty)
-faithfully reproduced the exact bug that killed the predecessor project.
-
-Each of those is now a test. See [VISION.md §5](VISION.md#5-what-we-already-learned-by-failing).
+Third-party components, all permissively licensed and AGPL-compatible: **MyoSuite** `myo_sim` hand
+model (Apache-2.0, git submodule, version-pinned), **MuJoCo** (Apache-2.0), **pymoo** (Apache-2.0),
+**PyNite** (MIT), NumPy / SciPy / Plotly (BSD / BSD / MIT). The muscle-effort model, the population
+scaling, and the co-design loop are ours.
