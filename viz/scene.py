@@ -311,7 +311,7 @@ def strap_loop(h, q, station, width=0.016, standoff=0.0012, device=None):
     return band_loop(h, q, station, device=device, width=width, standoff=standoff)
 
 
-def strap_traces(h, q, anchor_pts, n_bands=2, width=0.016, standoff=0.0012):
+def strap_traces(h, q, anchor_pts, n_bands=2, width=0.016, standoff=0.0012, device=None):
     """THE STRAPS, drawn as the bands they are -- around the WHOLE hand, not just over the top.
 
     THE USER: "Could you illustrate the straps in the render too?"
@@ -367,7 +367,7 @@ def strap_traces(h, q, anchor_pts, n_bands=2, width=0.016, standoff=0.0012):
 
     traces = []
     for st in stations:
-        loop = strap_loop(h, q, st, width=width, standoff=standoff)
+        loop = strap_loop(h, q, st, width=width, standoff=standoff, device=device)
         if loop is None:
             continue
 
