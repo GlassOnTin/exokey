@@ -1824,6 +1824,46 @@ prominence" (needs a pad, §8.15f cc). The band path also drops struts more than
 skin as well-arms rather than segmenting body-from-arm; a strut grazing that cutoff can still tug the
 hull. Both are heuristics, flagged, not solved.
 
+### 8.15i The INNER BEARING SHELL — an impact distributor, and a sandwich
+
+The device is strapped to the hand and worn all day, so how it MEETS the skin is a first-class
+ergonomic problem — and one the structural model leaves open (`manufacture/bearing.py`,
+`scripts/bearing.py`, `tests/test_bearing.py`).
+
+**(oo) THE GAUNTLET DOES NOT TOUCH THE SKIN YET — IT BEARS THROUGH AN ABSTRACT SPRING.** Measured,
+the optimised structure floats **≥ 5.5 mm off the skin** (no node within 2 mm), and it transmits its
+load through a *distributed compression spring* hanging below it — there is no real contact geometry.
+Build that interface naively, as feet on the structural nodes, and it becomes a set of PRESSURE
+POINTS: a 50 N knock through one 1.5 mm foot is **7.1 MPa**. The whole ergonomic outcome lives in
+this un-designed interface, and the STRAP is what makes it bite — its preload presses the interface
+into the flesh whether or not a key is being pressed.
+
+**(pp) THE INTERFACE IS AN IMPACT DISTRIBUTOR, AND THE KNOCK — NOT THE PRELOAD — SIZES IT.** A
+conformal SHELL is a stiff plate on the soft tissue (a Winkler elastic foundation, k = E_tissue /
+thickness). A concentrated load spreads over a characteristic length **λ = (D/k)^¼**, and the peak
+skin pressure under it is **P / (8 λ²)**. The steady strap preload is shared over several lattice
+junctions (< 1 N each) and is comfortable at any thickness; a KNOCK lands as a single point, so it
+binds. Measured: a **1.5–2 mm glass-nylon shell** spreads a 50 N knock over a ~5–6 cm patch to
+**56–86 kPa** — felt, not injurious — against **7.1 MPa** for a bare foot. So the impact requirement
+sets the thickness, and it comfortably covers the preload.
+
+**(qq) THE SHELL IS THE INNER FACE OF A SANDWICH, NOT A SOLID PLATE.** A solid shell of that
+thickness over the dorsal patch is ~10–13 g — it roughly *doubles* the 11 g bone. So the disclosed
+construction is a **sandwich**: the bearing shell as the **inner (skin-side) face**, the
+topology-optimised lattice as the **core**, and a thin dorsal **outer face** — a sandwich panel is
+far stiffer per unit mass than a solid plate, so it delivers the impact-spreading λ at a fraction of
+the mass, and it *reuses the bone already optimised* rather than adding to it. The inner face doubles
+as the surface the wells and sensor PCBs mount to.
+
+**(rr) ⚠ WHAT IS VERIFIED, AND WHAT IS PROPOSED.** The **sizing physics is verified** (plate on
+elastic foundation, locked in `tests/test_bearing.py`) and is order-of-magnitude only:
+**quasi-static** (a real impact adds dynamic amplification), **infinite-plate** (a real shell has
+edges), and **Winkler** (tissue as independent springs) — so the knock pressures are a *lower bound*.
+The **sandwich construction is proposed, not built**: it changes the structure's boundary condition
+and wants a re-solve of the 500 µm key-deflection gate with the shell in place. The **50 N knock**
+magnitude and the comfort/pain pressure thresholds (~4 kPa capillary, ~20 kPa worn, ~200 kPa painful)
+are estimates, flagged.
+
 ### 8.16 Provenance
 
 The **five-direction finger well** derives from the **DataHand** keyboard (patents filed early

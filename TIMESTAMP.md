@@ -8,11 +8,35 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** twice. **All three stamps stand**, and each one
-proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one — it
-is a *floor* on the date, and floors do not move.
+The disclosure has been **extended and re-anchored** three times. **All four stamps stand**, and each
+one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
+it is a *floor* on the date, and floors do not move.
 
-### Current — HUMAN FACTORS as the organising principle (§5g), and the whole structural stack
+### Current — the SENSOR, the STRAP ANCHOR, and the BEARING SHELL (§8.15g–i)
+
+Adds the wearable's two practical subsystems and its skin interface: the **contactless-Hall finger
+well** — a magnet on a printed **TPU dome** over a 3-axis Hall — with the flexure material chosen by
+**σ_fatigue/E** (the maximum recoverable bending strain) and the plunge that must *bend*, not
+compress; the measured result that **every well is five-way** (the ulnar "three-way" limit was a
+cradle artefact — the interossei are adequate, and the extensor hood a genuine but *non-operative*
+MyoHand gap); the **strap anchor** — the band routed as the convex hull of (skin ∪ device) so it
+rides *over* the structure it holds down, a **watch-lug** capturing a pin in shear, one adjustable
+strap fitting the 5th–95th percentile hand; and the **inner bearing shell** as an **impact
+distributor** — a plate on the soft-tissue elastic foundation, sized by the *knock* not the preload —
+built as a **sandwich** with the topology-optimised lattice as its core.
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) | `4d663f98528165d61fa3abbe4327db7dc7e64fb934ba447619bb626d85a6b9ad` |
+| `MANIFEST.sha256` (hashes of all 75 source + doc files) | `3ebcb9b285d300494a746acddc0d23f233083ec204a69b7e2be079b5222d0138` |
+
+Stamped: **2026-07-15T09:32:00Z** (UTC, submission time). Proofs: `VISION.md.ots`,
+`MANIFEST.sha256.ots`.
+
+⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
+the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+
+### Third — HUMAN FACTORS as the organising principle (§5g), and the whole structural stack
 
 Adds: **human factors as the organising principle** (§5g) — nearly every constraint here is a fact
 about PEOPLE, only three are facts about a machine, and reproducibility ("one person, one printer")
@@ -25,14 +49,11 @@ bone is HOLLOW**.
 
 | file | sha256 |
 |---|---|
-| `VISION.md` (the disclosure) | `15d99f392e9fe34fdec8908cb602bd49e32349c0667c398d005790318296866b` |
-| `MANIFEST.sha256` (hashes of all 63 source + doc files) | `f0e4fb4db6eb348e8e760464a40b1d58e5eefab1abe560ad1b2a0a3388335d91` |
+| `VISION.md` (as of 2026-07-14, 21:40Z) | `15d99f392e9fe34fdec8908cb602bd49e32349c0667c398d005790318296866b` |
+| `MANIFEST.sha256` (63 files) | `f0e4fb4db6eb348e8e760464a40b1d58e5eefab1abe560ad1b2a0a3388335d91` |
 
-Stamped: **2026-07-14T21:40:41Z** (UTC, submission time). Proofs: `VISION.md.ots`,
-`MANIFEST.sha256.ots`.
-
-⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
-the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+Stamped: **2026-07-14T21:40:41Z** (UTC). Proofs: `timestamps/VISION.md.2026-07-14b.ots`,
+`timestamps/MANIFEST.sha256.2026-07-14b.ots`.
 
 ### Second — the dorsal gauntlet, the structure, the anchor, the manufacture (§8.8–8.14)
 
