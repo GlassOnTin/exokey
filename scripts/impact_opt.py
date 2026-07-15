@@ -156,31 +156,90 @@ def main():
     print(f"  +knock:     {m_bolt*1e3:.1f} g, knock {worst_bolt/1e6:.0f} MPa "
           f"(gate still {w*1e6:.0f} um -- thicker only stiffens)\n", flush=True)
 
-    # ---- IN-THE-LOOP: impact topology, size for gate AND knock. Seed rlo from the knock's load path
-    # on the grown subset FIRST, so the prune keeps it (a sizer cannot resurrect a deleted member). --
+    # ---- IN-THE-LOOP: pin the knock's load path on the dense grow, size for gate AND knock.
+    # ⚠ THE DENSITY IS REAL, NOT SLACK -- so pin the WHOLE load path, do not try to prune it lean.
+    # Measured by sweeping how few members to pin: the structure cannot be made leaner without cost.
+    # Prune it to 695 struts and it gets HEAVIER (29.4 -> 31.0 g), because fewer members sharing the
+    # same 50 N blow must each be thicker; below ~700 struts the knock fails outright. A knock WANTS a
+    # broad, redundant skeleton, so the minimum-mass answer IS the dense one.
+    def co_size(nodes, tag):
+        sb, stress, mass = prep(nodes, live_i)
+        sig0, _w0 = stress(np.full(len(sb), 9e-4))       # the knock's load path on the dense grow
+        rlo = fsd(np.full(len(sb), 9e-4), sig0)
+        rlo[rlo < R_PRINT * 1.5] = R_PRINT
+        bst = None
+        for outer in range(10):
+            lv, r, _m, w = prune(nodes, sb, rlo=rlo)
+            rr = np.full(len(sb), 1e-6)
+            rr[lv] = r
+            sig, worst = stress(rr)
+            mp = mass(lv, r)
+            if worst <= yld / SF * 1.05 and (bst is None or mp < bst[2]):
+                bst = (list(lv), rr[lv].copy(), mp, w, worst)
+            rlo_new = np.maximum(rlo, fsd(rr, sig))
+            if worst <= yld / SF * 1.05 and np.allclose(rlo_new, rlo, rtol=0.02):
+                break
+            rlo = rlo_new
+        if bst is not None:
+            print(f"  {tag}: {len(bst[0])} struts, {bst[2]*1e3:.1f} g, {bst[3]*1e6:.0f} um, "
+                  f"knock {bst[4]/1e6:.0f} MPa", flush=True)
+        return bst, sb
+
+    def kink_stats(nodes, sb, lb):
+        """(median best-through-turn deg, count of kinks > 75 deg) -- the shape-convergence measure."""
+        lbars = [sb[e] for e in lb]
+        adj: dict = {}
+        for e, (i, j) in enumerate(lbars):
+            adj.setdefault(i, []).append(e); adj.setdefault(j, []).append(e)
+        def aw(e, n):
+            i, j = lbars[e]; v = nodes[j if i == n else i] - nodes[n]
+            L = np.linalg.norm(v); return v / L if L > 1e-12 else v * 0.0
+        t = []
+        for n, es in adj.items():
+            if len(es) < 2:
+                continue
+            b = 180.0
+            for a in range(len(es)):
+                for c in range(a + 1, len(es)):
+                    d = float(np.clip(aw(es[a], n) @ aw(es[c], n), -1, 1))
+                    b = min(b, 180 - np.degrees(np.arccos(d)))
+            t.append(b)
+        t = np.array(t)
+        return float(np.median(t)), int((t > 75).sum())
+
     print("IN-THE-LOOP -- impact topology, sized for gate AND knock:", flush=True)
-    sb_i, stress_i, mass_i = prep(nodes_i, live_i)
-    sig0, _w0 = stress_i(np.full(len(sb_i), 9e-4))
-    rlo = fsd(np.full(len(sb_i), 9e-4), sig0)
-    rlo[rlo < R_PRINT * 1.5] = R_PRINT
-    print(f"  seeded: {int((rlo > R_PRINT*1.5).sum())}/{len(sb_i)} members pinned by the knock",
-          flush=True)
-    best = None
-    for outer in range(10):
-        lv, r, m, w = prune(nodes_i, sb_i, rlo=rlo)
-        rr = np.full(len(sb_i), 1e-6)
-        rr[lv] = r
-        sig, worst = stress_i(rr)
-        mp = mass_i(lv, r)
-        print(f"  round {outer}: {len(lv)} struts, {mp*1e3:5.1f} g, {w*1e6:3.0f} um, "
-              f"knock {worst/1e6:4.0f} MPa", flush=True)
-        if worst <= yld / SF * 1.05 and (best is None or mp < best[2]):
-            best = (list(lv), rr[lv].copy(), mp, w, worst)
-        floor = fsd(rr, sig)
-        rlo_new = np.maximum(rlo, floor)
-        if worst <= yld / SF * 1.05 and np.allclose(rlo_new, rlo, rtol=0.02):
-            break
-        rlo = rlo_new
+    best, sb_i = co_size(nodes_i, "as grown")
+
+    # ---- SHAPE CONVERGENCE: RELAX THE NODES, then re-size. Every REPORTED structure gets this --
+    # grow does it during the search, but the dense impact grow STARVED it, leaving ~8% of nodes
+    # kinked past 75 deg (the "not-converged" look the eye catches, and the residual curves() cannot
+    # smooth). Form-finding: move each free node toward axial equilibrium, held in the skin band;
+    # buttons and anchors are fixed. Then re-size for the gate and knock on the straightened geometry
+    # and keep it only if both still hold. (Measured elsewhere: this straightens and barely moves mass
+    # -- a redundant lattice routes load around a kink -- so it is smoothness, not grams.)
+    if best is not None:
+        from structure.fem import Frame
+        from structure.lattice import BAR_R, relax_nodes
+        from structure.lattice import _normals as _nrm, skin as _skin
+        Vs, _Fs, _Ls = _skin(ref, q, labels=True)
+        Ns = _nrm(Vs, _Fs)
+        E = MATERIALS["cf_pa12"]["E"]
+        rr0 = float(BAR_R)
+        lbars = [sb_i[e] for e in best[0]]
+        k0 = kink_stats(nodes_i, sb_i, best[0])
+        Xr = nodes_i.copy()
+        for _ in range(15):
+            fr = Frame(Xr, lbars, E, E / 2.6, np.pi * rr0 ** 2, np.pi * rr0 ** 4 / 4,
+                       np.pi * rr0 ** 4 / 2, spring={i: k for i, k in akc.items()})
+            U = fr.solve([c[2] for c in cases])
+            Xr = relax_nodes(fr, U, Xr, lbars, list(range(len(lbars))), btn, akc, Vs, Ns, hug=0.004)
+        best_r, sb_r = co_size(Xr, "relaxed  ")
+        if best_r is not None:
+            k1 = kink_stats(Xr, sb_r, best_r[0])
+            print(f"  kinks > 75 deg: {k0[1]} -> {k1[1]}   median through-turn "
+                  f"{k0[0]:.0f} -> {k1[0]:.0f} deg", flush=True)
+            if best_r[4] <= yld / SF * 1.10:       # keep the relaxed shape if it still survives
+                nodes_i, best, sb_i = Xr, best_r, sb_r
 
     print("\nVERDICT (circular rods, same anchor, same gate, both survive the 50 N knock at SF 2):")
     print(f"  bolt-on     (keypress topology, thickened): {m_bolt*1e3:5.1f} g")

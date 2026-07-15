@@ -1952,8 +1952,9 @@ safety factor of 2: *bolt-on* — size the keypress skeleton for the gate, then 
 over-stressed member (fully-stressed design) — or *in-the-loop* — grow WITH the knock and size for the
 gate AND the stress together. Measured like for like (circular rods, one anchor, one gate, both
 surviving): bolt-on reaches **36.4 g and cannot even hit SF 2** — its sparse members **saturate at the
-radius ceiling** at 42 MPa (SF 1.7); in-the-loop reaches **29.3 g at SF ≈ 1.9**, **19% lighter and
-more robust**, because the broad skeleton never drives a member to its ceiling. The method: a knock is
+radius ceiling** at 42 MPa (SF 1.7); in-the-loop reaches **24.2 g at SF ≈ 1.9**, **34% lighter and
+more robust**, because the broad skeleton never drives a member to its ceiling *and* its shape is
+form-found (**(ddd)**), not left staircased on the grid. The method: a knock is
 a *local stress* limit and a keypress a *global deflection* limit, married by feeding a
 fully-stressed-design floor `r_e ≥ r_e·√(σ_e·SF/yield)` into the deflection sizer as a per-member
 lower bound (`rlo`), iterated to a fixed point as the knock redistributes; and `grow()` ranks members
@@ -1968,9 +1969,21 @@ threshold of a painful knock. So the fingertip wells, the most exposed features,
 mitigation: **more anchor loops sharing, or a compliant well cup** that yields before the load
 concentrates. (Both deferred; the cup also cuts the input force the structure must survive in (zz).)
 
+**(ddd) THE SHAPE HAD TO CONVERGE TOO — AND FOR A DENSE STRUCTURE THAT IS WHERE THE GRAMS ARE.** The
+co-sized skeleton comes off the lattice *staircased*: ~8% of its nodes turn a load path past 75°,
+kinks the eye reads (correctly) as un-converged. `relax_nodes` — **form-finding**, move each free node
+toward axial equilibrium, held in the skin band, buttons and anchors fixed — straightens them (**kinks
+> 75°: 40 → 11**, median through-turn **30° → 13°**). On the *sparse* keypress bone this is cosmetic:
+measured, it barely moves mass, because a redundant lattice just routes load around a kink. But the
+*dense* impact grow **starves** the relaxation that runs inside the topology search, so its members
+were sized thick to resist **bending** at their kinks; straightening lets them carry **axially**, and
+axial members are thinner — **29.3 g → 24.2 g (−17%)**, gate 113 → 133 µm (still crisp), knock
+unchanged. So here the form-finding is not cosmetic; it is where a sixth of the mass was hiding, and
+skipping it is what made the first render look un-converged. Every *reported* structure gets this pass.
+
 ⚠ **QUASI-STATIC**, as throughout (§8.15i): a real impact adds dynamic amplification (energy, contact
 time) this does not model, so the stresses and pressures are a lower bound and the 50 N magnitude is
-an estimate. ⚠ The **19% of (bbb) is a RATIO in circular rods** — the sizer's section, not the hollow
+an estimate. ⚠ The **34% of (bbb) is a RATIO in circular rods** — the sizer's section, not the hollow
 stadium of the final bone (§8.15d) — so it transfers as a ratio, not as grams; the bolt-on's own
 hollow-stadium number is **11 g → 17 g at SF 2** (`out/robust.npz`, gate 498 → 114 µm, so thicker is
 also crisper). The fully-stressed floor oscillates at 36–39 MPa; both structures stay well under yield.

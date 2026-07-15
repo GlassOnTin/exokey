@@ -20,10 +20,14 @@ from design.vector import action_dirs, evaluate, posture, tm_of, tp_of
 from hand.myohand import FINGERS
 from opt.problem import hands
 from structure.frame import hand_axes
+from structure.spline import TENSION, curves
 from viz.scene import skin_trace, strap_traces, well_traces
 
 from scripts.lattice_view import tubes
 from scripts.sized_view import _mobile
+
+SMOOTH = True     # spline the load paths (curves()), the smoothing the keypress bone got and this
+                  # render first skipped -- so a grid-staircased path is drawn as the curve it is.
 
 
 def main():
@@ -47,11 +51,24 @@ def main():
     # blow's load path. (tubes() takes a {bar: value} map and colours by its percentile.)
     se = {e: float(radii[e]) for e in live}
 
+    # SMOOTH: draw each member as its cubic-spline load path, not a grid staircase. curves() keeps the
+    # node indices (so the FEA nodes -- the verified structure -- are unchanged; only the DRAWN path
+    # curves), and owner[j] maps sub-beam j back to its member so radius and colour carry through. A
+    # dense lattice branches a lot (branches stay straight); the continuing trunks are what curve.
+    if SMOOTH:
+        cn, cb, owner = curves(nodes, bars, live, tension=float(TENSION) * 0.3)
+        clive = list(range(len(cb)))
+        crad = radii[owner]
+        cse = {j: float(radii[owner[j]]) for j in clive}
+        tn, tb, tl, ts, tr, sides = cn, cb, clive, cse, crad, 5
+    else:
+        tn, tb, tl, ts, tr, sides = nodes, bars, live, se, radii, 7
+
     traces = []
     sk = skin_trace(h, q, opacity=0.16)
     if sk is not None:
         traces.append(sk)
-    traces.append(tubes(nodes, bars, live, se, radii))
+    traces.append(tubes(tn, tb, tl, ts, tr, n=sides))
 
     cups = []
     for f in FINGERS:
