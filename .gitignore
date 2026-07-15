@@ -9,6 +9,9 @@ out/*
 !out/typing.html
 !out/anim.html
 !out/progress.html
+# impact.html is generated but SELF-CONTAINED (data embedded), committed so the §8.15k
+# result renders straight from a clone. Regenerate with scripts/impact_view.py.
+!out/impact.html
 __pycache__/
 .pytest_cache/
 *.pyc
