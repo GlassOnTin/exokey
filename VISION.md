@@ -1987,6 +1987,34 @@ moves mass" on a sparse bone. That was measured on the grow-**front** designs �
 relaxed, so more relaxation buys little. On a structure that was **never** relaxed it is worth a fifth
 of its mass. The trap was a real measurement quoted outside the scope it was taken in.
 
+**(eee) THE SHELL THE RENDER SUGGESTS IS A COMFORT FEATURE, NOT A MASS ONE — WEIGHED BY A COUPLED
+PLATE FEA.** The form-found impact lattice, dense in a thin band off the skin, *looks* like a shell —
+correctly, because a form-found lattice confined to a thin layer **is** a discretised shell. So would
+an explicit shell or sandwich (§8.15i) be lighter? Tested end to end, and the answer is **no**, for a
+reason worth recording:
+- a shell to take a knock **on the back** is pointless — the dorsal-ridge knock sizes **5 members,
+  0.1 g**; the fingertip-**well** knocks size the rest (`sandwich_weigh.py`);
+- the discrete tissue anchors **are** a bottleneck (the well-knock reaction funnels through ~31 of
+  them), and a continuous bearing spreads it: a **coupled lattice + finite-stiffness plate FEA**
+  (`sandwich_fea.py`, PyNite MITC4 quads tied to the anchors) cuts the worst well-knock member stress
+  **96 → 52 MPa (~46%)** at a 1 mm shell — real, not the 65% rigid-shell bound of the proxy;
+- **but that thins the lattice only ~3–4 g, while the shell over its ~100 cm² footprint costs ≥ 5 g** —
+  so **no shell thickness beats the pure lattice**: the lightest sandwich is **≥ 27 g** against the
+  lattice's **24.2 g**. The shell saves less lattice than it weighs.
+
+So the **density is fundamental**: a topology-optimised lattice is already the efficient way to carry a
+knock into the tissue, and a plate cannot pay for itself thinning it. The shell's real value is
+**continuous skin bearing** — comfort, low pressure — which the soft strap (§8.15j) already provides
+for free. (Honest arc, recorded because the reversals are the method: a "16–18 g sandwich" guess, then
+"the lattice always wins", then a proxy that reopened it at "up to 65%", before the coupled FEA settled
+it. The plate FEA is the arbiter; the guesses were not.) ⚠ The shell mass is pure geometry (ρ·A·t) and
+solver-independent; the lattice it saves is measured in PyNite (which reads ~2.6× the project solver's
+stress), so the robust part is the **ratio** — shell mass ≫ lattice saved — not the absolute grams. Flat
+shell, stiff-strut coupling, FSD thinning; a curved shell would save a little more but still cannot
+out-run its own mass. Method chain: `manufacture/bearing.py` (Westergaard) → `scripts/shell_fea.py`
+(plate FEA firms the shell mass) → `scripts/sandwich_weigh.py` (which knock drives the mass) →
+`scripts/sandwich_fea.py` (the coupled FEA that pins the number).
+
 ⚠ **QUASI-STATIC**, as throughout (§8.15i): a real impact adds dynamic amplification (energy, contact
 time) this does not model, so the stresses and pressures are a lower bound and the 50 N magnitude is
 an estimate. ⚠ The **34% of (bbb) is a RATIO in circular rods** — the sizer's section, not the hollow
