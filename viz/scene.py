@@ -294,49 +294,21 @@ def skin_trace(h, q, opacity: float = 0.35, colour: str = "#e8c4a8"):
     )
 
 
-def strap_loop(h, q, station, width=0.016, standoff=0.0012):
-    """THE BAND'S ACTUAL CENTRELINE: the hand's own cross-section at that station, hulled.
+def strap_loop(h, q, station, width=0.016, standoff=0.0012, device=None):
+    """THE BAND'S ACTUAL CENTRELINE -- ONE definition, shared with the physics.
 
-    ⚠ ONE DEFINITION. The live view used to draw the band as a FIXED 55 mm CIRCLE about the hand
-    axis. The hand is ~25 mm across at the wrist, so the ring floated at twice the radius of the
-    hand and the nodes the strap pulls on sat well INSIDE it -- the user: "I still don't see any
-    nodes on the wrist strap." The nodes were there. The ring was nowhere near the hand.
+    Delegates to manufacture.strap.band_loop: the convex hull of the (skin ∪ device) cross-section
+    (§8.15f). Pass `device=(nodes,bars,live,radii)` and the band goes OVER the gauntlet, which is
+    what a tensioned strap holding the device down actually does; omit it and this is the skin-only
+    hull (a slightly rounder version of the old max-radius outline).
 
-    Two renderers, two geometries, and the picture stopped telling the truth. Now there is one.
+    ⚠ ONE DEFINITION. The live view once drew the band as a FIXED 55 mm CIRCLE and the user could
+    not see the nodes it pulled on. Two renderers, two geometries, and the picture stopped telling
+    the truth. The band path lives in ONE place now, and the render reads it from there.
     """
-    import mujoco
+    from manufacture.strap import band_loop
 
-    from hand.flesh import skin
-    from structure.frame import hand_axes
-
-    V, _, L = skin(h, q, labels=True)
-    tid = {mujoco.mj_name2id(h.model, mujoco.mjtObj.mjOBJ_BODY, b)
-           for b in ("firstmc", "proximal_thumb", "distal_thumb", "trapezium")}
-    V = V[~np.isin(L, list(tid))]
-    o, e_d, e_r, e_o = hand_axes(h, q)
-
-    sel = np.abs((V - o) @ e_d - station) < width / 2
-    if sel.sum() < 30:
-        return None
-    P = V[sel]
-    c = P.mean(axis=0)
-    u = (P - c) @ e_r
-    v = (P - c) @ e_o
-    ang = np.arctan2(v, u)
-    loop = []
-    NB = 96
-    for k in range(NB):
-        lo, hi = -np.pi + 2 * np.pi * k / NB, -np.pi + 2 * np.pi * (k + 1) / NB
-        m = (ang >= lo) & (ang < hi)
-        if not m.any():
-            continue
-        rr = np.hypot(u[m], v[m])
-        a = 0.5 * (lo + hi)
-        loop.append(c + (rr.max() + standoff) * (np.cos(a) * e_r + np.sin(a) * e_o))
-    if len(loop) < 8:
-        return None
-    loop.append(loop[0])
-    return np.array(loop)
+    return band_loop(h, q, station, device=device, width=width, standoff=standoff)
 
 
 def strap_traces(h, q, anchor_pts, n_bands=2, width=0.016, standoff=0.0012):

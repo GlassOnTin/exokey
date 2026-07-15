@@ -1789,6 +1789,41 @@ scaffolding for it was removed. The hood remains a real limitation for anything 
 is the cross-check for that. Separately, the **false-trigger floor** — the only thing that would push
 the dome stiffer than "as soft as possible" — is still **not measured**.
 
+### 8.15h The STRAP ANCHOR — the band that goes OVER the device, and the watch-lug that holds it
+
+The strap is the compliant half of the anchor (§8.15f); this is how it attaches and adjusts
+(`manufacture/strap.py`, `scripts/strap.py`, `tests/test_strap.py`).
+
+**(jj) THE BAND GOES OVER THE STRUCTURE, AND THE CODE NOW DOES TOO.** §8.15f (bb) named the
+principle — the band is the convex hull of (skin ∪ device), not of the limb — but the renderer still
+hulled the limb alone, so the drawn band passed *under* the dorsal gauntlet. Measured, the device
+**is** proud at both strap stations (the wrist band bulges **27 mm** over it, the metacarpal band
+more), so a skin-only band would sit inside the structure it is meant to pull down. `band_loop` now
+takes the 2-D convex hull of the union — which cannot pass through either set by construction — and
+`viz` reads that same one definition. (An earlier attempt with a max-radius-per-angle outline *dipped
+between struts*, because one point per strut undercovers each tube's angular width; a hull does not.)
+
+**(kk) THE JOIN IS A CAPTURED PIN, NOT A BOND IN PEEL.** Where a soft strap meets a stiff printed
+part, an adhesive loaded in peel is where it fails. So each anchor foot carries a **watch-lug**: a
+printed boss with a through-hole (r 1.1 mm, ≥ two nozzle walls), a pin along the hand's long axis,
+and the circumferential TPU strap **looping the pin in SHEAR**. Three lugs sit on each band, on the
+nodes the strap already pulls (§8.11) — the tension goes straight into the load path.
+
+**(ll) ONE ADJUSTABLE STRAP FITS THE POPULATION.** The wrist-band circumference over the 5th–95th
+percentile hand is **139 → 160 mm — a 21 mm spread (1.15×)**, and a watch strap's holes span
+30–40 mm. So a single strap covers everyone; the per-finger wells carry the rest of the fit (§8.5).
+
+**(mm) THE BOND IS A MATERIALS CHOICE, AND IT ONLY HAS TO SURVIVE HANDLING.** PU adhesive keys the
+TPU to the printed lug; a **vinyl-silane primer** couples to the *glass* in glass-nylon before a
+structural epoxy/PU. Because the pin carries the tension, the bond is not in the primary load path.
+
+**(nn) ⚠ AND WHAT IS NOT SOLVED.** The metacarpal band rides mostly on the *device* (it wraps the
+well-arm fan-out), and the pad flag (`bridging_fraction`) measures stand-off from *skin* — so it
+cannot yet tell "riding the smooth device" (fine) from "bridging a skin concavity onto a bony
+prominence" (needs a pad, §8.15f cc). The band path also drops struts more than 20 mm proud of the
+skin as well-arms rather than segmenting body-from-arm; a strut grazing that cutoff can still tug the
+hull. Both are heuristics, flagged, not solved.
+
 ### 8.16 Provenance
 
 The **five-direction finger well** derives from the **DataHand** keyboard (patents filed early
