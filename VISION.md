@@ -177,11 +177,10 @@ was inherited from a device we no longer build.
 A 5-direction well **is** a 2-axis stick with a click, so a well can *be* the mouse — at the
 price of its four tilts, which stop being characters.
 
-**Only the thumb and the index can drive one at all.** A 2-axis stick needs all four tilts, and
-the middle and ring cannot perform `left`/`right` — they could only ever be a *one*-axis mouse.
-That falls out of the muscle model; it is not an opinion.
-
-**And the answer inverts convention:**
+**Any finger can drive one** — a 2-axis stick needs all four tilts, and with the well floor
+restored (§8.15g) every finger performs them. (An earlier draft claimed only the thumb and index
+could, "the interossei are weak"; that was a cradle artefact, not the muscle model — see §8.15g.)
+So capability does not choose the digit. **Cost does, and it inverts convention:**
 
 | | typing cost |
 |---|---|
@@ -991,6 +990,20 @@ These bound every conclusion above.
   PIP joints (it originally covered only the PIP, and the optimiser went straight through the
   gap — see §5); not solved. `COMMON_DRIVE = 0.15` is a **guess**, and it is now built into
   the parameterisation, which makes it *more* load-bearing, not less.
+- ⚠ **MyoHand has no EXTENSOR HOOD** (it models the intrinsics as bare tendons). This turned out
+  **not** to be what limited the lateral tilts — that was a cradle artefact (the withheld well floor,
+  now fixed; §8.15g), and the interossei were adequate. But the hood is a genuine gap for anything
+  depending on its **IP-extension coordination**, and **OpenSim ARMS (real extensor hood) is the
+  pending cross-check** for those.
+- ⚠ **MyoHand does not model the IP COLLATERAL LIGAMENTS.** A finger's DIP/PIP take lateral load
+  passively through these; MyoHand, having only flexion hinges there, demands a muscle for it. The
+  well floor now stands in for that support during a lateral press, but a device that loaded the IPs
+  laterally *without* a floor would expose the gap.
+- ⚠ **The sensor's false-trigger floor is NOT MEASURED.** Effort is negligible wherever a direction
+  is feasible, so the dome wants to be *as soft as possible*; the only thing that would push it
+  stiffer is resistance to accidental actuation (a resting finger, a neighbour's motion, tremor),
+  and that floor has not been quantified. Until it is, the dome rate (131 N/m at the 20 gf
+  reference) is an **upper bound on softness**, not a determined value.
 - ⚠ **ANSUR II percentiles are recalled, not read from the dataset.** The 95th/5th ratio
   (~1.24) is load-bearing. **Verify before publishing.**
 - **Σaᵢ³ is a hypothesis** about what humans minimise, not ground truth. Field-standard, but
@@ -1115,6 +1128,10 @@ multi-axis sensor per well resolving all directions.
 Implemented as a **miniature joystick / thumbstick** beneath the well; as a well on a
 compliant stalk; as discrete switches around the well rim; or as a rigid well over a
 multi-axis sensor.
+
+**MEASURED (§8.15g): every finger's well is five-way (25/25).** The ulnar lateral tilts looked
+infeasible only because the cradle model withheld the well **floor** the finger still rests on during
+a lateral press; with it restored, all five directions are actuable on every digit.
 
 ### 8.4 Switch characteristics — any within
 
@@ -1702,6 +1719,75 @@ than the nylon webbing assumed (E ≈ 12–30 MPa against 2.0 GPa). Same structu
 - Disclosed: a **single-material-printable** wearable (rigid skeleton + printed elastomeric band)
   needs **no webbing, no buckle, and no supplier** — which is the reproducibility constraint of
   §5g.1 satisfied, not merely acknowledged.
+
+### 8.15g The SENSOR as a PRINTED FLEXURE, and how many directions each well really has
+
+The well replaces the Svalboard **20 gf magneto-optical key** with a **magnet on a compliant
+flexure over a 3-axis Hall** — every custom part printed, no contacts to wear, no spring to source.
+Sizing the flexure (`manufacture/flexure.py`, `scripts/flexure.py`; `design/sensor.py`,
+`scripts/sensor.py`) settled the material, the mechanism, and the per-finger layout — and two of
+them are *forced*, not chosen.
+
+**(ee) THE FLEXURE MATERIAL IS DECIDED BY ONE NUMBER — σ_fatigue/E, THE MAXIMUM RECOVERABLE BENDING
+STRAIN.** A well that actuates at 20 gf over 1.5 mm needs a *soft* restoring spring, k = F/travel ≈
+**131 N/m**. Built as an isotropic rod or dome soft enough for that, a stiff FDM plastic runs past
+its own fatigue limit and cracks: glass-nylon **50 MPa vs 25**, PLA/PETG/ASA alike; plain PA12 is
+the one exception and it merely *squeaks under* (13 vs 16 MPa), with no safety margin. Only **TPU**
+(σ_fat/E ≈ **0.115**, ~27× the stiff plastics) has the headroom as a one-part flexure; thin
+**spring steel** has it too, but only as a **leaf or cruciform** — go thin, which a shim can and a
+nozzle cannot. Disclosed: the gauntlet is stiff (glass-nylon), the flexure soft (**a TPU dome, or a
+steel cruciform**), and the split falls straight out of a single material property.
+
+**(ff) THE PLUNGE MUST BEND, NOT COMPRESS — WHICH IS WHY THE ANSWER IS A DOME.** The down-press
+cannot be the flexure *shortening*: even TPU is **~112× too stiff** in axial compression (glass-nylon
+1700×, steel 9800×). It must be a **bending** mode, so the one-part flexure is a **dome/diaphragm** —
+soft in tilt *and* in plunge from a single magnet, and a shallow dome **snaps** for a tactile click.
+A TPU dome of radius ≈6 mm, thickness ≈0.32 mm, at ~1 MPa surface stress, fits inside the ~7 mm
+flesh-radius well. (The 0.3 mm membrane sits at the FDM single-perimeter floor — dome it, corrugate
+it, or drop to a 0.25 mm nozzle.)
+
+**(gg) THE MOMENT AND LEVER CANNOT MANUFACTURE A MUSCLE.** Actuation effort — measured per finger
+and per direction across the 5th–95th population by the *same cradle solve the gauntlet layout uses*
+— is **negligible wherever a direction is feasible**, because the cradle bears the load. So the dome
+wants to be **as soft as a deliberate press allows**, and tuning the lever (cup height, contact
+offset) does **not** change *which* directions a finger can use: those are limited by **muscle
+capacity, not leverage**. The optimisation's real yield is therefore a *feasibility map*, not a
+per-finger stiffness.
+
+**(hh) THE WELLS LOOKED THREE-WAY ON THE ULNAR FINGERS — AND RUNNING THAT DOWN FOUND A CRADLE
+ARTEFACT, NOT A MUSCLE LIMIT.** `click` / `forward` / `back` are actuable by every finger; the
+lateral tilts were the question. On the first model only **18 of 25** (finger, direction) pairs
+passed — thumb 5/5, index 4/5, the ulnar three 3/5. The chase (`design/sensor.py`, `hand/cradle.py`):
+
+- The finger **interossei are present** — RI/UI/LU per finger, hundreds of mN·m of abduction
+  capacity. Never the problem. (An earlier claim they were weak/absent was wrong.)
+- A lateral tilt demands almost pure **MCP abduction** (~15 mN·m at 20 gf), yet it came out
+  infeasible with the residual on **IP flexion** — ~1 mN·m the muscles could not cancel.
+- The cause was **the cradle model, not the hand**. It let only the *sensed* wall react during a
+  lateral press and **withheld the well floor** — a conservatism adopted to avoid a
+  self-cancelling-preload bug (§8.13). But the finger is *still resting on the floor* while it tilts,
+  and that floor bears the small IP torque; withholding it demanded a **muscle** for a **floor's**
+  (and, in a real finger, a DIP **collateral ligament's**) job.
+- Restore the floor as free support during a non-floor press — **only the floor, never the opposing
+  wall**, so it cannot self-cancel into a fake press — and stock MyoHand is **25/25**: every well
+  five-way, all five digits.
+
+| | stock, floor withheld | floor restored |
+|---|---|---|
+| usable (finger, direction) pairs | 18/25 | **25/25** |
+
+The control still holds and is the important half: a stock thumb with **no adductor still presses
+0/5** — the floor lends no muscle (`test_design`). And it is corroborated directly by a pianist: the
+independent middle/ring adduction of split chords and augmented sixths is not difficult.
+
+**(ii) ⚠ WHAT THIS DID AND DID NOT SETTLE.** An intermediate hypothesis — that MyoHand's missing
+**extensor hood** (it models the intrinsics as bare tendons) was the cause — *also* makes the tilts
+feasible, and the hood is a genuine gap. But it was **not the operative one**: the floor fix resolves
+the tilts with the interossei MyoHand already has, so the hood was not needed here and the
+scaffolding for it was removed. The hood remains a real limitation for anything that turns on its
+**IP-extension coordination**, and **OpenSim ARMS** (43 muscles, real extensor hood; access pending)
+is the cross-check for that. Separately, the **false-trigger floor** — the only thing that would push
+the dome stiffer than "as soft as possible" — is still **not measured**.
 
 ### 8.16 Provenance
 

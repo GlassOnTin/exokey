@@ -537,23 +537,20 @@ def test_the_thumb_should_carry_space_and_it_is_free_to_do_so(hands):
     assert best < strict, "QWERTY is leaving effort on the table"
 
 
-def test_only_the_thumb_or_index_can_be_a_two_axis_pointer(hands):
-    """SVALBOARD SHIPS A POINTING DEVICE, and a 5-direction well IS a 2-axis stick with a
-    click -- so a well can BE the mouse. But it costs the four tilts, and they stop being
-    characters.
+def test_any_finger_can_be_a_two_axis_pointer(hands):
+    """SVALBOARD SHIPS A POINTING DEVICE, and a 5-direction well IS a 2-axis stick with a click --
+    so a well can BE the mouse. It costs the four tilts, which stop being characters.
 
-    THE CATCH: a 2-axis pointer needs ALL FOUR tilts, and only the THUMB and the INDEX can
-    perform them. The middle and ring cannot do left/right at all (the interossei are weak),
-    so they could only ever be a ONE-axis mouse. That is not an opinion; it falls out of the
-    muscle model.
+    ⚠ AN EARLIER VERSION OF THIS TEST ASSERTED ONLY THE THUMB AND INDEX COULD DO IT -- "the
+    interossei are weak". That was wrong twice: the interossei are present, and the ulnar lateral
+    tilts were gated by a CRADLE artefact (the withheld well floor, §8.15g), not by muscle. With the
+    floor restored, EVERY finger performs all four tilts, so any of them could be the pointer.
 
-    AND THE ANSWER IS THE OPPOSITE OF CONVENTION. Every keyboard, Svalboard included, puts the
-    pointer on the THUMB. Measured here, that costs 6.1x the typing effort while the INDEX
-    costs 1.9x -- precisely BECAUSE the thumb turned out to be the cheapest digit, so
-    surrendering it is expensive. You cannot see that until the thumb has its muscles.
-
-    (Svalboard sidesteps this: its trackball is a SEPARATE sensor, so it consumes no
-    directions -- only hardware and thumb TIME.)
+    What still differs is the COST of surrendering a digit's characters -- and it is the opposite of
+    convention. Every keyboard, Svalboard included, puts the pointer on the THUMB; measured here that
+    costs 6.1x the typing effort against 1.9x for the INDEX, precisely because the thumb is the
+    cheapest digit once it has its thenar muscles. (Svalboard sidesteps it with a SEPARATE trackball,
+    which consumes no directions -- only hardware and thumb time.)
     """
     from design.vector import RESIDUAL_MAX
 
@@ -563,11 +560,9 @@ def test_only_the_thumb_or_index_can_be_a_two_axis_pointer(hands):
     x["tp_hand"], x["tm_hand"] = 0.35, 0.40
     _, res = _slot_costs(h, x)
 
-    can_point = {f for f in FINGERS
-                 if all(res[(f, a)] <= RESIDUAL_MAX for a in TILTS)}
-    assert "thumb" in can_point and "index" in can_point, "thumb and index should manage 4 tilts"
-    assert not ({"middle", "ring"} & can_point), (
-        "middle/ring cannot perform left/right -- they cannot drive a 2-axis pointer"
+    can_point = {f for f in FINGERS if all(res[(f, a)] <= RESIDUAL_MAX for a in TILTS)}
+    assert can_point == set(FINGERS), (
+        f"with the well floor, every finger should manage all four tilts; got {sorted(can_point)}"
     )
 
 

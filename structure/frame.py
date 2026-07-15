@@ -54,6 +54,15 @@ MATERIALS = {
     # poor fatigue, in a device that is meant to take millions of keystrokes.
     "pla": dict(E=3.5e9, G=1.3e9, nu=0.36, rho=1240.0, yield_=50e6, fatigue=15e6),
     "webbing": dict(E=2.0e9, G=0.70e9, nu=0.40, rho=1150.0, yield_=60e6, fatigue=20e6),
+    # PETG / ASA -- the other stiff FDM thermoplastics the user is happy to use. Rough handbook
+    # figures; like PLA they price the flexure question and lose it (low fatigue/E). Approximate.
+    "petg": dict(E=2.1e9, G=0.75e9, nu=0.40, rho=1270.0, yield_=50e6, fatigue=11e6),
+    "asa":  dict(E=2.0e9, G=0.72e9, nu=0.35, rho=1070.0, yield_=44e6, fatigue=10e6),
+    # TPU 95A -- the STRAP, and the finger-well FLEXURE. ⚠ E is a small-strain tangent and is
+    # formulation- and print-dependent (~20-40 MPa for Shore 95A); it is hyperelastic, so a single
+    # linear E is a stand-in, fine for the soft-spring regime the flexure works in. rho/nu solid;
+    # `fatigue` is a conservative placeholder (TPU is unusually fatigue-robust). Approximate.
+    "tpu": dict(E=26e6, G=8.8e6, nu=0.48, rho=1210.0, yield_=30e6, fatigue=3e6),
     # the spring-steel clip that pre-tensions the strap against the palm support
     "spring_steel": dict(E=200e9, G=79e9, nu=0.30, rho=7850.0, yield_=1200e6, fatigue=600e6),
     # 316L STAINLESS WIRE, annealed -- the user's process: form it on a printed jig and laser-weld

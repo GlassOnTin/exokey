@@ -192,27 +192,45 @@ def solve(h: MyoHand, q: np.ndarray, finger: str, action: str, press_N: float):
         tau_star = Ad @ a_ls
         cons = [{"type": "eq", "fun": lambda a: Ad @ a - tau_star, "jac": lambda a: Ad}]
         res = minimize(lambda a: float(np.sum(a**3)), a_ls, jac=lambda a: 3.0 * a**2,
-                       bounds=[(0.0, 1.0)] * h.nu, constraints=cons, method="SLSQP",
+                       bounds=[(0.0, 1.0)] * Ad.shape[1], constraints=cons, method="SLSQP",
                        options={"maxiter": 200, "ftol": 1e-10})
         a = np.clip(res.x, 0.0, 1.0)
         return a, float(np.sum(a**3)), rel, float(a.max())
 
     G_s = G[surf]
+
+    # THE FINGER IS STILL RESTING IN THE WELL. When it presses any wall OTHER than the floor
+    # (a lateral tilt, or the end stop), the FLOOR still cradles it -- a free, non-negative dorsal
+    # support that stabilises the DIP/IP exactly as it does for a click. The old model withheld it
+    # and so demanded a MUSCLE for a lateral load the floor (and, in a real finger, the DIP
+    # collateral ligaments -- which MyoHand does not model) actually carry. That is what flagged
+    # middle/right and ring/right as infeasible over ~1 mN·m of DIP torque.
+    #
+    # ⚠ ONLY THE FLOOR, NEVER THE OPPOSING WALL. The self-cancelling-preload bug (a left-wall push
+    # balanced by a right-wall push, conjuring a keypress from a passive finger) needs two opposed
+    # surfaces. The floor's contact normals ALL point dorsally, so they cannot self-cancel, and the
+    # floor supplies no lateral force -- so it cannot fake the wall press. The control in
+    # test_design (a thumb with no adductor still presses nothing) is what verifies this.
+    G_f = G["floor"] if surf != "floor" else np.zeros((Ad.shape[0], 0))
+    nsup = G_f.shape[1]
     nu, npts, ndof = Ad.shape[1], G_s.shape[1], Ad.shape[0]
 
-    # Phase 1: the smallest torque the muscles + cradle cannot supply.
-    c = np.concatenate([np.zeros(nu + npts), np.ones(2 * ndof)])
+    # Phase 1: the smallest torque the muscles + cradle cannot supply. Variables: a (muscles),
+    # lam (sensed-wall forces, summing to press_N), mu (free floor support), e+/e- (slack).
+    c = np.concatenate([np.zeros(nu + npts + nsup), np.ones(2 * ndof)])
     A_eq = np.vstack([
-        np.hstack([Ad, G_s, np.eye(ndof), -np.eye(ndof)]),
-        np.concatenate([np.zeros(nu), np.ones(npts), np.zeros(2 * ndof)])[None, :],
+        np.hstack([Ad, G_s, G_f, np.eye(ndof), -np.eye(ndof)]),
+        np.concatenate([np.zeros(nu), np.ones(npts), np.zeros(nsup + 2 * ndof)])[None, :],
     ])
     b_eq = np.concatenate([-rest, [press_N]])
-    bnds = [(0.0, 1.0)] * nu + [(0.0, None)] * npts + [(0.0, None)] * (2 * ndof)
+    bnds = ([(0.0, 1.0)] * nu + [(0.0, None)] * npts + [(0.0, None)] * nsup
+            + [(0.0, None)] * (2 * ndof))
     r1 = linprog(c, A_eq=A_eq, b_eq=b_eq, bounds=bnds, method="highs")
     if not r1.success:
         return np.zeros(nu), float("inf"), 1.0, 1.0
 
-    e = r1.x[nu + npts:nu + npts + ndof] - r1.x[nu + npts + ndof:]
+    off = nu + npts + nsup
+    e = r1.x[off:off + ndof] - r1.x[off + ndof:]
     from design.vector import action_dirs
 
     d = action_dirs(h, q, finger)[action]
@@ -225,15 +243,16 @@ def solve(h: MyoHand, q: np.ndarray, finger: str, action: str, press_N: float):
     e_star = e
 
     def eq(z):
-        a, lam = z[:nu], z[nu:]
-        return np.concatenate([Ad @ a + G_s @ lam + rest + e_star, [lam.sum() - press_N]])
+        a, lam, mu = z[:nu], z[nu:nu + npts], z[nu + npts:]
+        return np.concatenate([Ad @ a + G_s @ lam + G_f @ mu + rest + e_star,
+                               [lam.sum() - press_N]])
 
-    z0 = np.concatenate([r1.x[:nu], r1.x[nu:nu + npts]])
+    z0 = np.concatenate([r1.x[:nu], r1.x[nu:nu + npts], r1.x[nu + npts:nu + npts + nsup]])
     res = minimize(
         lambda z: float(np.sum(z[:nu] ** 3)),
         z0,
-        jac=lambda z: np.concatenate([3.0 * z[:nu] ** 2, np.zeros(npts)]),
-        bounds=[(0.0, 1.0)] * nu + [(0.0, None)] * npts,
+        jac=lambda z: np.concatenate([3.0 * z[:nu] ** 2, np.zeros(npts + nsup)]),
+        bounds=[(0.0, 1.0)] * nu + [(0.0, None)] * (npts + nsup),
         constraints=[{"type": "eq", "fun": eq}],
         method="SLSQP", options={"maxiter": 200, "ftol": 1e-10},
     )

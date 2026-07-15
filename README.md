@@ -56,7 +56,7 @@ co-designs a wearable keyboard by multi-objective optimisation:
 | **Space** — 22% of the left hand's keystrokes — was not in the objective at all | it now sits on `thumb/click`, the cheapest slot on the hand |
 | Handing the thumb the modifiers is **free to learn** | **1.36×** cheaper (nobody's muscle memory encodes *direction*→*row*) |
 | What QWERTY itself costs, vs. a free (exact, Hungarian) assignment | **3.86×** |
-| A pointer can only go on the **thumb or index** (only they manage 4 tilts) | and it belongs on the **index**: 1.9× vs the thumb's **6.1×** |
+| Any finger can be a 2-axis pointer (every well is 5-way; the "ulnar can't tilt" limit was a cradle artefact) | but it belongs on the **index**: 1.9× typing cost vs the thumb's **6.1×** |
 | A well is a **cup**, not a cap: the fingertip *bone* slides in along its own axis | so the wells need a **spread, open** hand — gripping converges the fingertips |
 | QWERTY's *top* row is the most-used, not "home" | 30.2% vs 23.0% |
 | A palm-strapped body vs an articulated exoskeleton | **3× stiffer, 35% lighter** — *and then the palmar body was abandoned too: an open frame cannot reach into the palm without crossing the hand. The load path wants to go over the **back** of the hand.* |
