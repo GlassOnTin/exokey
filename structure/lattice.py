@@ -1005,6 +1005,15 @@ def relax_nodes(fr, U, nodes, bars, live, buttons, anchor_k, skin_V, skin_N,
     but it is NOT where the grams are. So it is ON for the structures that get reported and OFF in
     the GA loop, where it doubles the cost of an evaluation for no measurable return.
 
+    ⚠ CORRECTED LATER (VISION §8.15k, claim (ddd)). "NOT where the grams are" holds only for the
+    grow-FRONT designs measured above -- which are ALREADY relaxed, because grow runs this pass inside
+    its own loop, so a second helping buys little. But the DEFINITIVE structures come off a DECOUPLED
+    pipeline that never ran it at all: size-then-prune-then-curve for the keypress bone, and
+    grow-then-co-size for the impact one. On THOSE it is worth ~a fifth of the mass -- keypress bone
+    11.05 -> 8.51 g, impact structure 29.3 -> 24.2 g -- because their kinked members were sized to
+    resist BENDING, and straightening lets them carry AXIALLY. So this pass belongs in every reported
+    pipeline (it is now in scripts/bone.py and scripts/impact_opt.py), not only in the render.
+
     THE NODE IS STILL NOT FREE TO DO ANYTHING. It must stay in the band the gauntlet is allowed to
     occupy -- between `hug` and `hug + layer` off the skin -- so it cannot sink into the hand and
     it cannot flatten the lever arm. BUTTONS and ANCHORS are held: they are where the load enters

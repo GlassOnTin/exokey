@@ -32,9 +32,9 @@ anatomy rather than a bracket:
 | the gauntlet, optimised under every constraint at once | |
 |---|---|
 | members | **138** (drawn as 552 curved sub-beams) |
-| mass | **11.04 g** (beam model) |
+| mass | **8.51 g** (beam model) — after form-finding; see below |
 | section | **hollow tubes**, 0.8 mm wall — two perimeters of a 0.4 mm nozzle |
-| worst well displacement | **498 µm** against a 500 µm gate |
+| worst well displacement | **499 µm** against a 500 µm gate |
 | sharpest surface anywhere | **1.50 mm** — no spikes, no loose ends, one piece |
 | survives a **50 N knock** | re-sized for impact, not just crispness (§8.15k) |
 | support to print it | 254 pillars, **0 props** |
@@ -57,7 +57,8 @@ of what fell out:
 | The **ergonomic** minimum feature (1.5 mm), not the nozzle's (0.4 mm), makes it trabecular | 867 members → 153, and 56 spikes → **0** |
 | A palm-strapped body beats an articulated exoskeleton — then *it* was dropped too | the load path wants to go over the **back** of the hand, not around it |
 | Every well is a five-way joystick, on every finger | the "ulnar can't tilt" limit was a modelling artefact, not muscle |
-| A **50 N knock**, not the keypress, is what sizes the structure | and it wants a *broad* skeleton — growing with it in the loop is 19% lighter than bolting it on (§8.15k) |
+| A **50 N knock**, not the keypress, is what sizes the structure | and it wants a *broad* skeleton — growing with it in the loop is 34% lighter than bolting it on (§8.15k) |
+| **Form-finding the decoupled pipeline forgot.** The definitive bones were curved but never *relaxed* off the grid | doing so straightens the load paths *and* drops the flagship bone **11.0 → 8.5 g** (−23%): kinked members sized for bending carry axially once straight (§8.15k) |
 
 Full findings, the retracted ones included (a headline "1.9-million×" number that turned out to be an
 unbalanced-press artefact, and two design justifications that failed their own measurement), are in

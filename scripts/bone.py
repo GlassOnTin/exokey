@@ -82,9 +82,33 @@ def main():
     print(f"  its load paths still KINK: median {np.median(turns0):.0f} deg at each node "
           f"they run through\n")
 
-    # ---- CURVE the load paths ------------------------------------------------------------------
+    # ---- FORM-FINDING: relax the nodes off the grid, BEFORE curving -----------------------------
+    # ⚠ The decoupled bone pipeline curves the load paths but never MOVED the nodes, so ~12% of them
+    # still turn a path past 75 deg -- a grid staircase curves() can only follow, not straighten.
+    # relax_nodes is the pass every REPORTED structure is meant to get (grow runs it inside the
+    # topology search; this pipeline dropped it): move each free node toward axial equilibrium, held
+    # in the skin band, buttons and anchors fixed. Then curve, and size_stadium re-sizes on the
+    # straightened geometry -- so the curves follow a load path that actually goes where it is drawn.
+    from structure.fem import Frame
+    from structure.frame import MATERIALS
+    from structure.lattice import BAR_R, relax_nodes, _normals
     from scipy.spatial import cKDTree
     V, _F = skin(ref, q)
+    Nr = _normals(V, _F)
+    E = MATERIALS["cf_pa12"]["E"]
+    rr0 = float(BAR_R)
+    X = np.array(nodes, float)
+    for _ in range(15):
+        fr = Frame(X, sb, E, E / 2.6, np.pi * rr0 ** 2, np.pi * rr0 ** 4 / 4, np.pi * rr0 ** 4 / 2,
+                   spring={i: k for i, k in ak.items()})
+        U = fr.solve([c[2] for c in cases])
+        X = relax_nodes(fr, U, X, bars, live, btn, ak, V, Nr, hug=0.004)
+    nodes = X
+    turns_r = kink(nodes, bars, live)
+    print(f"RELAXED (form-finding): median kink {np.median(turns0):.0f} -> {np.median(turns_r):.0f} "
+          f"deg, kinks > 75: {int((turns0 > 75).sum())} -> {int((turns_r > 75).sum())}\n")
+
+    # ---- CURVE the load paths ------------------------------------------------------------------
     tree = cKDTree(V)
     need = {e: float(SEG_CLEAR) * 0.004 + float(z["radii"][k]) for k, e in enumerate(live)}
     n2, b2, owner = curves(nodes, bars, live, tension=float(TENSION) * 0.3)

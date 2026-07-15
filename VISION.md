@@ -1969,17 +1969,23 @@ threshold of a painful knock. So the fingertip wells, the most exposed features,
 mitigation: **more anchor loops sharing, or a compliant well cup** that yields before the load
 concentrates. (Both deferred; the cup also cuts the input force the structure must survive in (zz).)
 
-**(ddd) THE SHAPE HAD TO CONVERGE TOO — AND FOR A DENSE STRUCTURE THAT IS WHERE THE GRAMS ARE.** The
-co-sized skeleton comes off the lattice *staircased*: ~8% of its nodes turn a load path past 75°,
-kinks the eye reads (correctly) as un-converged. `relax_nodes` — **form-finding**, move each free node
-toward axial equilibrium, held in the skin band, buttons and anchors fixed — straightens them (**kinks
-> 75°: 40 → 11**, median through-turn **30° → 13°**). On the *sparse* keypress bone this is cosmetic:
-measured, it barely moves mass, because a redundant lattice just routes load around a kink. But the
-*dense* impact grow **starves** the relaxation that runs inside the topology search, so its members
-were sized thick to resist **bending** at their kinks; straightening lets them carry **axially**, and
-axial members are thinner — **29.3 g → 24.2 g (−17%)**, gate 113 → 133 µm (still crisp), knock
-unchanged. So here the form-finding is not cosmetic; it is where a sixth of the mass was hiding, and
-skipping it is what made the first render look un-converged. Every *reported* structure gets this pass.
+**(ddd) THE SHAPE HAD TO CONVERGE TOO — AND THE DECOUPLED PIPELINE HAD FORGOTTEN IT.** A sized skeleton
+comes off the lattice *staircased*: nodes pinned to grid sites turn a load path in kinks (~8% past 75°
+on the impact structure, 12% on the keypress bone), which the eye reads — correctly — as un-converged,
+and which `curves()` can only *follow*, not straighten. `relax_nodes` is the fix: **form-finding** —
+move each free node toward axial equilibrium (the FEA residual points the way), held in the skin band,
+buttons and anchors fixed. It is the pass every *reported* structure is meant to get, but it only ever
+ran *inside* `grow()`; the **decoupled** pipelines that produce the definitive structures — size-then-
+prune-then-curve for the keypress bone, grow-then-co-size for the impact one — never applied it.
+Adding it straightens them (impact **kinks > 75°: 40 → 11**, median through-turn **30° → 13°**) **and
+lightens them**: the impact structure **29.3 → 24.2 g (−17%)** and the keypress bone **11.05 → 8.51 g
+(−23%)**, both with the gate still held. Straightening is the reason — a member sized thick to resist
+**bending** at its kink carries **axially** once straight, and axial members are thinner.
+
+⚠ **This corrects an earlier reading** (the `relax_nodes` note): that relaxation is "cosmetic, barely
+moves mass" on a sparse bone. That was measured on the grow-**front** designs — which are *already*
+relaxed, so more relaxation buys little. On a structure that was **never** relaxed it is worth a fifth
+of its mass. The trap was a real measurement quoted outside the scope it was taken in.
 
 ⚠ **QUASI-STATIC**, as throughout (§8.15i): a real impact adds dynamic amplification (energy, contact
 time) this does not model, so the stresses and pressures are a lower bound and the 50 N magnitude is
