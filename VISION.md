@@ -1855,14 +1855,23 @@ far stiffer per unit mass than a solid plate, so it delivers the impact-spreadin
 the mass, and it *reuses the bone already optimised* rather than adding to it. The inner face doubles
 as the surface the wells and sensor PCBs mount to.
 
-**(rr) ⚠ WHAT IS VERIFIED, AND WHAT IS PROPOSED.** The **sizing physics is verified** (plate on
-elastic foundation, locked in `tests/test_bearing.py`) and is order-of-magnitude only:
-**quasi-static** (a real impact adds dynamic amplification), **infinite-plate** (a real shell has
-edges), and **Winkler** (tissue as independent springs) — so the knock pressures are a *lower bound*.
-The **sandwich construction is proposed, not built**: it changes the structure's boundary condition
-and wants a re-solve of the 500 µm key-deflection gate with the shell in place. The **50 N knock**
-magnitude and the comfort/pain pressure thresholds (~4 kPa capillary, ~20 kPa worn, ~200 kPa painful)
-are estimates, flagged.
+**(rr) THE GATE, RE-SOLVED WITH THE FACE — IT HOLDS.** The inner face was added to the per-element
+Sizer as CST membrane triangles and the 500 µm key-deflection gate re-solved at the bone's real
+sections (`scripts/sandwich.py`, `tests/test_sandwich.py`): the buttons hold at **485 µm ≤ 500 µm**,
+and the no-face baseline reproduces the **498 µm** bone gate exactly. So the face does not compromise
+key-crispness. It barely *helps* the gate (−3%) — the anchor is tissue-dominated — which confirms the
+face's value is the IMPACT (pp), not crispness.
+
+**(ss) ⚠ WHAT IS VERIFIED, AND WHAT IS NOT.** The sizing physics is verified (plate on elastic
+foundation, `tests/test_bearing.py`) and order-of-magnitude only — quasi-static, infinite-plate,
+Winkler — so the knock pressures are a lower bound. The gate re-solve models the face as a **flat CST
+membrane tying the bearing nodes**: it captures the in-plane tying and the gate, but NOT the
+out-of-plane plate bending that *is* the impact benefit (that stays the (pp) analysis), and the
+full-membrane face mass (**+10.8 g** at 1.5 mm) is an upper bound — the sandwich's real saving is
+*thin* faces over the lattice core, a bending efficiency the membrane model does not compute. A
+finer conforming shell on the skin (not the ~5.5 mm-proud bearing nodes) and the outer face remain
+to be built. The 50 N knock magnitude and the comfort/pain thresholds (~4 kPa capillary, ~20 kPa
+worn, ~200 kPa painful) are estimates, flagged.
 
 ### 8.16 Provenance
 

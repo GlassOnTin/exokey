@@ -111,15 +111,20 @@ def _basis(nodes, bars, E, G):
 class Ellipse:
     """A frame whose members are ELLIPSES: a scale `s`, an aspect `k`, and a roll, per element."""
 
-    def __init__(self, nodes, bars, mat="cf_pa12"):
+    def __init__(self, nodes, bars, mat="cf_pa12", shells=(), shell_t=None):
         self.nodes = np.asarray(nodes, float)
         self.bars = [tuple(b) for b in bars]
         p = MATERIALS[mat]
         self.E, self.G, self.rho = p["E"], p["E"] / 2.6, p["rho"]
         self.L = np.array([np.linalg.norm(self.nodes[j] - self.nodes[i]) for i, j in self.bars])
         self.KA, self.KIy, self.KIz, self.KJ = _basis(self.nodes, self.bars, self.E, self.G)
-        # a Frame only for its node map and dof bookkeeping -- the stiffness is built here
-        self.fr = Frame(self.nodes, self.bars, self.E, self.G, 1e-6, 1e-12, 2e-12)
+        # a Frame for the node map and dof bookkeeping -- and, if given, the SANDWICH FACES: CST
+        # membrane triangles (structure/fem). A curved conforming face resists the keypress by
+        # MEMBRANE action, which a stick lattice cannot -- so a face ties the bearing patch into a
+        # sheet. Default (no shells) is identical to the plain beam sizer.
+        self.shell_t = 0.0015 if shell_t is None else float(shell_t)
+        self.fr = Frame(self.nodes, self.bars, self.E, self.G, 1e-6, 1e-12, 2e-12,
+                        shells=shells, shell_t=self.shell_t)
 
     #                                    A TUBE.
     #
@@ -205,9 +210,17 @@ class Ellipse:
                 for q in range(3):
                     sr.append(6 * self.fr.idx[i] + q)
                     sv.append(kk)
-        K = coo_matrix((np.concatenate([kg.ravel(), np.array(sv)]),
-                        (np.concatenate([rows, np.array(sr, int)]),
-                         np.concatenate([cols, np.array(sr, int)]))), shape=(n, n)).tocsc()
+        vals = [kg.ravel(), np.array(sv, float)]
+        ris = [rows, np.array(sr, int)]
+        cis = [cols, np.array(sr, int)]
+        for si in range(len(self.fr.sk)):        # SANDWICH FACES: assemble each CST membrane cell
+            dd = self.fr.sdofs[si]
+            rr, cc = np.meshgrid(dd, dd, indexing="ij")
+            vals.append(self.fr.sk[si].ravel())
+            ris.append(rr.ravel())
+            cis.append(cc.ravel())
+        K = coo_matrix((np.concatenate(vals), (np.concatenate(ris), np.concatenate(cis))),
+                       shape=(n, n)).tocsc()
         K = K + 1e-6 * coo_matrix((np.ones(n), (np.arange(n), np.arange(n))), shape=(n, n)).tocsc()
         lu = splu(K)
         B = np.zeros((n, len(cases)))
