@@ -1,0 +1,55 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light"><title>ExoKey — what is being served</title>
+<style>
+ html,body{background:#fff}
+ body{font:15px/1.7 -apple-system,Segoe UI,Roboto,sans-serif;max-width:44rem;margin:3rem auto;
+      padding:0 1.5rem;color:#1a1a1a;text-align:left}
+ h1{font-size:1.15rem} a{color:#12639b} li{margin:.35rem 0} code{color:#666;font-size:.85em}
+ .k{color:#666;font-size:.9em}
+</style>
+<h1>ExoKey</h1>
+<p class="k"><b>The bone.</b> 138 members → 552 curved sub-beams · <b>11.04 g</b> · hollow tubes
+   (0.8 mm wall) · every surface ≥ 1.5 mm · no spikes, no loose ends, one piece · 498 µm at the
+   wells against a 500 µm gate · 254 pillars, 0 props.</p>
+<p class="k"><b>The sensor.</b> Each well is a contactless-Hall flexure — a magnet on a printed
+   <b>TPU dome</b> over a 3-axis Hall, soft in tilt and in plunge, snapping for a click. Scored
+   against the muscle-effort model across the 5th–95th percentile hand: <b>every well is
+   five-way</b> on every finger — the ulnar "three-way" limit was a cradle artefact, not muscle.</p>
+<p class="k"><b>The strap.</b> The band is the convex hull of (skin ∪ device), so it rides
+   <b>over</b> the gauntlet it holds down; a <b>watch-lug</b> captures a pin in shear at each anchor
+   foot; one adjustable strap (21 mm range) fits the 5th–95th percentile population.</p>
+<ul>
+  <li><a href="onstrap.html">onstrap.html</a> — <b>the gauntlet on the OUTSIDE of the strap</b>
+      (§8.15j, the current decision). Hand → soft strap (the only thing that touches the hand) →
+      gauntlet. The strap cushions, tethers, and spreads; no hard bit meets the hand, and the gate
+      still holds (499 µm).</li>
+  <li><a href="sandwich.html">sandwich.html</a> — <b>the sandwich, layered</b> (the bearing-shell
+      step it superseded). The hand meets a
+      smooth <b>bearing pad</b> (the inner face), which spreads the strap preload and any knock over
+      the dorsal skin; the topology-optimised lattice is the <b>core</b> that sits on the pad. No
+      tube-end touches the hand — the answer to "won't the gauntlet spike me?".</li>
+  <li><a href="strap.html">strap.html</a> — <b>the strap, over the gauntlet</b>. The band routed as
+      the convex hull of (skin ∪ device) so it bulges over the structure it pulls down; the gauntlet
+      as solid tubes, and the anchor feet the watch-lugs sit on.</li>
+  <li><a href="typing.html">typing.html</a> — <b>watch it type</b>. The hand posed into every wired
+      press: the character, the direction, the muscle effort, and whether the digit can actually
+      balance the key. Every pose derived from the pad <b>Jacobian</b>, not drawn. The gauntlet is
+      the real one, at the radius the physics chose for each member, with the wall <b>translucent so
+      you can see the marrow cavity</b> — and the sacrificial supports on a toggle.</li>
+  <li><a href="anim.html">anim.html</a> — <b>the whole optimisation, replayed</b>. Scrub or play
+      through every generation: the front forming, and the knee design's structure growing with it.</li>
+  <li><a href="progress.html">progress.html</a> — <b>the optimiser, live</b>.</li>
+  <li><a href="pareto.html">pareto.html</a> — the co-optimised front, as landed.</li>
+</ul>
+<p class="k">Artefacts, newest first:
+   <code>bone.npz</code> (the answer — friendly, curved, hollow),
+   <code>gauntlet.stl</code> (the printable solid; <b>slice it with 2 perimeters and 0% infill</b> —
+   that is what makes the members hollow, and the printer was going to do it anyway),
+   <code>friendly.npz</code> (the ergonomic floor, solid rods),
+   <code>smooth.npz</code> (the spline study),
+   <code>printable.npz</code> (the nozzle floor — the thin one nobody could bear to wear),
+   <code>wire.npz</code> (the welded-wire build), <code>sized.npz</code>, <code>final.npz</code>,
+   <code>pareto.pkl</code>.</p>
+<p class="k">Superseded renders were deleted (all regenerable from <code>scripts/</code>).
+   Invalidated <em>results</em> were archived, not deleted — see <code>out_archive/</code>.</p>

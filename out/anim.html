@@ -1,0 +1,157 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ExoKey — the optimisation, replayed</title>
+<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+<style>
+  html,body{height:100%}
+  body { margin:0; display:flex; flex-direction:column; overflow:hidden; font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif; color:#1a1a1a;
+         background:#fff; }
+  header { padding:10px 18px; border-bottom:1px solid #e5e5e5; display:flex; gap:18px;
+           align-items:center; flex-wrap:wrap; }
+  h1 { font-size:15px; margin:0 12px 0 0; font-weight:600; }
+  button { font:inherit; padding:4px 14px; border:1px solid #ccc; background:#fff;
+           border-radius:5px; cursor:pointer; }
+  button:hover { background:#f2f2f2; }
+  input[type=range] { width:min(420px, 42vw); }
+  .k { color:#666; } .v { font-variant-numeric:tabular-nums; font-weight:600; }
+  #wrap { display:grid; grid-template-columns: 1fr 1fr; flex:1 1 auto; min-height:0; }
+  @media (max-width:900px),(max-height:560px){ #wrap{grid-template-columns:1fr} .note{display:none} }
+  @media (max-width:900px){ #wrap { grid-template-columns:1fr; } }
+  .note { padding:6px 18px; color:#666; font-size:12px; border-bottom:1px solid #f0f0f0; }
+</style>
+<header>
+  <h1>ExoKey — the optimisation, replayed</h1>
+  <button id="play">▶ play</button>
+  <input type="range" id="scrub" min="0" max="0" value="0">
+  <span class="k">gen <span class="v" id="gen">–</span></span>
+  <span class="k">front <span class="v" id="n">–</span></span>
+  <span class="k">lightest <span class="v" id="m">–</span></span>
+  <span class="k" id="status"></span>
+  <button id="rock">⏸ rotation</button>
+</header>
+<div class="note" id="sub">
+  Left: the Pareto front as it forms — every point a design whose gauntlet was actually
+  <b>grown</b>. Right: the knee design's structure at that generation. Nothing was drawn by hand.
+</div>
+<div id="wrap"><div id="front"></div><div id="dev"></div></div>
+<script>
+let frames = [], cache = {}, i = 0, playing = false, timer = null, lastScene = -1;
+
+async function load() {
+  const man = await (await fetch('history/manifest.json?_=' + Date.now())).json();
+  const fresh = man.gens.filter(g => !frames.includes(g));
+  for (const g of fresh) {
+    try { cache[g] = await (await fetch(`history/gen_${String(g).padStart(3,'0')}.json?_=${Date.now()}`)).json(); }
+    catch (e) { continue; }
+    frames.push(g);
+  }
+  frames.sort((a,b) => a-b);
+  const s = document.getElementById('scrub');
+  s.max = Math.max(0, frames.length - 1);
+  document.getElementById('status').textContent =
+    man.done ? `${frames.length} generations` : `${frames.length} so far — still running`;
+  if (!man.done) setTimeout(load, 15000);
+  if (frames.length && i === 0) show(0);
+}
+
+// the front's extent, over ALL frames, so the axes do not jump about as it plays
+function bounds() {
+  let x0=Infinity, x1=-Infinity, y0=Infinity, y1=-Infinity;
+  for (const g of frames) for (const p of cache[g].front) {
+    x0=Math.min(x0,p[0]); x1=Math.max(x1,p[0]); y0=Math.min(y0,p[1]); y1=Math.max(y1,p[1]);
+  }
+  const px=(x1-x0)*0.08 || 1e-8, py=(y1-y0)*0.08 || 1;
+  return [[x0-px, x1+px], [y0-py, y1+py]];
+}
+
+function show(k) {
+  i = k;
+  const f = cache[frames[k]];
+  if (!f) return;
+  document.getElementById('scrub').value = k;
+  document.getElementById('gen').textContent = f.gen;
+  document.getElementById('n').textContent = f.front.length;
+  document.getElementById('m').textContent =
+    Math.min(...f.front.map(p => p[1])).toFixed(1) + ' g';
+
+  const [xr, yr] = bounds();
+  const kx = f.front[f.knee] || f.front[0];
+  Plotly.react('front', [
+    { x: f.front.map(p=>p[0]), y: f.front.map(p=>p[1]), mode:'markers', type:'scatter',
+      marker:{size:10, color:'#12639b', line:{width:1,color:'#fff'}},
+      hovertemplate:'effort/char %{x:.3e}<br>%{y:.1f} g<extra></extra>' },
+    { x:[kx[0]], y:[kx[1]], mode:'markers', type:'scatter',
+      marker:{size:16, color:'#e8590c', symbol:'diamond', line:{width:1,color:'#fff'}},
+      hoverinfo:'skip' }
+  ], {
+    title:`generation ${f.gen}  ·  ${f.elapsed.toFixed(0)}s`,
+    xaxis:{title:'effort / character (Σa³)', range:xr},
+    yaxis:{title:'grown gauntlet + adjusters (g)', range:yr},
+    margin:{t:40,r:10}, template:'plotly_white', showlegend:false, uirevision:'keep'
+  });
+
+  // The structure is only grown every few generations, so carry the nearest one forward --
+  // and if there is none BEHIND (generation 1 has no structure yet), look AHEAD, or the panel
+  // sits empty on the very first frame and the animation opens on nothing.
+  let sc = null;
+  for (let j = k; j >= 0; j--) if (cache[frames[j]] && cache[frames[j]].scene) {
+    sc = cache[frames[j]].scene; break;
+  }
+  if (!sc) for (let j = k + 1; j < frames.length; j++) if (cache[frames[j]] && cache[frames[j]].scene) {
+    sc = cache[frames[j]].scene; break;
+  }
+  if (sc && sc !== lastScene) {
+    lastScene = sc;
+    cam0 = null;
+    Plotly.react('dev', sc.traces, Object.assign(
+      { margin:{t:40,l:0,r:0,b:0}, template:'plotly_white', showlegend:false,
+        title: sc.note, uirevision:'keep' }, sc.layout || {}));
+  }
+}
+
+// ⚠ DEPTH COMES FROM MOTION. The user: "I can only make sense of the render by rotating it
+// dynamically to infer the depth info." Quite right, and it is a missing CUE, not a failure of the
+// viewer: motion parallax is the strongest depth cue the visual system has, and a static
+// projection of a tangle of tubes simply does not carry the information. They were supplying it by
+// hand. So the device panel rocks +/-18 deg about its own up-axis -- a rock and not a spin,
+// because the first-person framing (looking down at the back of your own hand) is what makes the
+// thing legible and an orbit throws it away. Dragging pauses it.
+let rocking = true, rockT = 0, dragged = 0, cam0 = null;
+function rot(v, k, a) {
+  const c = Math.cos(a), s = Math.sin(a);
+  const kd = k[0]*v[0] + k[1]*v[1] + k[2]*v[2];
+  const kx = [k[1]*v[2]-k[2]*v[1], k[2]*v[0]-k[0]*v[2], k[0]*v[1]-k[1]*v[0]];
+  return [v[0]*c + kx[0]*s + k[0]*kd*(1-c),
+          v[1]*c + kx[1]*s + k[1]*kd*(1-c),
+          v[2]*c + kx[2]*s + k[2]*kd*(1-c)];
+}
+setInterval(() => {
+  const gd = document.getElementById('dev');
+  if (!rocking || !gd || !gd.layout || !gd.layout.scene || !gd.layout.scene.camera) return;
+  if (Date.now() - dragged < 2500) return;
+  if (!cam0) cam0 = JSON.parse(JSON.stringify(gd.layout.scene.camera));
+  const u0 = [cam0.up.x, cam0.up.y, cam0.up.z];
+  const n = Math.hypot(...u0), u = u0.map(v => v / n);
+  rockT += 0.012;
+  const e = rot([cam0.eye.x, cam0.eye.y, cam0.eye.z], u, 0.315 * Math.sin(rockT));
+  Plotly.relayout(gd, {'scene.camera.eye': {x: e[0], y: e[1], z: e[2]}});
+}, 60);
+document.getElementById('dev').addEventListener('mousedown', () => { dragged = Date.now(); });
+document.getElementById('rock').onclick = () => {
+  rocking = !rocking;
+  document.getElementById('rock').textContent = rocking ? '⏸ rotation' : '↻ rotation';
+};
+
+document.getElementById('scrub').oninput = e => show(+e.target.value);
+document.getElementById('play').onclick = () => {
+  playing = !playing;
+  document.getElementById('play').textContent = playing ? '⏸ pause' : '▶ play';
+  if (playing) {
+    timer = setInterval(() => {
+      if (!frames.length) return;
+      show((i + 1) % frames.length);
+    }, 500);
+  } else clearInterval(timer);
+};
+load();
+</script>
