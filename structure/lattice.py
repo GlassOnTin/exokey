@@ -724,7 +724,8 @@ def solve(nodes, bars, live, buttons, cases, anchor_k, anchor_n, r=None, mat="cf
 
 
 def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
-         press_N=0.196, wired=None, relax=True, plates=False, r=None, on_step=None):
+         press_N=0.196, wired=None, relax=True, plates=False, r=None, on_step=None,
+         impact_cases=None):
     """WOLFF'S LAW. Delete the bars that carry no load, until the buttons stop being crisp.
 
     Bone is not designed, it is grown: it lays down material where it is strained and resorbs it
@@ -759,7 +760,15 @@ def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
         # ⚠ ONE RANKING FOR BOTH. A strut and a plate compete on the SAME criterion -- strain
         # energy per unit VOLUME -- so ESO deletes whichever is doing less work, whatever shape it
         # happens to be. Rank them separately and you have decided the answer in advance.
-        pool = ([("b", e, se.get(e, 0.0)) for e in live]
+        # ⚠ IMPACT-IN-THE-LOOP. Given a knock load set, rank a bar by its strain energy over the
+        # keypress AND the impact cases -- so a bar that carries a knock survives even if it is idle
+        # under a keypress. The GATE stays keypress deflection; only the RANKING sees the impact.
+        rank_se = se
+        if impact_cases is not None:
+            _wi, sei, *_rest = solve(nodes, bars, live, btn, impact_cases, ak, an, mat=mat, r=r,
+                                     shells=shells, live_s=live_s, strap_n=strap_n)
+            rank_se = {e: se.get(e, 0.0) + sei.get(e, 0.0) for e in live}
+        pool = ([("b", e, rank_se.get(e, 0.0)) for e in live]
                 + [("s", e, ss.get(e, 0.0)) for e in live_s])
         pool.sort(key=lambda t: t[2])
         drop = set((k, e) for k, e, _v in pool[:max(1, int(cut * len(pool)))])

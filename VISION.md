@@ -1917,10 +1917,63 @@ members — a belt-loop, not a fastener. Strap and attachment are then a *single
 buckle and no supplier — the reproducibility constraint of §5g.1 met again. (TPU prints such loops
 cleanly.)
 
-**(yy) ⚠ STILL OPEN.** The **impact** through the new path (a knock runs gauntlet → strap → hand; the
-soft band should cushion it, but that is argued, not computed); the **meshed strap** (the re-solve is
-a conservative compliance model, not a modelled band); and the loop geometry itself. The decision is
-sound on the gate and the comfort; the impact case and the loop are the remaining work.
+**(yy) ⚠ STILL OPEN.** The **meshed strap** (the re-solve is a conservative compliance model, not a
+modelled band) and the **loop geometry** itself. (The **impact** through the path, flagged open here,
+is now computed — **§8.15k** — and it both re-sized the bone and showed the strap cushions most knocks
+but not a direct one on a fingertip well.) The decision is sound on the gate and the comfort; the
+meshed strap and the loop are the remaining work.
+
+### 8.15k WILL IT BREAK? — impact as the binding structural load, and the re-optimisation for it
+
+§8.15j (yy) left the **impact** argued but not computed. It is now computed — `scripts/robust.py`
+(does it break or fatigue), `scripts/impact.py` (does a knock hurt the hand through the strap),
+`scripts/regrow_impact.py` (does the knock want a different skeleton), `scripts/impact_opt.py` (the
+proper re-optimisation) — and it moves the structure.
+
+**(zz) THE KNOCK, NOT THE KEYPRESS, IS THE BINDING STRUCTURAL LOAD.** Two questions the 500 µm
+deflection gate never asked. **Fatigue** is trivial: the worst member sees **1.6 MPa** under a 0.196 N
+keypress against a 25 MPa fatigue limit — a **16× margin**, because the device is touch-limited
+(§8.15d) and its members are already far over-thick for a keypress. But a **50 N knock is 250× a
+keypress**, and on the deflection-optimised bone it drives the worst member to **348 MPa against a
+70 MPa yield — it BREAKS** (by well: thumb 348, little 254, ring 245, index 239, middle 116, dorsal
+72 MPa). A structure sized only to be *crisp* is not a structure that *survives being knocked*.
+
+**(aaa) THE KNOCK WANTS A DIFFERENT SKELETON — BROAD, NOT SPARSE.** A keypress-deflection gate wants a
+*sparse, efficient* skeleton; a localised knock wants a *broad, redundant* one that shares the blow
+over many members. Measured: the same 50 N knock is **348 MPa on the sparse bone but ~56 MPa spread
+over the broad candidate domain**. Grown *with* the knock in the load set versus without, the two
+skeletons share only **20% of their members (Jaccard 0.20)** — the impact-aware grow keeps 781 struts
+to the keypress grow's 339, and **595 of them are members the keypress grow threw away**. The
+robustness the ergonomic floor bought (§8.15f) covers the keypress and the fatigue; it does **not**
+cover the knock, which needs its own topology.
+
+**(bbb) IMPACT-IN-THE-LOOP BEATS BOLTING IT ON.** Two ways to make the bone survive the knock at a
+safety factor of 2: *bolt-on* — size the keypress skeleton for the gate, then thicken every
+over-stressed member (fully-stressed design) — or *in-the-loop* — grow WITH the knock and size for the
+gate AND the stress together. Measured like for like (circular rods, one anchor, one gate, both
+surviving): bolt-on reaches **36.4 g and cannot even hit SF 2** — its sparse members **saturate at the
+radius ceiling** at 42 MPa (SF 1.7); in-the-loop reaches **29.3 g at SF ≈ 1.9**, **19% lighter and
+more robust**, because the broad skeleton never drives a member to its ceiling. The method: a knock is
+a *local stress* limit and a keypress a *global deflection* limit, married by feeding a
+fully-stressed-design floor `r_e ≥ r_e·√(σ_e·SF/yield)` into the deflection sizer as a per-member
+lower bound (`rlo`), iterated to a fixed point as the knock redistributes; and `grow()` ranks members
+by their keypress **and** impact strain energy while the deletion gate stays keypress deflection.
+
+**(ccc) THE STRAP CUSHIONS MOST KNOCKS — BUT NOT A DIRECT ONE ON A FINGERTIP WELL.** Through the
+gauntlet → strap → hand path (§8.15j), a 50 N knock spread over the strap footprint is **10× gentler
+than through a bare 1.5 mm foot** (7.1 MPa): a knock on the back of the hand or a well shared by two
+anchor loops lands at **36–93 kPa** (felt, not injurious). But a knock straight onto the thumb, index
+or middle well **levers onto a single anchor loop** and reaches **228–689 kPa** — past the ~200 kPa
+threshold of a painful knock. So the fingertip wells, the most exposed features, want their own
+mitigation: **more anchor loops sharing, or a compliant well cup** that yields before the load
+concentrates. (Both deferred; the cup also cuts the input force the structure must survive in (zz).)
+
+⚠ **QUASI-STATIC**, as throughout (§8.15i): a real impact adds dynamic amplification (energy, contact
+time) this does not model, so the stresses and pressures are a lower bound and the 50 N magnitude is
+an estimate. ⚠ The **19% of (bbb) is a RATIO in circular rods** — the sizer's section, not the hollow
+stadium of the final bone (§8.15d) — so it transfers as a ratio, not as grams; the bolt-on's own
+hollow-stadium number is **11 g → 17 g at SF 2** (`out/robust.npz`, gate 498 → 114 µm, so thicker is
+also crisper). The fully-stressed floor oscillates at 36–39 MPa; both structures stay well under yield.
 
 ### 8.16 Provenance
 

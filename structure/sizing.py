@@ -161,8 +161,16 @@ class Sizer:
 
 def size(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, strap_k,
          gate=0.5e-3, mat="cf_pa12", r_min=1e-6, r_max=2.5e-3, r0=9e-4,
-         steps=22, pnorm=8.0, eta=0.5, on_step=None, r_init=None, patience=3):
+         steps=22, pnorm=8.0, eta=0.5, on_step=None, r_init=None, patience=3, rlo=None):
     """Minimise mass subject to the deflection gate. Returns (radii, mass, worst, live).
+
+    ⚠ rlo IS A PER-MEMBER LOWER BOUND, and it is how the IMPACT constraint enters a sizer that only
+    knows about deflection. A knock is a local stress limit on each member (sigma <= yield/SF); a
+    keypress is a global deflection limit. So the caller sizes for the impact stress by fully-stressed
+    design -- r_e >= r_e*sqrt(sigma_e*SF/yield) -- and hands the result in as rlo, a floor the
+    deflection OC must respect. The OC then only ADDS material where stiffness needs more than impact
+    survival already bought. Iterated to a fixed point (impact redistributes as members fatten), the
+    two constraints are satisfied together, not one bolted onto the other.
 
     OPTIMALITY CRITERIA, derived rather than invented. At a KKT point, for any strut not sitting on
     a bound,
@@ -198,13 +206,16 @@ def size(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, strap_k,
     """
     S = Sizer(nodes, bars, mat=mat, r0=r0)
     idx = S.fr.idx
+    # the per-member floor: the numerical r_min unless the caller pins some members thicker (impact).
+    lo = (np.full(len(bars), r_min, float) if rlo is None
+          else np.maximum(np.asarray(rlo, float), r_min))
     # ⚠ r0 IS THE STIFFNESS *REFERENCE*; r_init IS WHERE THE SEARCH *STARTS*. They were the same
     # thing, so every re-size began from a UNIFORM radius and had to rediscover a five-decade spread
     # from scratch in 22 steps. After a 25% cut the surviving struts' own radii are an excellent
     # starting point -- the topology barely moved -- and starting there is both faster and lands
     # somewhere better.
-    r = (np.full(len(bars), r0) if r_init is None
-         else np.clip(np.asarray(r_init, float).copy(), r_min, r_max))
+    r = (np.maximum(np.full(len(bars), r0), lo) if r_init is None
+         else np.clip(np.asarray(r_init, float).copy(), lo, r_max))
     dV = 2.0 * S.rho * np.pi * S.L                      # dV/dr, up to the factor r
     stall = 0
 
@@ -282,9 +293,9 @@ def size(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, strap_k,
             # which is a bounded step in log(r) and imposes NO ceiling on the spread. The design
             # can reach a 300,000x range and still move smoothly.
             rn = -mu * neg / np.maximum(dV, 1e-30)
-            rn = np.maximum(rn, r_min)
+            rn = np.maximum(rn, lo)
             rn = np.exp((1.0 - eta) * np.log(r) + eta * np.log(rn))
-            return np.clip(rn, r_min, r_max)
+            return np.clip(rn, lo, r_max)
 
         # ⚠ BISECT AGAINST THE TRUE DEFLECTION, NOT THE LINEARISED ONE.
         #
@@ -365,8 +376,13 @@ def _down_struts(nodes, bars, live, build_dir):
 
 def size_and_prune(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, strap_k,
                    gate=0.5e-3, mat="cf_pa12", r_print=2.5e-4, rate=0.25, on_step=None,
-                   build_dir=None, on_stop=None):
+                   build_dir=None, on_stop=None, rlo=None):
     """SIZE, THEN PRUNE, THEN RE-SIZE. The only version of this that yields a buildable structure.
+
+    ⚠ rlo (per-member lower bound over the FULL domain, or None) carries the IMPACT constraint. A
+    member pinned above the printable floor by rlo is one the knock needs, so the pruner leaves it
+    alone -- otherwise the thinnest-first cut would delete a member that is thin under a keypress but
+    load-bearing under a knock, and the impact survival would be lost between prune passes.
 
     ⚠ PURE SIZING DOES NOT PRODUCE A TOPOLOGY. It produces a CONTINUUM of radii: the run that
     finally worked came out at 3.12 g and 477 um -- right on the gate, and less than half ESO's
@@ -456,7 +472,7 @@ def size_and_prune(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, str
         r_init = np.array([rmap[e] for e in live]) if rmap and all(e in rmap for e in live) else None
         r, m, w, _ = size(nodes, sb, buttons, cases, anchor_k, anchor_n, strap_n, strap_k,
                           gate=gate, mat=mat, r_min=r_size, r0=max(9e-4, 2 * r_size),
-                          r_init=r_init)
+                          r_init=r_init, rlo=(None if rlo is None else np.asarray(rlo)[live]))
         if not np.isfinite(w) or w > gate:
             if not prev:
                 why = "even the full domain cannot meet the gate"
@@ -517,6 +533,8 @@ def size_and_prune(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, str
             if len(drop) >= n_cut:
                 break
             e = live[int(i)]
+            if rlo is not None and rlo[e] > r_print * 1.01:
+                continue               # the KNOCK needs this member: not ours to take
             node = holds.get(e)
             if node is not None and n_down.get(node, 0) <= 1:
                 continue               # the LAST thing holding that node up: not ours to take
@@ -558,7 +576,8 @@ def size_and_prune(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, str
     if best is not None:
         sb = [bars[e] for e in best[0]]
         r2, m2, w2, _ = size(nodes, sb, buttons, cases, anchor_k, anchor_n, strap_n, strap_k,
-                             gate=gate, mat=mat, r_min=r_print, r0=max(9e-4, 2 * r_print))
+                             gate=gate, mat=mat, r_min=r_print, r0=max(9e-4, 2 * r_print),
+                             rlo=(None if rlo is None else np.asarray(rlo)[best[0]]))
         if np.isfinite(w2) and w2 <= gate and m2 < best[2]:
             best = (best[0], r2, m2, w2)
             if on_step:
