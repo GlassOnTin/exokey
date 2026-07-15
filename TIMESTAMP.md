@@ -8,28 +8,43 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** four times. **All five stamps stand**, and each
+The disclosure has been **extended and re-anchored** five times. **All six stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — the SANDWICH GATE RE-SOLVE (§8.15i)
+### Current — the GAUNTLET ON THE OUTSIDE OF THE STRAP (§8.15j)
 
-Extends the previous stamp (the contactless-Hall sensor and five-way wells, the strap anchor, and the
-inner bearing shell, §8.15g–i) with the shell's **gate re-solve**: the sandwich inner face was added
-to the per-element solver, and the 500 µm key-deflection gate re-solved at the bone's real sections —
-the buttons hold at **485 µm**, so the face does not compromise key-crispness (its value is the
-IMPACT, not the gate).
+The design decision that the *strap*, not the gauntlet, is what meets the hand: the gauntlet mounts
+on the OUTER face of the soft TPU strap, so the strap is the sole hand interface — cushion, tension
+tether, and load-spreader in one part, attached by loops printed into the strap itself. Re-solved:
+the 500 µm gate holds (**499 µm**, +0%) with the soft strap in the load path, because TPU is stiffer
+in through-thickness compression than the tissue it sits on. This **supersedes the inner bearing
+shell (§8.15i)** as the skin interface.
 
 | file | sha256 |
 |---|---|
-| `VISION.md` (the disclosure) | `772124bf2730861e27aa572b66adb057230a8b4362403353904642b1b2bfec0d` |
-| `MANIFEST.sha256` (hashes of all 77 source + doc files) | `ce4971b13227485c8944c995465a29696cf6361222e5af854892c1a29197bdd2` |
+| `VISION.md` (the disclosure) | `d92e96496c21acec7568bbbfe53db0aa1fbba4c6caac4fa556554b4f41d0a7b5` |
+| `MANIFEST.sha256` (hashes of all 80 source + doc files) | `4775e3d98f00977352b0d077cd85b0d867876eff7e164f1db57c29ee071cc0de` |
 
-Stamped: **2026-07-15T13:43:52Z** (UTC, submission time). Proofs: `VISION.md.ots`,
+Stamped: **2026-07-15T14:31:37Z** (UTC, submission time). Proofs: `VISION.md.ots`,
 `MANIFEST.sha256.ots`.
 
 ⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
 the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+
+### Fifth — the SANDWICH GATE RE-SOLVE (§8.15i)
+
+The sandwich inner face added to the per-element solver, and the 500 µm key-deflection gate re-solved
+at the bone's real sections: the buttons hold at **485 µm**, so the face does not compromise
+key-crispness (its value is the IMPACT, not the gate).
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (as of 2026-07-15, 13:43Z) | `772124bf2730861e27aa572b66adb057230a8b4362403353904642b1b2bfec0d` |
+| `MANIFEST.sha256` (77 files) | `ce4971b13227485c8944c995465a29696cf6361222e5af854892c1a29197bdd2` |
+
+Stamped: **2026-07-15T13:43:52Z** (UTC). Proofs: `timestamps/VISION.md.2026-07-15b.ots`,
+`timestamps/MANIFEST.sha256.2026-07-15b.ots`.
 
 ### Fourth — the SENSOR, the STRAP ANCHOR, and the BEARING SHELL (§8.15g–i)
 

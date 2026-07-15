@@ -1791,6 +1791,10 @@ the dome stiffer than "as soft as possible" — is still **not measured**.
 
 ### 8.15h The STRAP ANCHOR — the band that goes OVER the device, and the watch-lug that holds it
 
+⚠ **RECONFIGURED by §8.15j**: the strap is now the *innermost* layer (against the hand) with the
+gauntlet on its outer face, so the band is the hull of the *limb*, not of (skin ∪ device). The
+hull math (jj), the watch-lug (kk), and the adjustment (ll) all still hold; the band just moves inboard.
+
 The strap is the compliant half of the anchor (§8.15f); this is how it attaches and adjusts
 (`manufacture/strap.py`, `scripts/strap.py`, `tests/test_strap.py`).
 
@@ -1825,6 +1829,10 @@ skin as well-arms rather than segmenting body-from-arm; a strut grazing that cut
 hull. Both are heuristics, flagged, not solved.
 
 ### 8.15i The INNER BEARING SHELL — an impact distributor, and a sandwich
+
+⚠ **SUPERSEDED as the skin interface by §8.15j** (the gauntlet mounts on the OUTSIDE of the strap, so
+the soft strap is the pad and no inner shell is added). Retained as the reasoning that led there, and
+because the impact-distributor physics still applies to anything that *does* bear directly.
 
 The device is strapped to the hand and worn all day, so how it MEETS the skin is a first-class
 ergonomic problem — and one the structural model leaves open (`manufacture/bearing.py`,
@@ -1872,6 +1880,47 @@ full-membrane face mass (**+10.8 g** at 1.5 mm) is an upper bound — the sandwi
 finer conforming shell on the skin (not the ~5.5 mm-proud bearing nodes) and the outer face remain
 to be built. The 50 N knock magnitude and the comfort/pain thresholds (~4 kPa capillary, ~20 kPa
 worn, ~200 kPa painful) are estimates, flagged.
+
+### 8.15j THE GAUNTLET MOUNTS ON THE OUTSIDE OF THE STRAP — the interface reduced to one soft part
+
+A design decision, reached by the loop that runs this whole project: an instinct at the render (the
+strap presses the gauntlet's hard bits into the hand), the reasoning for why it felt wrong (the
+anchor is a tension tether, not a press-in), and the model that grounded it (`scripts/onstrap.py`).
+
+**(tt) THE SOFT STRAP IS THE SOLE HAND INTERFACE.** Mount the gauntlet on the OUTER face of the
+strap, and the soft TPU band becomes the only thing that ever touches the hand — it cushions the hand
+from every hard or pointy feature of the structure. This **supersedes the bearing shell (§8.15i) as
+the skin interface**: nothing is added to the gauntlet's inner face, because the strap already is a
+soft, distributed pad.
+
+**(uu) ONE PART, THREE JOBS.** In tension the strap **tethers** the gauntlet against the keypress
+lift-off (the anchor is compression-only, §8.15f/§8.11 — the flesh cannot pull, so the strap
+supplies it); the same soft band **cushions** the hand from the gauntlet; and it **spreads** the
+bearing over its contact area. The tether, the pad, and the cushion are the same component.
+
+**(vv) MEASURED — THE GATE HOLDS THROUGH THE SOFT LAYER.** Re-solved with the strap as a compliant
+layer in series with the soft tissue on the pressing side (`scripts/onstrap.py`): the buttons hold at
+**499 µm** (+0% vs the 498 µm baseline) at strap thicknesses from **1 mm to 5 mm**. TPU is floppy in
+bending but **stiffer in through-thickness compression than the tissue it sits on** (k ≈ 520–2600 vs
+67 kN/m), so it is negligible in the load path. Conservative — the strap's load-spreading (ignored)
+would only stiffen it.
+
+**(ww) THE STRAP FLIPS TO THE HULL OF THE LIMB.** Innermost now, the band is the convex hull of the
+HAND (hand-hugging), not of (skin ∪ device); the gauntlet rides on its outer face. (§8.15h's
+over-the-device band was the previous configuration; the hull math of (jj) stands, applied to the
+limb.)
+
+**(xx) THE ATTACHMENT IS A PRINTED TPU LOOP — AND IT PRINTS AS ONE PART WITH THE STRAP.** The
+strap→gauntlet join carries the anchor loads in shear/tension, and it need be nothing more than
+**loops or hooks printed integrally into the TPU strap** that catch the gauntlet's own anchor
+members — a belt-loop, not a fastener. Strap and attachment are then a *single* printed part, with no
+buckle and no supplier — the reproducibility constraint of §5g.1 met again. (TPU prints such loops
+cleanly.)
+
+**(yy) ⚠ STILL OPEN.** The **impact** through the new path (a knock runs gauntlet → strap → hand; the
+soft band should cushion it, but that is argued, not computed); the **meshed strap** (the re-solve is
+a conservative compliance model, not a modelled band); and the loop geometry itself. The decision is
+sound on the gate and the comfort; the impact case and the loop are the remaining work.
 
 ### 8.16 Provenance
 
