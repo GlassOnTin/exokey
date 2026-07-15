@@ -8,11 +8,31 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** eight times. **All nine stamps stand**, and each
+The disclosure has been **extended and re-anchored** nine times. **All ten stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — FORM-FINDING BELONGS IN THE WHOLE PIPELINE (§8.15k, generalised)
+### Current — SHELL vs LATTICE: the sandwich weighed by a coupled plate FEA (§8.15k, claim eee)
+
+The render looks like a shell, so an explicit one was weighed end to end. A shell for a knock on the
+back is pointless (that knock sizes 0.1 g); the discrete tissue anchors ARE a bottleneck, and a
+**coupled lattice + finite-stiffness plate FEA** cuts the worst well-knock stress **96 → 52 MPa** — but
+that thins the lattice only ~3–4 g while the shell costs ≥ 5 g, so **no shell beats the pure lattice**
+(sandwich ≥ 27 g vs **24.2 g**). The density is fundamental; the shell's value is continuous skin
+bearing (comfort), already met by the strap (§8.15j). Recorded with its reversals, the FEA the arbiter.
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) | `f1b19f6a015751771b2d67a827937a82d672ef8018d4b4de41c99b037b7afa9a` |
+| `MANIFEST.sha256` (hashes of all 90 source + doc files) | `ebad7d7b37c804727bc7e645c997d9514a30dfa0712f430a48d9a894f439d891` |
+
+Stamped: **2026-07-15T21:46:13Z** (UTC, submission time). Proofs: `VISION.md.ots`,
+`MANIFEST.sha256.ots`.
+
+⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
+the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+
+### Ninth — FORM-FINDING BELONGS IN THE WHOLE PIPELINE (§8.15k, generalised)
 
 The shape-convergence pass generalised, and a correction. The **decoupled** pipelines that make the
 definitive structures — size-then-prune-then-curve for the keypress bone, grow-then-co-size for the
@@ -25,14 +45,11 @@ relaxed; on a never-relaxed definitive structure it is worth a fifth of the mass
 
 | file | sha256 |
 |---|---|
-| `VISION.md` (the disclosure) | `9b106711890b9cb4c91b1b2070a493d9ace1517838a3c20c346573bb5cb6fe58` |
-| `MANIFEST.sha256` (hashes of all 86 source + doc files) | `6003414c039f78efd4b3cdf86229bceb814f80117e7b44ce6ce1069ea8e320d2` |
+| `VISION.md` (as of 2026-07-15, 19:44Z) | `9b106711890b9cb4c91b1b2070a493d9ace1517838a3c20c346573bb5cb6fe58` |
+| `MANIFEST.sha256` (86 files) | `6003414c039f78efd4b3cdf86229bceb814f80117e7b44ce6ce1069ea8e320d2` |
 
-Stamped: **2026-07-15T19:44:25Z** (UTC, submission time). Proofs: `VISION.md.ots`,
-`MANIFEST.sha256.ots`.
-
-⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
-the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+Stamped: **2026-07-15T19:44:25Z** (UTC, submission time). Proofs:
+`timestamps/VISION.md.2026-07-15f.ots`, `timestamps/MANIFEST.sha256.2026-07-15f.ots`.
 
 ### Eighth — the IMPACT STRUCTURE, SHAPE-CONVERGED (§8.15k, revised)
 
