@@ -2076,6 +2076,20 @@ up), then only **size** the struts to the ergonomic floor, curve and hollow them
 better founded: a topology the optimiser already grew must not be re-**searched** by a greedy top-down
 prune that can dead-end in a membrane — **size it, don't re-prune it.**
 
+⚠ **AND THE PRUNE ITSELF IS NOW FIXED — it was a one-line RANKING bug.** `grow` and `size_and_prune` are
+both top-down ESO; the only difference that mattered is the signal each deletes by. `grow` ranks members
+by **strain energy** at a fixed radius, where an idle member reads as idle whatever the sizer later does;
+`size_and_prune` ranked by the **OC-sized radius**, which the OC returns *uniform* on a membrane — no
+signal, so it deleted ~blindly and stalled. Measured, on the same 8 mm lattice: `grow` carves a **205-strut
+/ 7.2 g** truss; the old prune stalled at **1149 / 41 g**; `grow` with node-relaxation *off* still gives
+205 / 7.2 g — so it was never relaxation or pitch, only the ranking. So `size_and_prune` now ranks
+deletions by strain energy too (one `solve` at a fixed radius), and it carves a truss: **253 members /
+8.9 g** — grow's 205 plus the ~50 FDM support struts the print version keeps. The impact and bone numbers
+are unchanged (both were already grow-based); the fix corrects the `printable`/`ergonomic`/impact-bolt-on
+prunes. Guarded by `test_the_prune_carves_a_truss_not_a_membrane`, which fails if the prune ever weighs
+more than 2.5× the grow again. ⚠ It costs one extra FEM solve per prune step (~2× the prune time); reading
+the strain energy off the OC's *own* solve instead would make it free — a noted follow-up, not yet done.
+
 ### 8.16 Provenance
 
 The **five-direction finger well** derives from the **DataHand** keyboard (patents filed early

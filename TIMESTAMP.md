@@ -8,11 +8,37 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** twelve times. **All thirteen stamps stand**, and each
+The disclosure has been **extended and re-anchored** thirteen times. **All fourteen stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — CORRECTION: the prune's membrane is not enslavement-specific (§8.15k, claim fff)
+### Current — FIX THE PRUNE'S MEMBRANE TRAP: rank deletions by strain energy (§8.15k, claim fff)
+
+The membrane was a one-line **ranking** bug. `grow` and `size_and_prune` are both top-down ESO; the only
+difference that mattered is the signal each deletes by. `grow` ranks by **strain energy** at a fixed
+radius, where an idle member reads as idle whatever the sizer later does; `size_and_prune` ranked by the
+**OC-sized radius**, which the OC returns *uniform* on a membrane — no signal, so it deleted ~blindly and
+stalled. Measured on the same 8 mm lattice: `grow` carves a **205-strut / 7.2 g** truss (with node
+relaxation on *or* off — so it was never relaxation or pitch, only the ranking); the old prune stalled at
+**1149 / 41 g**. So `size_and_prune` now ranks deletions by strain energy too, and it carves **253 members
+/ 8.9 g** — grow's 205 plus the ~50 FDM support struts the print version keeps. The impact and bone
+numbers are unchanged (both were already grow-based); the fix corrects the `printable`/`ergonomic`/
+impact-bolt-on prunes. Guarded by `test_the_prune_carves_a_truss_not_a_membrane`, which fails if the prune
+ever weighs more than 2.5× the grow again. It costs one extra FEM solve per prune step (~2× the prune
+time); reading the strain energy off the OC's own solve would make it free — a noted follow-up.
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) | `865a5bc43b4751b63f37058f401081e50540ebf6a9db4996dc58d5c405b2b310` |
+| `MANIFEST.sha256` (hashes of all 90 source + doc files) | `fb13ad82e5f81b40e33b72a8f8e6c8e1f1458134251d55cd2765480b0145f8b4` |
+
+Stamped: **2026-07-16T14:42:32Z** (UTC, submission time). Proofs: `VISION.md.ots`,
+`MANIFEST.sha256.ots`.
+
+⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
+the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+
+### Thirteenth — CORRECTION: the prune's membrane is not enslavement-specific (§8.15k, claim fff)
 
 The twelfth anchor's (fff) said the *pre-enslavement* design "pruned cleanly to 138 members / 8.5 g" and
 only the enslavement design "trapped" — and it read the plateau as the build-support rule. **Both were
@@ -31,14 +57,11 @@ measured, not inferred.
 
 | file | sha256 |
 |---|---|
-| `VISION.md` (the disclosure) | `d7554838166f05418bfdce07440e704c6e520c22d213d5e3bdd670a18ccd6114` |
-| `MANIFEST.sha256` (hashes of all 90 source + doc files) | `40a7633e049358ff9ef1de1edad39a9eca7c585406b47337dd1832afd0ee5c8e` |
+| `VISION.md` (as of 2026-07-16, 12:13Z) | `d7554838166f05418bfdce07440e704c6e520c22d213d5e3bdd670a18ccd6114` |
+| `MANIFEST.sha256` (90 files) | `40a7633e049358ff9ef1de1edad39a9eca7c585406b47337dd1832afd0ee5c8e` |
 
-Stamped: **2026-07-16T12:13:49Z** (UTC, submission time). Proofs: `VISION.md.ots`,
-`MANIFEST.sha256.ots`.
-
-⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
-the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+Stamped: **2026-07-16T12:13:49Z** (UTC, submission time). Proofs:
+`timestamps/VISION.md.2026-07-16c.ots`, `timestamps/MANIFEST.sha256.2026-07-16c.ots`.
 
 ### Twelfth — RENDER THE BONE FROM THE GROW, not a print-time re-prune (§8.15k, claim fff)
 

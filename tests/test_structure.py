@@ -894,6 +894,56 @@ def test_the_pruner_keeps_every_down_strut_the_domain_can_offer():
     #  node pays a PILLAR instead. A pillar is snapped off and thrown away; a spike is worn.)
 
 
+def test_the_prune_carves_a_truss_not_a_membrane():
+    """THE FDM PRUNE MUST DELETE BY STRAIN ENERGY, OR IT DEAD-ENDS IN A MEMBRANE.
+
+    When the buttons sit far from the anchors, a keypress load fans out over the dorsal skin and every
+    member carries a similar share. `size_and_prune` used to rank deletions by the OC-sized RADIUS --
+    which the OC returns UNIFORM for such a structure, so `argsort(r)` had no signal, the prune deleted
+    ~blindly, every cut breached the gate, and it stalled in a dense MEMBRANE: measured 1149 members /
+    41 g where `grow` -- the same top-down ESO but ranking by STRAIN ENERGY at a fixed radius -- finds a
+    ~205-strut / 7 g TRUSS on the SAME 8 mm lattice. The fix is to rank by strain energy here too.
+
+    The invariant: the FDM prune must land NEAR the grow (a truss), never ~5x heavier (a membrane). A
+    factor of 2.5 leaves room for the legitimate FDM support struts the print version keeps and the grow
+    does not, while a returned membrane (5-6x) fails loudly. (Uses the shipped design; skipped without it.)
+    """
+    import os
+    import pickle
+    if not os.path.exists("out/final_design.pkl"):
+        pytest.skip("needs out/final_design.pkl (the shipped design)")
+    from design.params import DEFLECTION_MAX
+    from design.qwerty import used_actions
+    from design.vector import evaluate, posture, tm_of, tp_of
+    from hand.myohand import FINGERS
+    from opt.problem import hands
+    from structure.frame import hand_axes
+    from structure.lattice import NOZZLE_R, STRAP_K, grow, ground, load_cases
+    from structure.sizing import size_and_prune
+
+    H = hands(); h = H[50]
+    x = pickle.load(open("out/final_design.pkl", "rb"))["x"]
+    wired = used_actions(evaluate(x, H)["action_map"])
+    q = h.compose({f: posture(h, f, tp_of(x, f), tm_of(x, f), float(x.get(f"ab_{f}", 0.0)))
+                   for f in FINGERS})
+
+    # the truss the grow finds on the 8 mm lattice -- the reference the prune must match
+    _N, _b, glive, _bt, _c, _ak, _an, ghist, _pc, _sh, _ls = grow(
+        h, q, wired=wired, gate=float(DEFLECTION_MAX), pitch=0.008)
+    grow_g = ghist[-1][2] * 1000
+
+    _o, e_d, _r, _oo = hand_axes(h, q)
+    nodes, bars, btn, _l, ak, an, _t, sn = ground(h, q, pitch=0.008, reach=2.2)
+    cases = load_cases(h, q, btn, wired=wired)
+    live, r, m, w = size_and_prune(nodes, bars, btn, cases, ak, an, sn, float(STRAP_K),
+                                   gate=float(DEFLECTION_MAX), r_print=float(NOZZLE_R), build_dir=e_d)
+    prune_g = m * 1000
+    assert len(live), "the prune found no feasible structure"
+    assert prune_g <= 2.5 * grow_g, (
+        f"the prune weighs {prune_g:.1f} g against the grow's {grow_g:.1f} g "
+        f"({prune_g/grow_g:.1f}x) -- it has dead-ended in a membrane, not carved the truss")
+
+
 def test_the_cut_never_orphans_a_node_it_then_has_to_repair():
     """THE PRUNER STALLED AFTER FOUR STEPS AND REPORTED ITS STALL AS AN OPTIMUM (20.28 g).
 

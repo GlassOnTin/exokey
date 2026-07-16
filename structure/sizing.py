@@ -525,14 +525,27 @@ def size_and_prune(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, str
         #
         # So COUNT DOWN as you go. A strut may be dropped unless it is the last one still holding its
         # node up AT THAT MOMENT.
+        # ⚠ RANK BY STRAIN ENERGY, NOT BY THE OC RADIUS -- OR THE PRUNE DEAD-ENDS IN A MEMBRANE.
+        # When the load fans out over a dense skin (the buttons sit far from the anchors), the OC
+        # sizer's own optimum for the FULL topology is a UNIFORM radius -- every member the same --
+        # so `argsort(r)` has no signal, the pruner deletes ~blindly, every cut breaches the gate,
+        # and it stalls in a heavy MEMBRANE: measured 1154 members / 41 g where `grow`, on the SAME
+        # 8 mm lattice, finds a 205-strut / 7.2 g TRUSS. The only difference is the signal: `grow`
+        # ranks by STRAIN ENERGY at a fixed radius, where an idle member reads as idle whatever the
+        # sizer later does with it. So rank the same way -- delete the least-strained members, which
+        # is what "carries no load" actually means -- and this pruner carves the truss too.
+        from structure.lattice import solve as _energy_solve
+        _we, se_map, _sse, _me, _te, _pce = _energy_solve(nodes, bars, live, buttons, cases,
+                                                          anchor_k, anchor_n, mat=mat,
+                                                          strap_k=strap_k, strap_n=strap_n)
         down = _down_struts(nodes, bars, live, build_dir) if build_dir is not None else ({}, {})
         holds, n_down = down
         n_cut = max(1, int(rate_now * len(live)))
         drop = set()
-        for i in np.argsort(r):
+        for k in sorted(range(len(live)), key=lambda j: se_map.get(live[j], 0.0)):
             if len(drop) >= n_cut:
                 break
-            e = live[int(i)]
+            e = live[k]
             if rlo is not None and rlo[e] > r_print * 1.01:
                 continue               # the KNOCK needs this member: not ours to take
             node = holds.get(e)
