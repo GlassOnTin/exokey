@@ -2172,12 +2172,18 @@ against here): boot baseline → 500 Hz scan → project ΔB onto the per-well c
 per-direction Schmitt (on 60 % / off 40 % of full-travel signal) → idle-gated baseline tracker →
 `action_map` → BLE HID.
 
-**(rrr) THE WHOLE PART, MEASURED.** With five modules, the harness grooves, and the housing carved
-in, `scripts/export_stl.py` meshes **one watertight, winding-consistent solid** (`out/gauntlet.stl`,
-100 × 152 × 91 mm) — the sensor subsystem is genuinely *part of the print*, not a bolt-on drawing.
-The modules + housing **add 13.5 g** over the bare struts (25.5 → **39.0 g** solid CF-PA12,
-measured off the mesh, not estimated) — the honest cost of contactless sensing at this gap, and a
-target for the cluster-packing rework that (sss) already needs.
+**(rrr) THE WHOLE PART, MEASURED — AND A CORRECTION.** With five modules, the harness grooves, and
+the housing meshed in, `scripts/export_stl.py` builds `out/gauntlet.stl` (100 × 152 × 91 mm). ⚠ The
+first cut of this claim said "one watertight solid" — it was watertight but in **31 pieces**: the
+modules and the MCU housing floated ~10 mm off the skeleton, because `well_frame`'s fingertip pad is
+**not** the structure's button node (`ground()` places them differently), and the housing neck
+anchored at the anchor *centroid*, which sits in empty space. Found only by counting components, not
+by the watertight check. Fixed by tying each frame to its button node with **stalks**, the housing
+to its nearest **live-strut nodes**, and dropping the sub-mm³ marching-cubes debris: now **one
+connected, watertight, winding-consistent body — measured at component count 1**. The modules +
+housing **add 16.6 g** over the bare struts (25.5 → **42.1 g** solid CF-PA12, measured off the mesh,
+not estimated) — the honest cost of contactless sensing at this gap. The MCU box is also lifted
+along the local skin normal so it sits proud of the wrist instead of cutting into it.
 
 **(sss) ⚠ WHAT THIS DID NOT SETTLE.**
 - **The tightest module pair collides.** Sized independently, the **middle and ring** sensor tails

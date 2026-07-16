@@ -8,11 +8,35 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** sixteen times. **All seventeen stamps stand**, and each
+The disclosure has been **extended and re-anchored** seventeen times. **All eighteen stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — THE READ-OUT: the field a moving magnet presents to the Hall, and the printed module (§8.15l)
+### Current — CORRECTION: the sensor part was 31 pieces, not one solid; now tied into one (§8.15l rrr)
+
+The 17th anchor claimed the sensor gauntlet meshed as "one watertight solid." It was watertight but in
+**31 disconnected pieces**: the five modules and the MCU housing floated **~10 mm off the skeleton**,
+because `well_frame`'s fingertip pad is **not** the structure's button node (`ground()` places them
+differently), and the housing neck anchored at the anchor *centroid* — empty space. The watertight check
+passed; only counting **components** caught it. Fixed: each frame is tied to its button node with
+**stalks**, the housing to its nearest **live-strut nodes**, and the sub-mm³ marching-cubes debris is
+dropped — now **one connected body, component count 1**, **42.1 g** (the 39.0 g figure was measured off the
+broken mesh). The MCU box is also re-oriented along the local skin normal so it sits **proud of the wrist**
+instead of cutting in. A new `scripts/gauntlet_solid_view.py` renders the STL back with the magnets and Hall
+sensors flagged in contrasting colour, so the mounts are visible.
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) | `ad483d8c11148d49c234160da6d5fe21ce83a0be9dd19a0bddfb8c887c06a81a` |
+| `MANIFEST.sha256` (hashes of all 97 source + doc files) | `d4861889384256b712e9391b64011cd3eb35c02dc1fb5cdb0ab65e1fef1b3533` |
+
+Stamped: **2026-07-16T22:53:48Z** (UTC, submission time). Proofs: `VISION.md.ots`,
+`MANIFEST.sha256.ots`.
+
+⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
+the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+
+### Seventeenth — THE READ-OUT: the field a moving magnet presents to the Hall, and the printed module (§8.15l)
 
 §8.15g sized the finger-well's restoring spring (a TPU dome) but **deferred the signal** — the field a
 moving magnet presents to the Hall. This closes it. A **Ø3×1 mm N42** disc on the cradle over a **3-axis
@@ -33,11 +57,8 @@ cluster-level packing; the read-out is a **model** the stage-1 coupon bench must
 | `VISION.md` (the disclosure) | `b7d68754afc631c980f8aa8b9c30d268dc33a5a3c06428ac3ff532f427b9029a` |
 | `MANIFEST.sha256` (hashes of all 96 source + doc files) | `ae16c7936218aa19408d1b14fc8b460fd462edd7d3359dbba1bae0d57b2f3a0d` |
 
-Stamped: **2026-07-16T22:09:56Z** (UTC, submission time). Proofs: `VISION.md.ots`,
-`MANIFEST.sha256.ots`.
-
-⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
-the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+Stamped: **2026-07-16T22:09:56Z** (UTC, submission time). Proofs:
+`timestamps/VISION.md.2026-07-16g.ots`, `timestamps/MANIFEST.sha256.2026-07-16g.ots`.
 
 ### Sixteenth — RANK BY STRAIN ENERGY FOR FREE, off the OC's own solve (§8.15k, claim fff)
 

@@ -50,7 +50,7 @@ def main():
     # base) that blends into the struts, plus the wire grooves back to a wrist MCU housing.
     anchors = [int(a) for a in z["anchors"]]
     btn = {f: int(i) for f, i in zip(z["fingers"], z["buttons"])}
-    mods = [wm.module_frame(h, q, f) for f in FINGERS]
+    mods = [wm.module_frame(h, q, f, mount=nodes[btn[f]]) for f in FINGERS]
     mboxes = [b for md in mods for b in md["boxes"]]
     mcaps = [c[0] for md in mods for c in md["caps"]]
     mcap_r = [c[1] for md in mods for c in md["caps"]]
@@ -58,14 +58,24 @@ def main():
     cv_cyls = [c for md in mods for c in md["carve_cyls"]]
     cv_boxes = [c for md in mods for c in md["carve_boxes"]]
 
-    # HOUSING for the XIAO nRF52840 + LiPo at the wrist anchor cluster.
-    hboxes, hcav = wm.housing(nodes[np.array(anchors)])
-
-    # WIRE GROOVES: sink a re-entrant capsule channel into each strut the route follows, on the
-    # dorsal (away-from-skin) surface so a wire never presses the hand.
     from scipy.spatial import cKDTree
     V, _ = skin(h, q)
     stree = cKDTree(V)
+
+    # HOUSING for the XIAO nRF52840 + LiPo at the wrist anchor cluster -- lifted OUT along the skin
+    # normal there so the box sits proud of the hand instead of cutting into the wrist.
+    anchor_c = nodes[np.array(anchors)].mean(axis=0)
+    outward = anchor_c - V[stree.query(anchor_c)[1]]    # skin -> cluster: points dorsally, outward
+    hboxes, hcaps, hcav = wm.housing(nodes[np.array(anchors)], outward)
+    # tie the box to the nearest LIVE-strut nodes (guaranteed structural; anchor nodes may carry only
+    # a spring, not a bar) so it cannot detach.
+    live_nodes = np.array(sorted({i for e in live for i in bars[e]}))
+    box_c = np.asarray(hboxes[0][0], float)
+    near = live_nodes[np.argsort(np.linalg.norm(nodes[live_nodes] - box_c, axis=1))[:3]]
+    hcaps = hcaps + [((nodes[int(i)], box_c), wm.STALK_R) for i in near]
+
+    # WIRE GROOVES: sink a re-entrant capsule channel into each strut the route follows, on the
+    # dorsal (away-from-skin) surface so a wire never presses the hand.
     routes = wm.harness_grooves(nodes, bars, live, btn, anchors)
     gcyls = []
     for route in routes:
@@ -80,9 +90,9 @@ def main():
                 store.append(p + off * away)
             gcyls.append((pa[0], pb[0], wm.GROOVE_R))
 
-    allstruts = struts + mcaps
+    allstruts = struts + mcaps + [c[0] for c in hcaps]
     allr = list(rr) if rr.size > 1 else [float(rr[0])] * len(struts)
-    allr = allr + list(mcap_r)
+    allr = allr + list(mcap_r) + [c[1] for c in hcaps]
     print(f"  {src}: {len(struts)} struts + {len(mods)} sensor modules + housing")
     print(f"  wire grooves: {len(routes)} routes, {len(gcyls)} channel segments")
     print(f"  rod r = {rr.min()*1000:.2f}-{rr.max()*1000:.2f} mm, fillet = {BLEND*1000:.1f} mm, "
@@ -93,11 +103,23 @@ def main():
     carve(f, o, v, cyls=cv_cyls + gcyls, boxes=cv_boxes + hcav)
     m = to_mesh(f, o, v)
 
+    # DROP DEBRIS: the smooth-min + carves leave a scatter of near-zero-volume shells (slivers where
+    # a groove grazes a surface). Keep only bodies that carry real material -- a printable part is one
+    # solid, not one solid plus confetti a slicer would choke on.
+    import trimesh
+    bodies = m.split(only_watertight=False)
+    if len(bodies) > 1:
+        keep = [b for b in bodies if b.volume > 1e-9]      # > 1 mm^3
+        dropped = len(bodies) - len(keep)
+        m = trimesh.util.concatenate(keep) if len(keep) > 1 else keep[0]
+        print(f"  dropped {dropped} debris shells (<1 mm^3); kept {len(keep)} real bod[y/ies]")
+
     rho = MATERIALS["cf_pa12"]["rho"]
     print(f"\nTHE SOLID")
     print(f"  {len(m.vertices)} vertices, {len(m.faces)} faces")
     print(f"  watertight       {m.is_watertight}")
     print(f"  winding correct  {m.is_winding_consistent}")
+    print(f"  components       {m.body_count}  (1 = the housing + modules all attach)")
     print(f"  volume           {m.volume*1e6:.2f} cm^3")
     print(f"  MASS (CF-PA12)   {m.volume*rho*1000:.1f} g")
     print(f"  bbox             {' x '.join(f'{d*1000:.0f}' for d in m.extents)} mm")

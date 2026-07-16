@@ -48,6 +48,7 @@ SKIRT_LIP = 0.0003                         # radial keying interference (snap)
 SKIRT_ENGAGE = 0.0010                      # how deep the lip seats
 GROOVE_R = 0.0006                          # wire channel radius
 GROOVE_BURY = 0.0004                       # channel centre below the strut surface (re-entrant)
+STALK_R = 0.0025                           # the post that ties a frame to the button node's struts
 
 
 def _R(wf):
@@ -75,8 +76,13 @@ def _stack(wf):
                 hall=s_hall, pcb_c=s_pcb_c, base_c=s_base_c, depth=s_base_c + 0.5 * BASE_T)
 
 
-def module_frame(h, q, finger, *, wire_len=0.010):
+def module_frame(h, q, finger, *, mount=None, wire_len=0.010):
     """The rigid PA frame for one well, as primitive lists in world coords.
+
+    `mount` is the STRUCTURE's button node (nodes[button]) -- where the truss struts actually land,
+    which is ~10 mm from the fingertip pad `well_frame` reports (ground() places them differently).
+    A stalk ties the frame to it, or the whole module floats free of the gauntlet. Defaults to the
+    pad point (for standalone/coupon use, where there is no truss to reach).
 
     Returns dict(boxes, caps, cyls, carve_cyls, carve_boxes):
       boxes/caps/cyls  -- ADD (blend into the gauntlet struts via mesh.field)
@@ -115,6 +121,14 @@ def module_frame(h, q, finger, *, wire_len=0.010):
         a = cc - half * ax + side * (r + 0.5 * PA_WALL) * lat + s["cup_dorsal"] * fl
         b = cc + half * ax + side * (r + 0.5 * PA_WALL) * lat + s["cup_dorsal"] * fl
         caps.append(((a, b), float(SKIN_R)))
+
+    # STALKS -- tie the frame to the structure's button node (where the truss struts land), on both
+    # sides, or the whole module floats free of the gauntlet (measured: it did, ~10 mm away). They
+    # run to the collar walls, clear of the central cup/dome/sensor stack.
+    src = np.asarray(mount, float) if mount is not None else pos
+    for side in (+1.0, -1.0):
+        tip = cc + wc * fl + side * (r + 0.5 * PA_WALL) * lat
+        caps.append(((src, tip), STALK_R))
 
     # CARVE: the PCB seat, opening palmar.
     carve_boxes.append((cc + s["pcb_c"] * fl, R,
@@ -253,16 +267,36 @@ def harness_grooves(nodes, bars, live, btn, anchors):
     return routes
 
 
-def housing(anchor_nodes, *, xiao=(0.021, 0.0178, 0.0035), lipo=(0.020, 0.012, 0.006)):
-    """A wrist box for the XIAO nRF52840 + LiPo at the anchor cluster centroid.
+def housing(anchor_nodes, outward, *, xiao=(0.021, 0.0178, 0.0035), lipo=(0.020, 0.012, 0.006),
+            clear=0.003, wall=0.0015):
+    """A wrist box for the XIAO nRF52840 + LiPo at the anchor cluster, sitting PROUD of the hand.
 
-    Returns (boxes, carve_boxes): a solid shell to ADD and the two cavities to CARVE.
+    ⚠ A world-axis box at the anchor centroid cuts INTO the wrist -- the anchors are only a few mm
+    off the skin. So the box is oriented with its THIN axis along `outward` (the dorsal normal) and
+    pushed out along it until its inner face clears the skin, and its component pockets open on the
+    OUTER face (you drop the boards in from outside, away from the hand). Returns (boxes, carve_boxes).
     """
-    C = np.asarray(anchor_nodes, float).mean(axis=0)
-    R = np.eye(3)
-    wall = 0.0015
-    inner = np.array([0.5 * xiao[0], 0.5 * (xiao[1] + lipo[1]), 0.5 * max(xiao[2], lipo[2])])
-    shell = [(C, R, inner + wall)]
-    cav = [(C + np.array([0, 0.25 * (xiao[1] + lipo[1]), 0]), R, 0.5 * np.array(xiao)),
-           (C - np.array([0, 0.25 * (xiao[1] + lipo[1]), 0]), R, 0.5 * np.array(lipo))]
-    return shell, cav
+    A = np.asarray(anchor_nodes, float)
+    C = A.mean(axis=0)
+    z = np.asarray(outward, float)
+    z = z / (np.linalg.norm(z) + 1e-12)
+    x = np.cross(z, np.array([0.0, 0.0, 1.0]))
+    if np.linalg.norm(x) < 1e-6:
+        x = np.cross(z, np.array([0.0, 1.0, 0.0]))
+    x = x / (np.linalg.norm(x) + 1e-12)
+    y = np.cross(z, x)
+    R = np.vstack([x, y, z])                          # rows = box axes; z (thin) = outward
+    depth = max(xiao[2], lipo[2])
+    half = np.array([0.5 * xiao[0], 0.5 * (xiao[1] + lipo[1]), 0.5 * depth]) + wall
+    center = C + (clear + half[2]) * z                # lift the box off the skin along the normal
+    boxes = [(center, R, half)]
+    # NECKS back to the gauntlet -- capsules from the THREE nearest anchor NODES (real strut
+    # endpoints, not the centroid, which floats in space) to the box, or the lifted box detaches.
+    order = np.argsort(np.linalg.norm(A - center, axis=1))
+    caps = [((A[int(i)], center), STALK_R) for i in order[:3]]
+    cav = []                                          # two pockets side by side, opening the +z face
+    for comp, sy in ((xiao, +1.0), (lipo, -1.0)):
+        ch = 0.5 * np.asarray(comp, float)
+        cc = center + sy * 0.25 * (xiao[1] + lipo[1]) * y + (half[2] - ch[2]) * z
+        cav.append((cc, R, ch))
+    return boxes, caps, cav
