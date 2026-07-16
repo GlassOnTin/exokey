@@ -8,11 +8,35 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** ten times. **All eleven stamps stand**, and each
+The disclosure has been **extended and re-anchored** eleven times. **All twelve stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — ENSLAVEMENT, grounded per finger, and the layout re-optimised under it (§6)
+### Current — RENDER THE BONE FROM THE GROW, not a print-time re-prune (§8.15k, claim fff)
+
+Regenerating the gauntlet for the enslavement design exposed a **print-pipeline trap**. The keypress
+bone had been re-derived for printing by an independent 8 mm re-prune (`size_and_prune`); on this design
+its build-support rule (never delete a node's last down-strut) plateaued it at a **dense 1149-member
+skin, 33.9 g hollow** — support-limited, not stiffness-limited (the worst well sat at 338 µm, well inside
+the 500 µm gate). The **impact** structure settles it: it carries the keypress *and* the 50 N knock at
+**23.2 g**, so a keypress-only bone cannot honestly need 33.9 g. So `bone.py` now renders the **grown**
+topology directly — the one the objective already form-found off the grid — only **sizing** it to the
+ergonomic floor: **7.54 g** beam / **12.7 g** hollow, 410 members, within 6% of the old committed 12.0 g.
+Impact re-optimised to **23.2 g** (was 24.2 g), 39% lighter than the 37.7 g bolt-on. Grow it, don't
+re-prune it.
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) | `40cc56d91cf9b307e0e283d3aecfbf85fb235ed3c78261985c459e543a619d26` |
+| `MANIFEST.sha256` (hashes of all 90 source + doc files) | `6bfc868638a875a8361b238d305413de283a097c9eca6a7e4a6ecced8e269c5c` |
+
+Stamped: **2026-07-16T09:40:08Z** (UTC, submission time). Proofs: `VISION.md.ots`,
+`MANIFEST.sha256.ots`.
+
+⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
+the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+
+### Eleventh — ENSLAVEMENT, grounded per finger, and the layout re-optimised under it (§6)
 
 The winning layout had posed the **ring extended while its neighbours flexed** — raised 9 mm, and the
 design leaned on it (+33% effort and key-overlap when clamped). No hand holds that: MyoHand models the
@@ -25,14 +49,11 @@ effort and mass comparable — the illusory raise cost nothing to remove.
 
 | file | sha256 |
 |---|---|
-| `VISION.md` (the disclosure) | `1b841e6478146f91f529ceb65a6e73bac48706263ee44d9ec1731e8e53add1da` |
-| `MANIFEST.sha256` (hashes of all 90 source + doc files) | `81c526a05c0c3d4b3d2009ae83dabb84852b7726d1366652215957c539117827` |
+| `VISION.md` (as of 2026-07-16, 07:25Z) | `1b841e6478146f91f529ceb65a6e73bac48706263ee44d9ec1731e8e53add1da` |
+| `MANIFEST.sha256` (90 files) | `81c526a05c0c3d4b3d2009ae83dabb84852b7726d1366652215957c539117827` |
 
-Stamped: **2026-07-16T07:25:50Z** (UTC, submission time). Proofs: `VISION.md.ots`,
-`MANIFEST.sha256.ots`.
-
-⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
-the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+Stamped: **2026-07-16T07:25:50Z** (UTC, submission time). Proofs:
+`timestamps/VISION.md.2026-07-16a.ots`, `timestamps/MANIFEST.sha256.2026-07-16a.ots`.
 
 ### Tenth — SHELL vs LATTICE: the sandwich weighed by a coupled plate FEA (§8.15k, claim eee)
 

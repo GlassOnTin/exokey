@@ -52,21 +52,25 @@ def main():
     q = ref.compose({f: posture(ref, f, tp_of(x, f), tm_of(x, f), float(x.get(f"ab_{f}", 0.0)))
                      for f in FINGERS})
 
-    z = np.load("out/friendly.npz", allow_pickle=True)
-    nodes = z["nodes"]
+    # RENDER FROM THE GROW. The keypress bone is the GROWN topology (final.npz) -- the structure the
+    # design headline reports as bone_g -- NOT an independent re-prune. bone.py used to re-ground at
+    # 8 mm and re-prune from scratch; on this design that prune trapped at a 1149-member skin (41 g)
+    # while the grow's own ~410-strut topology meets the SAME gate at 7.5 g. The impact structure
+    # settles it -- it carries keypress AND the 50 N knock at 23 g -- so a keypress-only bone cannot
+    # honestly need 41 g. So take the grown structure and only SIZE it (to the friendly floor), never
+    # prune. ground() here only rebuilds the anchor model: the grow moved the nodes but kept every
+    # index, so ak/an/sn/btn line up with final.npz (verified: bars, buttons, anchors all match).
+    z = np.load("out/final.npz", allow_pickle=True)
+    nodes = np.array(z["nodes"], float)           # the grow's RELAXED nodes
     bars = [tuple(b) for b in z["bars"]]
     live = [int(e) for e in z["live"]]
     btn = {f: int(i) for f, i in zip(z["fingers"], z["buttons"])}
-    pitch = float(z["pitch"])
-    circ = float(z["mass"])                       # the ROUND answer, in grams
-
-    _n, _b, _bt, _l, ak, an, _t, sn = ground(ref, q, pitch=pitch, reach=2.2)
-    cases = load_cases(ref, q, btn, wired=wired)
-    sb = [bars[e] for e in live]
+    pitch = 0.004                                 # the grow's lattice pitch (ground default)
     R = float(SKIN_R)
 
-    # ⚠ CLEAN IT FIRST. friendly.npz was written before `cleanup` existed, and the user found what
-    # it left behind: 9 loose ends and a 13-node fragment floating free of everything.
+    _n, _b, _bt, _l, ak, an, _t, sn = ground(ref, q, hug=0.004, pitch=pitch, press_N=0.196)
+    cases = load_cases(ref, q, btn, press_N=0.196, wired=wired)
+
     from structure.lattice import cleanup
     bearing = set(ak) | {int(v) for v in btn.values()}
     n_before = len(live)
@@ -75,6 +79,15 @@ def main():
         print(f"  ⚠ CLEANED: dropped {n_before - len(live)} members -- debris and loose ends "
               f"({n_before} -> {len(live)})")
     sb = [bars[e] for e in live]
+
+    # THE FRIENDLY SOLID: size the grown struts to the ergonomic floor (>= SKIN_R), no pruning. The
+    # grow already chose the topology and relaxed the nodes; this only thickens each surface a hand
+    # can touch up to SKIN_R and reads off the round-rod mass and per-member radii the curve step needs.
+    from structure.sizing import size
+    radii, m_pre, _wpre, _lv = size(nodes, sb, btn, cases, ak, an, sn, float(STRAP_K),
+                                    gate=float(DEFLECTION_MAX), r_min=R)
+    radii = np.asarray(radii)
+    circ = m_pre * 1000                           # grams, solid round rods at the friendly floor
 
     turns0 = kink(nodes, bars, live)
     print(f"THE FRIENDLY STRUCTURE: {len(sb)} members, {circ:.2f} g as SOLID ROUND rods, "
@@ -110,7 +123,7 @@ def main():
 
     # ---- CURVE the load paths ------------------------------------------------------------------
     tree = cKDTree(V)
-    need = {e: float(SEG_CLEAR) * 0.004 + float(z["radii"][k]) for k, e in enumerate(live)}
+    need = {e: float(SEG_CLEAR) * 0.004 + float(radii[k]) for k, e in enumerate(live)}
     n2, b2, owner = curves(nodes, bars, live, tension=float(TENSION) * 0.3)
     n2, moved = push_out(n2, len(nodes), b2, owner, tree, need)
     turns1 = kink(n2, b2, list(range(len(b2))))
@@ -148,12 +161,26 @@ def main():
     aspect = np.ones_like(b)
 
     from structure.lattice import buildable, unsupported
-    bd = np.asarray(z["build_dir"], float)
-    bd /= np.linalg.norm(bd)
+
+    def _sup_mm(d):
+        d = np.asarray(d, float); d = d / np.linalg.norm(d)
+        hh = nodes @ d
+        bed = min(hh[i] for e in live for i in bars[e])
+        tot = sum(float(hh[i] - bed) for i in unsupported(nodes, bars, live, d))
+        ok_ = buildable(nodes, bars, d)
+        for e in live:
+            if not ok_[e]:
+                a_, b_ = bars[e]
+                tot += float(0.5 * (hh[a_] + hh[b_]) - bed)   # a prop under the strut's midpoint
+        return tot
+
+    _rng = np.random.default_rng(5)
+    _V = _rng.normal(size=(400, 3)); _V /= np.linalg.norm(_V, axis=1, keepdims=True)
+    bd = min(_V, key=_sup_mm); bd = np.asarray(bd, float); bd /= np.linalg.norm(bd)
     pil = unsupported(nodes, bars, live, bd)
     ok = buildable(nodes, bars, bd)
     sag = [e for e in live if not ok[e]]
-    print(f"\n  SUPPORT: {len(pil)} pillars + {len(sag)} props")
+    print(f"\n  SUPPORT: {len(pil)} pillars + {len(sag)} props  (build dir: least support of 400)")
 
     np.savez("out/bone.npz", nodes=nodes, bars=np.array(bars), live=np.array(live),
              b=b, wall=W, roll=roll, radii=b, owner=owner,

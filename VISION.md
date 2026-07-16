@@ -1966,8 +1966,8 @@ cover the knock, which needs its own topology.
 safety factor of 2: *bolt-on* — size the keypress skeleton for the gate, then thicken every
 over-stressed member (fully-stressed design) — or *in-the-loop* — grow WITH the knock and size for the
 gate AND the stress together. Measured like for like (circular rods, one anchor, one gate, both
-surviving): bolt-on reaches **36.4 g and cannot even hit SF 2** — its sparse members **saturate at the
-radius ceiling** at 42 MPa (SF 1.7); in-the-loop reaches **24.2 g at SF ≈ 1.9**, **34% lighter and
+surviving): bolt-on reaches **37.7 g and cannot even hit SF 2** — its sparse members **saturate at the
+radius ceiling** at 50 MPa; in-the-loop reaches **23.2 g at SF ≈ 2** (36 MPa, 747 struts), **39% lighter and
 more robust**, because the broad skeleton never drives a member to its ceiling *and* its shape is
 form-found (**(ddd)**), not left staircased on the grid. The method: a knock is
 a *local stress* limit and a keypress a *global deflection* limit, married by feeding a
@@ -1989,13 +1989,15 @@ comes off the lattice *staircased*: nodes pinned to grid sites turn a load path 
 on the impact structure, 12% on the keypress bone), which the eye reads — correctly — as un-converged,
 and which `curves()` can only *follow*, not straighten. `relax_nodes` is the fix: **form-finding** —
 move each free node toward axial equilibrium (the FEA residual points the way), held in the skin band,
-buttons and anchors fixed. It is the pass every *reported* structure is meant to get, but it only ever
-ran *inside* `grow()`; the **decoupled** pipelines that produce the definitive structures — size-then-
-prune-then-curve for the keypress bone, grow-then-co-size for the impact one — never applied it.
-Adding it straightens them (impact **kinks > 75°: 40 → 11**, median through-turn **30° → 13°**) **and
-lightens them**: the impact structure **29.3 → 24.2 g (−17%)** and the keypress bone **11.05 → 8.51 g
-(−23%)**, both with the gate still held. Straightening is the reason — a member sized thick to resist
-**bending** at its kink carries **axially** once straight, and axial members are thinner.
+buttons and anchors fixed. It is the pass every *reported* structure is meant to get; `grow()` runs it
+*inside* the topology search, but the **grow-then-co-size** impact pipeline applied it only once at the
+end, and the old **size-then-prune-then-curve** keypress-bone pipeline not at all — and that pipeline is
+now abandoned, because on this design its re-prune trapped in a dense skin (**(fff)**). Adding the relax
+straightens the impact structure (**kinks > 75°: 37 → 12**, median through-turn **30° → 13°**) **and
+lightens it**: **26.3 → 23.2 g (−12%)**, gate still held. Straightening is the reason — a member sized
+thick to resist **bending** at its kink carries **axially** once straight, and axial members are thinner.
+The keypress bone is now rendered straight from the grown, already-form-found topology (**(fff)**), so it
+needs no separate relax pass at all.
 
 ⚠ **This corrects an earlier reading** (the `relax_nodes` note): that relaxation is "cosmetic, barely
 moves mass" on a sparse bone. That was measured on the grow-**front** designs — which are *already*
@@ -2015,7 +2017,7 @@ reason worth recording:
   **96 → 52 MPa (~46%)** at a 1 mm shell — real, not the 65% rigid-shell bound of the proxy;
 - **but that thins the lattice only ~3–4 g, while the shell over its ~100 cm² footprint costs ≥ 5 g** —
   so **no shell thickness beats the pure lattice**: the lightest sandwich is **≥ 27 g** against the
-  lattice's **24.2 g**. The shell saves less lattice than it weighs.
+  lattice's **23.2 g**. The shell saves less lattice than it weighs.
 
 So the **density is fundamental**: a topology-optimised lattice is already the efficient way to carry a
 knock into the tissue, and a plate cannot pay for itself thinning it. The shell's real value is
@@ -2032,10 +2034,29 @@ out-run its own mass. Method chain: `manufacture/bearing.py` (Westergaard) → `
 
 ⚠ **QUASI-STATIC**, as throughout (§8.15i): a real impact adds dynamic amplification (energy, contact
 time) this does not model, so the stresses and pressures are a lower bound and the 50 N magnitude is
-an estimate. ⚠ The **34% of (bbb) is a RATIO in circular rods** — the sizer's section, not the hollow
+an estimate. ⚠ The **39% of (bbb) is a RATIO in circular rods** — the sizer's section, not the hollow
 stadium of the final bone (§8.15d) — so it transfers as a ratio, not as grams; the bolt-on's own
 hollow-stadium number is **11 g → 17 g at SF 2** (`out/robust.npz`, gate 498 → 114 µm, so thicker is
 also crisper). The fully-stressed floor oscillates at 36–39 MPa; both structures stay well under yield.
+
+**(fff) RENDER THE BONE FROM THE GROW, NOT A RE-PRUNE — THE PRINT PIPELINE CAN TRAP.** The keypress bone
+used to be re-derived from scratch for printing: `printable.py` re-grounds an 8 mm lattice and
+`size_and_prune` prunes it under the nozzle + build-direction support rules. On the pre-enslavement
+design that pruned cleanly to **138 members / 8.5 g**. On the enslavement design (§6) it **trapped**: the
+support rule (never delete a node's last down-strut) plateaued the prune at **1149 members / 33.9 g
+hollow** — a dense "skin" — with the worst well still at **338 µm**, well inside the 500 µm gate. So it
+stopped **support-limited, not stiffness-limited**, leaving mass on the table. The tell is physical: the
+**impact** structure carries the keypress *and* the 50 N knock at **23.2 g**, so a keypress-*only* bone
+cannot honestly need 33.9 g — and the grow already answers it, its own **410-strut** topology meeting the
+same gate at **7.5 g** beam. So `bone.py` now renders the **grown** topology directly (`out/final.npz` —
+the one the objective form-found off the grid): it rebuilds the anchor model with a cheap `ground()`
+call (the grow moved the nodes but kept every index, so anchors/buttons/bars line up exactly), then only
+**sizes** the struts to the ergonomic floor, curves and hollows them — **20.9 g solid → 12.7 g hollow,
+172 µm**, no prune. That lands within **6%** of the old committed hollow bone (12.0 g), confirming the
+33.9 g was the pruner's artefact, not the design's mass. The lesson: a topology the optimiser already
+grew should not be independently re-*searched* by a different algorithm at print time; **size it, don't
+re-prune it.** ⚠ The higher member count (410 vs 138) is only the grow's finer 4 mm pitch — shorter
+members, so the total mass tracks; it is not a heavier structure.
 
 ### 8.16 Provenance
 
