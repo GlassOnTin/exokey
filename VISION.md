@@ -1653,6 +1653,25 @@ A tube of outer radius `b` and wall `w`:
 retaining **94%** of the bending stiffness. **A long bone is a tube with a marrow cavity. That is not
 an analogy — it is the same optimisation under the same constraint.**
 
+⚠ **RE-CHARACTERISED UNDER THE FIXED PRUNE (§8.15k (fff)).** The 153-member structure above was the
+top-down prune's MEMBRANE — a bug. Re-run with the prune fixed (strain-energy ranking), the ergonomic-floor
+study splits into two regimes, and the split *is* the finding:
+
+- **The device stays touch-limited — more so.** The grow-based bone (§8.15k) is dense: **all 408 of its
+  members sit on the 1.5 mm floor** (measured; was 95%), sized by the hand, not the load. Solid **20.9 g →
+  hollow 12.7 g (−39%)**, worst well **172 µm** — and hollowing is free precisely *because* a floored member
+  is **over-stiff** (172 µm against a 500 µm gate), so taking out the marrow spends slack it never needed.
+- **But touch-limited is a property of DENSITY, not of the floor.** Ask the fixed 8 mm prune to *minimise
+  mass* and it carves a SPARSE truss instead: **61 members, every one at the r_max ceiling (2.5 mm), 17.4 g**
+  — **load-limited**, sized by the gate, not the hand. That is where the old "146-on-the-floor" reading
+  would have gone had the prune not membraned; the ergonomic floor does not *make* a structure touch-limited,
+  a dense one is.
+- **And that is exactly why the device does not go sparse.** A load-limited member cannot be hollowed: it
+  is at r_max *for its stiffness*, so removing the core drops its second moment to **~79%** and the well
+  deflection from 405 µm **past the 500 µm gate**. The touch-limited dense bone, hollowed, is **12.7 g**; the
+  load-limited sparse truss, which cannot hollow, is **17.4 g**. Touch-limited-and-hollow wins — the ergonomic
+  floor plus the marrow cavity is **vindicated by the fix, not overturned by it.**
+
 ### 8.15e The SPIKE, the DEBRIS, and the BEARING AREA — defects that are structurally invisible
 
 Disclosed as a class, because it is the one that has caught this project out most often:

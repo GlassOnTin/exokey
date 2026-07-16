@@ -52,9 +52,9 @@ of what fell out:
 |---|---|
 | **Stock MyoHand's thumb cannot press a key** — 0.0 N, every posture, every direction | it has **no adductor**; pressing a key is pushing *against* something |
 | Adding the thenar group ([`hand/thenar.py`](hand/thenar.py): ADP, FPB, APB) | thumb reaches a **66.8 N pinch — inside the human 45–70 N band, never fitted** |
-| **The device is TOUCH-limited, not load-limited** | **95%** of members are as thick as they are because a *hand* must bear them, not a force |
-| ...so the bone is **hollow**, exactly as a real one is | −19% mass, identical to the touch |
-| The **ergonomic** minimum feature (1.5 mm), not the nozzle's (0.4 mm), makes it trabecular | 867 members → 153, and 56 spikes → **0** |
+| **The device is TOUCH-limited, not load-limited** | **100%** of the grown bone's members sit on the 1.5 mm floor — thick because a *hand* must bear them, not a force (§8.15v) |
+| ...so the bone is **hollow**, exactly as a real one is | **−39%** mass, identical to the touch — free *because* it is touch-limited (over-stiff), which a load-limited truss is not (§8.15v) |
+| The **ergonomic** minimum feature (1.5 mm), not the nozzle's (0.4 mm), makes it trabecular | the fixed prune coarsens **400 → 61 members** as the floor rises, and the rendered bone is **spike-free** (§8.15v) |
 | A palm-strapped body beats an articulated exoskeleton — then *it* was dropped too | the load path wants to go over the **back** of the hand, not around it |
 | Every well is a five-way joystick, on every finger | the "ulnar can't tilt" limit was a modelling artefact, not muscle |
 | A **50 N knock**, not the keypress, is what sizes the structure | and it wants a *broad* skeleton — growing with it in the loop (**23.2 g**) is 39% lighter than bolting it on (**37.7 g**, §8.15k) |

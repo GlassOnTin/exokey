@@ -8,11 +8,35 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** thirteen times. **All fourteen stamps stand**, and each
+The disclosure has been **extended and re-anchored** fourteen times. **All fifteen stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — FIX THE PRUNE'S MEMBRANE TRAP: rank deletions by strain energy (§8.15k, claim fff)
+### Current — RE-CHARACTERISE THE FRIENDLY COMPARISON UNDER THE FIXED PRUNE (§8.15v)
+
+With the prune fixed (fff), the ergonomic-floor study splits into two regimes, and the split is the finding.
+The **device** (grow-based bone) stays **touch-limited — all 408 members sit on the 1.5 mm floor** (was
+95%), sized by the hand: solid 20.9 g → **hollow 12.7 g (−39%)**, over-stiff at 172 µm, so the marrow comes
+out free. But touch-limited is a property of **density**, not the floor: ask the fixed prune to minimise
+mass and it carves a **sparse truss — 61 members, every one at the r_max ceiling (2.5 mm), load-limited,
+17.4 g** — which **cannot be hollowed** (at r_max *for stiffness*; removing the core drops the second moment
+to ~79% and the well deflection past the 500 µm gate). So touch-limited-dense-and-hollow (**12.7 g**) beats
+load-limited-sparse (**17.4 g**): the ergonomic floor plus the marrow cavity is **vindicated by the fix, not
+overturned**. README's touch-limited line (now 100%), hollow line (−39%), and trabecular line (400 → 61)
+updated to match.
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) | `6019ba7ea36dd5f3055778e810b98ab90c7d2d34abe7fafda8ad22e062b9bfab` |
+| `MANIFEST.sha256` (hashes of all 90 source + doc files) | `b58cb9305b4fcced0d06a3014e4518de209ed7cd4bbef78f93ffd482bee9ae0d` |
+
+Stamped: **2026-07-16T16:43:22Z** (UTC, submission time). Proofs: `VISION.md.ots`,
+`MANIFEST.sha256.ots`.
+
+⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
+the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+
+### Fourteenth — FIX THE PRUNE'S MEMBRANE TRAP: rank deletions by strain energy (§8.15k, claim fff)
 
 The membrane was a one-line **ranking** bug. `grow` and `size_and_prune` are both top-down ESO; the only
 difference that mattered is the signal each deletes by. `grow` ranks by **strain energy** at a fixed
@@ -29,14 +53,11 @@ time); reading the strain energy off the OC's own solve would make it free — a
 
 | file | sha256 |
 |---|---|
-| `VISION.md` (the disclosure) | `865a5bc43b4751b63f37058f401081e50540ebf6a9db4996dc58d5c405b2b310` |
-| `MANIFEST.sha256` (hashes of all 90 source + doc files) | `fb13ad82e5f81b40e33b72a8f8e6c8e1f1458134251d55cd2765480b0145f8b4` |
+| `VISION.md` (as of 2026-07-16, 14:42Z) | `865a5bc43b4751b63f37058f401081e50540ebf6a9db4996dc58d5c405b2b310` |
+| `MANIFEST.sha256` (90 files) | `fb13ad82e5f81b40e33b72a8f8e6c8e1f1458134251d55cd2765480b0145f8b4` |
 
-Stamped: **2026-07-16T14:42:32Z** (UTC, submission time). Proofs: `VISION.md.ots`,
-`MANIFEST.sha256.ots`.
-
-⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
-the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+Stamped: **2026-07-16T14:42:32Z** (UTC, submission time). Proofs:
+`timestamps/VISION.md.2026-07-16d.ots`, `timestamps/MANIFEST.sha256.2026-07-16d.ots`.
 
 ### Thirteenth — CORRECTION: the prune's membrane is not enslavement-specific (§8.15k, claim fff)
 
