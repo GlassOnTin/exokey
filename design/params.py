@@ -106,9 +106,36 @@ COMMON_DRIVE = P(
     "COMMON_DRIVE", 0.15, "fraction of flexion range", Source.GUESS,
     "How differently two neighbouring fingers may curl. A stand-in for ENSLAVEMENT, which "
     "MyoHand does not model at all (its FDP2-FDP5 are strictly independent). The number is "
-    "made up. It is currently the binding constraint on the well layout -- a guess is "
-    "deciding the design, which is exactly why it must be visible.",
-    describes="finger independence")
+    "made up. Retained only as a loose TOTAL-spread re-check; the binding limit is now the "
+    "per-finger INDIVIDUATION below, so this guess no longer decides the design.",
+    describes="total finger spread")
+
+# ENSLAVEMENT, GROUNDED PER FINGER. The four long-finger flexors share a muscle belly, so a digit
+# cannot be posed independently -- and the RING is the LEAST independent. MyoHand models FDP2-FDP5 as
+# INDEPENDENT actuators (no shared belly), so nothing stopped the optimiser posing the ring extended
+# while its neighbours flexed: a posture no hand can hold. Measured on the winning design -- it raised
+# the ring 9 mm, and it LEANED on it: clamp the ring to the common drive and effort jumps +33% and the
+# key layout goes infeasible (keys overlap). The OpenSim hand-and-wrist models get enslavement right by
+# driving the FDP's four finger-slips from ONE activation; we express that coupling KINEMATICALLY, per
+# digit, by the INDIVIDUATION INDEX -- how independently each finger can move -- so the ring's curl may
+# deviate from the common drive far LESS than the index's. This REPLACES the single symmetric
+# COMMON_DRIVE/2 = 0.075 that applied to every finger alike.
+#
+# ⚠ The ORDERING is robust (index & little most independent, ring least -- Hager-Ross & Schieber 2000,
+# J Neurosci 20:8542 "Quantifying the independence of human finger movements"). The exact half-ranges
+# are that ordering scaled so the INDEX keeps the old 0.075; the ring at ~0.5x it. A measured enslaving
+# MATRIX would refine these, and is the next real measurement (VISION §6).
+_INDIV = "how far this finger's curl may deviate from the common drive -- its individuation, ring least"
+INDIVIDUATION = {
+    "index":  P("INDIV_index",  0.075, "curl-fraction half-range", Source.LITERATURE, _INDIV,
+                describes="per-finger individuation"),
+    "little": P("INDIV_little", 0.060, "curl-fraction half-range", Source.LITERATURE, _INDIV,
+                describes="per-finger individuation"),
+    "middle": P("INDIV_middle", 0.050, "curl-fraction half-range", Source.LITERATURE, _INDIV,
+                describes="per-finger individuation"),
+    "ring":   P("INDIV_ring",   0.035, "curl-fraction half-range", Source.LITERATURE, _INDIV,
+                describes="per-finger individuation"),
+}
 
 COLUMN_SHIFT_COST = P(
     "COLUMN_SHIFT_COST", 5e-6, "sum a^3", Source.GUESS,

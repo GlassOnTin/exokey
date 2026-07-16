@@ -150,9 +150,15 @@ REAL_BOUNDS["tm_thumb"] = (0.10, 0.80)      # the thumb's MP still drives indepe
 # The two constraints pull opposite ways. That is what the constrained search is for.
 REAL_BOUNDS["tp_hand"] = (0.10, 0.90)
 REAL_BOUNDS["tm_hand"] = (0.10, 0.90)
+# ⚠ PER-FINGER, NOT SYMMETRIC. The offset each finger may take from the common curl is bounded by its
+# INDIVIDUATION (design/params.py) -- the ring far less than the index -- so the ring cannot be posed
+# extended while its neighbours flex. This is the kinematic form of the shared-FDP enslavement that
+# MyoHand lacks; it replaces the single COMMON_DRIVE/2 that used to apply to all four fingers alike.
+from design.params import INDIVIDUATION as _INDIV
 for _f in ("index", "middle", "ring", "little"):
-    REAL_BOUNDS[f"dp_{_f}"] = (-float(COMMON_DRIVE) / 2, float(COMMON_DRIVE) / 2)
-    REAL_BOUNDS[f"dm_{_f}"] = (-float(COMMON_DRIVE) / 2, float(COMMON_DRIVE) / 2)
+    _b = float(_INDIV[_f])
+    REAL_BOUNDS[f"dp_{_f}"] = (-_b, _b)
+    REAL_BOUNDS[f"dm_{_f}"] = (-_b, _b)
 # NO `dc_`: there are no ROWS. One key per finger; the three QWERTY rows come from three
 # finger ACTIONS on one 3-position Hall key, not from three physical keys.
 # SPLAY. Without it the fingers cannot separate their keys and KEY_PITCH is unsatisfiable:

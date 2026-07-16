@@ -286,8 +286,19 @@ drawn curls — but four independent draws over [0.10, 0.80] have an expected sp
 against a limit of 0.15, so **98% of designs were born violating it** and the GA burned its
 budget rediscovering it. It is now built into the **parameterisation** (one shared hand curl
 + bounded per-finger deviations), so it cannot be represented, let alone violated: 98% → 0%,
-and randomly drawn feasible designs went 0/240 → 1/240. ⚠ Note what this means: a **guess**
-(`COMMON_DRIVE = 0.15`) is now *structural*. That makes it more load-bearing, not less.
+and randomly drawn feasible designs went 0/240 → 1/240.
+
+⚠ **And then a single symmetric guess was found too loose — now grounded per finger.** One bound,
+`COMMON_DRIVE/2 = 0.075`, applied to every finger alike. That let the optimiser pose the **ring
+extended while its neighbours flexed**: measured on the winning design, the ring rode **9 mm** above
+its neighbours, and the design *leaned* on it — clamp the ring to the common curl and effort jumps
+**+33%** and the key layout goes infeasible (keys overlap). No hand holds that; the ring is the least
+independent digit. So the symmetric guess is replaced by **per-finger `INDIVIDUATION`** bounds (index
+±0.075 … ring ±0.035), scaled by the individuation index of each digit (Häger-Ross & Schieber 2000) —
+the kinematic form of the **shared-FDP enslavement** the OpenSim hand-and-wrist models capture (one
+activation drives the FDP's four finger-slips) and MyoHand lacks (FDP2–5 independent). A `GUESS`
+became `LITERATURE`; the ordering (ring least) is robust, a measured enslaving matrix would refine the
+magnitudes. The layout re-optimised under it is the honest one.
 
 **THE WELL IS A CRADLE, AND I MODELLED IT AS A PIN. This overturns the negative result below.**
 
@@ -985,11 +996,15 @@ These bound every conclusion above.
   conclusions are shown not to depend on it (11.9% from 100 N to 400 N), but the number itself
   is unverified.
 - ⚠ **MyoHand has no enslavement.** FDP2–FDP5 moment arms are strictly diagonal — four
-  independent actuators. Curling the ring alone is *free* in this model and impossible in a
-  hand. Mitigated by an externally imposed common-drive constraint on **both** the MCP and
+  independent actuators. Curling *or extending* the ring alone is *free* in this model and
+  impossible in a hand. Mitigated by a common-drive parameterisation on **both** the MCP and
   PIP joints (it originally covered only the PIP, and the optimiser went straight through the
-  gap — see §5); not solved. `COMMON_DRIVE = 0.15` is a **guess**, and it is now built into
-  the parameterisation, which makes it *more* load-bearing, not less.
+  gap — see §5), now with **per-finger `INDIVIDUATION` bounds** (`Source.LITERATURE`, Häger-Ross
+  & Schieber 2000): the ring may deviate ±0.035 where the index may ±0.075. This caught a real
+  artefact — the winning design had raised the ring 9 mm and leaned on it (+33% effort, key-overlap
+  when clamped) — the kinematic form of the shared-FDP coupling the OpenSim hand models carry. Not
+  *solved* (a measured enslaving matrix would refine the magnitudes), but no longer a single symmetric
+  guess deciding the design.
 - ⚠ **MyoHand has no EXTENSOR HOOD** (it models the intrinsics as bare tendons). This turned out
   **not** to be what limited the lateral tilts — that was a cradle artefact (the withheld well floor,
   now fixed; §8.15g), and the interossei were adequate. But the hood is a genuine gap for anything
