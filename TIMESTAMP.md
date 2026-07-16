@@ -8,11 +8,33 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** nine times. **All ten stamps stand**, and each
+The disclosure has been **extended and re-anchored** ten times. **All eleven stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — SHELL vs LATTICE: the sandwich weighed by a coupled plate FEA (§8.15k, claim eee)
+### Current — ENSLAVEMENT, grounded per finger, and the layout re-optimised under it (§6)
+
+The winning layout had posed the **ring extended while its neighbours flexed** — raised 9 mm, and the
+design leaned on it (+33% effort and key-overlap when clamped). No hand holds that: MyoHand models the
+four long-finger flexors as independent actuators, but they share a belly (the OpenSim hand models
+drive the FDP's four slips from one activation). We express that coupling **kinematically, per finger**,
+by the **individuation index** — `INDIVIDUATION` (Häger-Ross & Schieber 2000, `Source.LITERATURE`):
+the ring may deviate ±0.035 from the common curl where the index may ±0.075, replacing the single
+symmetric `COMMON_DRIVE` guess. Re-optimised under it, the ring sits **+2.1 mm** (was +8.9), feasible,
+effort and mass comparable — the illusory raise cost nothing to remove.
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) | `1b841e6478146f91f529ceb65a6e73bac48706263ee44d9ec1731e8e53add1da` |
+| `MANIFEST.sha256` (hashes of all 90 source + doc files) | `81c526a05c0c3d4b3d2009ae83dabb84852b7726d1366652215957c539117827` |
+
+Stamped: **2026-07-16T07:25:50Z** (UTC, submission time). Proofs: `VISION.md.ots`,
+`MANIFEST.sha256.ots`.
+
+⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
+the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+
+### Tenth — SHELL vs LATTICE: the sandwich weighed by a coupled plate FEA (§8.15k, claim eee)
 
 The render looks like a shell, so an explicit one was weighed end to end. A shell for a knock on the
 back is pointless (that knock sizes 0.1 g); the discrete tissue anchors ARE a bottleneck, and a
@@ -23,14 +45,11 @@ bearing (comfort), already met by the strap (§8.15j). Recorded with its reversa
 
 | file | sha256 |
 |---|---|
-| `VISION.md` (the disclosure) | `f1b19f6a015751771b2d67a827937a82d672ef8018d4b4de41c99b037b7afa9a` |
-| `MANIFEST.sha256` (hashes of all 90 source + doc files) | `ebad7d7b37c804727bc7e645c997d9514a30dfa0712f430a48d9a894f439d891` |
+| `VISION.md` (as of 2026-07-15, 21:46Z) | `f1b19f6a015751771b2d67a827937a82d672ef8018d4b4de41c99b037b7afa9a` |
+| `MANIFEST.sha256` (90 files) | `ebad7d7b37c804727bc7e645c997d9514a30dfa0712f430a48d9a894f439d891` |
 
-Stamped: **2026-07-15T21:46:13Z** (UTC, submission time). Proofs: `VISION.md.ots`,
-`MANIFEST.sha256.ots`.
-
-⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
-the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+Stamped: **2026-07-15T21:46:13Z** (UTC, submission time). Proofs:
+`timestamps/VISION.md.2026-07-15g.ots`, `timestamps/MANIFEST.sha256.2026-07-15g.ots`.
 
 ### Ninth — FORM-FINDING BELONGS IN THE WHOLE PIPELINE (§8.15k, generalised)
 
