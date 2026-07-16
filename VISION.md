@@ -2106,8 +2106,12 @@ deletions by strain energy too (one `solve` at a fixed radius), and it carves a 
 8.9 g** — grow's 205 plus the ~50 FDM support struts the print version keeps. The impact and bone numbers
 are unchanged (both were already grow-based); the fix corrects the `printable`/`ergonomic`/impact-bolt-on
 prunes. Guarded by `test_the_prune_carves_a_truss_not_a_membrane`, which fails if the prune ever weighs
-more than 2.5× the grow again. ⚠ It costs one extra FEM solve per prune step (~2× the prune time); reading
-the strain energy off the OC's *own* solve instead would make it free — a noted follow-up, not yet done.
+more than 2.5× the grow again. And the ranking is **free**: `size` reads the strain energy off the OC's
+*own* solve — the sizer already has the displacements and the radius-scaled element stiffnesses, so the
+per-member energy density (½·uᵀk u / L) falls out with no second solve. Measured, the prune goes **38 → 30 s**
+(the truss lands unchanged, 253 → 250 members). ⚠ An earlier note estimated the extra solve at "~2× the
+prune time"; that was pessimistic — it was ~20%, because a prune step is dominated by the OC's own sizing
+solves, not the one ranking solve.
 
 ### 8.16 Provenance
 

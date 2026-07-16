@@ -8,11 +8,32 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** fourteen times. **All fifteen stamps stand**, and each
+The disclosure has been **extended and re-anchored** fifteen times. **All sixteen stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — RE-CHARACTERISE THE FRIENDLY COMPARISON UNDER THE FIXED PRUNE (§8.15v)
+### Current — RANK BY STRAIN ENERGY FOR FREE, off the OC's own solve (§8.15k, claim fff)
+
+The prune fix (14th anchor) ranked deletions by strain energy via a second FEM solve, and estimated that
+at "~2× the prune time." **Both the mechanism and the estimate are now improved.** `size` reads the strain
+energy off the OC's *own* solve — the sizer already computes the displacements and the radius-scaled element
+stiffnesses, so the per-member energy density (½·uᵀk u / L) falls out with **no second solve**. And the
+"~2×" was pessimistic: **measured, the extra solve was ~20%** (a prune goes **38 → 30 s**), because a prune
+step is dominated by the OC's own sizing solves, not the one ranking solve. The truss lands unchanged (253 →
+250 members); 110 tests pass.
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) | `21f5f3ef458a226fb30e2518418873cfc32ec2079fb072f1a62bd6ebe1952829` |
+| `MANIFEST.sha256` (hashes of all 90 source + doc files) | `8abf4d692e7278199bc423cf3926f2515e13c047ee7217e986567c53ee9d39bd` |
+
+Stamped: **2026-07-16T17:09:24Z** (UTC, submission time). Proofs: `VISION.md.ots`,
+`MANIFEST.sha256.ots`.
+
+⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
+the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+
+### Fifteenth — RE-CHARACTERISE THE FRIENDLY COMPARISON UNDER THE FIXED PRUNE (§8.15v)
 
 With the prune fixed (fff), the ergonomic-floor study splits into two regimes, and the split is the finding.
 The **device** (grow-based bone) stays **touch-limited — all 408 members sit on the 1.5 mm floor** (was
@@ -27,14 +48,11 @@ updated to match.
 
 | file | sha256 |
 |---|---|
-| `VISION.md` (the disclosure) | `6019ba7ea36dd5f3055778e810b98ab90c7d2d34abe7fafda8ad22e062b9bfab` |
-| `MANIFEST.sha256` (hashes of all 90 source + doc files) | `b58cb9305b4fcced0d06a3014e4518de209ed7cd4bbef78f93ffd482bee9ae0d` |
+| `VISION.md` (as of 2026-07-16, 16:43Z) | `6019ba7ea36dd5f3055778e810b98ab90c7d2d34abe7fafda8ad22e062b9bfab` |
+| `MANIFEST.sha256` (90 files) | `b58cb9305b4fcced0d06a3014e4518de209ed7cd4bbef78f93ffd482bee9ae0d` |
 
-Stamped: **2026-07-16T16:43:22Z** (UTC, submission time). Proofs: `VISION.md.ots`,
-`MANIFEST.sha256.ots`.
-
-⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
-the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+Stamped: **2026-07-16T16:43:22Z** (UTC, submission time). Proofs:
+`timestamps/VISION.md.2026-07-16e.ots`, `timestamps/MANIFEST.sha256.2026-07-16e.ots`.
 
 ### Fourteenth — FIX THE PRUNE'S MEMBRANE TRAP: rank deletions by strain energy (§8.15k, claim fff)
 

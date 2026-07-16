@@ -84,8 +84,8 @@ def main():
     # grow already chose the topology and relaxed the nodes; this only thickens each surface a hand
     # can touch up to SKIN_R and reads off the round-rod mass and per-member radii the curve step needs.
     from structure.sizing import size
-    radii, m_pre, _wpre, _lv = size(nodes, sb, btn, cases, ak, an, sn, float(STRAP_K),
-                                    gate=float(DEFLECTION_MAX), r_min=R)
+    radii, m_pre, _wpre, _lv, _se = size(nodes, sb, btn, cases, ak, an, sn, float(STRAP_K),
+                                         gate=float(DEFLECTION_MAX), r_min=R)
     radii = np.asarray(radii)
     circ = m_pre * 1000                           # grams, solid round rods at the friendly floor
 

@@ -83,7 +83,7 @@ def main():
         # of the curves.
         n2, moved = push_out(n2, len(nodes), b2, owner, tree, need)
         lv2 = list(range(len(b2)))
-        r, m, w, _ = size(n2, b2, btn, cases, ak, an, sn, float(STRAP_K),
+        r, m, w, _, _ = size(n2, b2, btn, cases, ak, an, sn, float(STRAP_K),
                           gate=float(DEFLECTION_MAX), r_min=n, r0=max(9e-4, 2 * n), steps=18)
         if not np.isfinite(w) or w > float(DEFLECTION_MAX):
             print(f"  {tau:5.2f}  MISSES THE GATE ({w*1e6:.0f} um)")

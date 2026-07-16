@@ -162,7 +162,9 @@ class Sizer:
 def size(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, strap_k,
          gate=0.5e-3, mat="cf_pa12", r_min=1e-6, r_max=2.5e-3, r0=9e-4,
          steps=22, pnorm=8.0, eta=0.5, on_step=None, r_init=None, patience=3, rlo=None):
-    """Minimise mass subject to the deflection gate. Returns (radii, mass, worst, live).
+    """Minimise mass subject to the deflection gate. Returns (radii, mass, worst, live, se), where
+    `se` is the per-member strain-energy density at the returned radii -- the ESO deletion signal,
+    computed free from the OC's own solve so the pruner need not solve again to rank by it.
 
     ⚠ rlo IS A PER-MEMBER LOWER BOUND, and it is how the IMPACT constraint enters a sizer that only
     knows about deflection. A knock is a local stress limit on each member (sigma <= yield/SF); a
@@ -232,7 +234,7 @@ def size(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, strap_k,
         # sensitivities on the frozen system. Standard for contact, and honest while it converges.
         for _ in range(6):
             spring = {i: (ks[i] if i in lift else anchor_k[i]) for i in anch}
-            U, lu, _kl = S.solve(r, spring, cases)
+            U, lu, kl = S.solve(r, spring, cases)
             nxt = {i for i in anch
                    if float(U[0][6 * idx[i]:6 * idx[i] + 3] @ anchor_n[i]) > 0}
             if nxt == lift:
@@ -267,7 +269,14 @@ def size(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, strap_k,
 
         m = S.mass(r)
         if worst <= gate and (best is None or m < best[1]):
-            best = (r.copy(), m, worst)
+            # THE PRUNER'S DELETION SIGNAL, FREE OFF THIS SOLVE. Per-member strain-energy density at
+            # the current radii (½·uᵀk u / L) -- the ESO criterion. Computed from the U and kl this
+            # OC step already produced, so the pruner needs no second solve to rank by strain energy
+            # instead of by radius (which goes uniform on a membrane and carries no signal, §8.15k).
+            Uf = U.reshape(U.shape[0], -1)
+            ul = np.einsum("bij,cbj->cbi", S.fr.T, Uf[:, S.fr.dofs])
+            se = 0.5 * np.einsum("cbi,bij,cbj->b", ul, kl, ul) / S.L
+            best = (r.copy(), m, worst, se)
         if on_step:
             on_step(step, m, worst, int((r > r_min * 1.01).sum()))
 
@@ -341,10 +350,10 @@ def size(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, strap_k,
         r = r_new
 
     if best is None:
-        return r, S.mass(r), float("inf"), []
-    r, m, wbest = best
+        return r, S.mass(r), float("inf"), [], np.zeros(len(bars))
+    r, m, wbest, se = best
     live = [e for e in range(len(bars)) if r[e] > r_min * 1.01]
-    return r, m, wbest, live
+    return r, m, wbest, live, se
 
 
 def _down_struts(nodes, bars, live, build_dir):
@@ -470,9 +479,9 @@ def size_and_prune(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, str
         # WARM START. The topology barely moved, so the surviving struts' own radii are a far better
         # starting point than a uniform rod -- and the OC lands somewhere better for it.
         r_init = np.array([rmap[e] for e in live]) if rmap and all(e in rmap for e in live) else None
-        r, m, w, _ = size(nodes, sb, buttons, cases, anchor_k, anchor_n, strap_n, strap_k,
-                          gate=gate, mat=mat, r_min=r_size, r0=max(9e-4, 2 * r_size),
-                          r_init=r_init, rlo=(None if rlo is None else np.asarray(rlo)[live]))
+        r, m, w, _, se_live = size(nodes, sb, buttons, cases, anchor_k, anchor_n, strap_n, strap_k,
+                                   gate=gate, mat=mat, r_min=r_size, r0=max(9e-4, 2 * r_size),
+                                   r_init=r_init, rlo=(None if rlo is None else np.asarray(rlo)[live]))
         if not np.isfinite(w) or w > gate:
             if not prev:
                 why = "even the full domain cannot meet the gate"
@@ -530,19 +539,15 @@ def size_and_prune(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, str
         # sizer's own optimum for the FULL topology is a UNIFORM radius -- every member the same --
         # so `argsort(r)` has no signal, the pruner deletes ~blindly, every cut breaches the gate,
         # and it stalls in a heavy MEMBRANE: measured 1154 members / 41 g where `grow`, on the SAME
-        # 8 mm lattice, finds a 205-strut / 7.2 g TRUSS. The only difference is the signal: `grow`
-        # ranks by STRAIN ENERGY at a fixed radius, where an idle member reads as idle whatever the
-        # sizer later does with it. So rank the same way -- delete the least-strained members, which
-        # is what "carries no load" actually means -- and this pruner carves the truss too.
-        from structure.lattice import solve as _energy_solve
-        _we, se_map, _sse, _me, _te, _pce = _energy_solve(nodes, bars, live, buttons, cases,
-                                                          anchor_k, anchor_n, mat=mat,
-                                                          strap_k=strap_k, strap_n=strap_n)
+        # 8 mm lattice, finds a 205-strut / 7.2 g TRUSS. The only difference is the signal: rank by
+        # STRAIN ENERGY, where an idle member reads as idle whatever the sizer did to its radius, and
+        # this pruner carves the truss too. `se_live` came FREE from the OC solve above (`size`
+        # returns it) -- parallel to `live` -- so ranking by it costs no extra solve.
         down = _down_struts(nodes, bars, live, build_dir) if build_dir is not None else ({}, {})
         holds, n_down = down
         n_cut = max(1, int(rate_now * len(live)))
         drop = set()
-        for k in sorted(range(len(live)), key=lambda j: se_map.get(live[j], 0.0)):
+        for k in np.argsort(se_live):
             if len(drop) >= n_cut:
                 break
             e = live[k]
@@ -588,9 +593,9 @@ def size_and_prune(nodes, bars, buttons, cases, anchor_k, anchor_n, strap_n, str
     # Whichever is lighter wins, and the clamp is always there as a guaranteed fallback.
     if best is not None:
         sb = [bars[e] for e in best[0]]
-        r2, m2, w2, _ = size(nodes, sb, buttons, cases, anchor_k, anchor_n, strap_n, strap_k,
-                             gate=gate, mat=mat, r_min=r_print, r0=max(9e-4, 2 * r_print),
-                             rlo=(None if rlo is None else np.asarray(rlo)[best[0]]))
+        r2, m2, w2, _, _ = size(nodes, sb, buttons, cases, anchor_k, anchor_n, strap_n, strap_k,
+                                gate=gate, mat=mat, r_min=r_print, r0=max(9e-4, 2 * r_print),
+                                rlo=(None if rlo is None else np.asarray(rlo)[best[0]]))
         if np.isfinite(w2) and w2 <= gate and m2 < best[2]:
             best = (best[0], r2, m2, w2)
             if on_step:
