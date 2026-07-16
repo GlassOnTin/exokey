@@ -58,7 +58,7 @@ of what fell out:
 | A palm-strapped body beats an articulated exoskeleton — then *it* was dropped too | the load path wants to go over the **back** of the hand, not around it |
 | Every well is a five-way joystick, on every finger | the "ulnar can't tilt" limit was a modelling artefact, not muscle |
 | A **50 N knock**, not the keypress, is what sizes the structure | and it wants a *broad* skeleton — growing with it in the loop (**23.2 g**) is 39% lighter than bolting it on (**37.7 g**, §8.15k) |
-| **Grow it, don't re-prune it.** A print-time re-prune of the same design trapped in a dense 1149-member skin (33.9 g hollow) | rendering the *grown* topology instead — the one the objective already form-found off the grid — holds the bone at its true **7.5 g** beam / **12.7 g** hollow (§8.15k) |
+| **Grow it, don't re-prune it.** A top-down re-prune dead-ends in a heavy uniform *membrane* — a local optimum it can't escape (1149 members, 33.9 g hollow) | the *grow* builds a light truss bottom-up instead; rendering that topology holds the bone at **7.5 g** beam / **12.7 g** hollow (§8.15k) |
 
 Full findings, the retracted ones included (a headline "1.9-million×" number that turned out to be an
 unbalanced-press artefact, and two design justifications that failed their own measurement), are in

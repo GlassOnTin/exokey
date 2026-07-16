@@ -8,11 +8,43 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** eleven times. **All twelve stamps stand**, and each
+The disclosure has been **extended and re-anchored** twelve times. **All thirteen stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — RENDER THE BONE FROM THE GROW, not a print-time re-prune (§8.15k, claim fff)
+### Current — CORRECTION: the prune's membrane is not enslavement-specific (§8.15k, claim fff)
+
+The twelfth anchor's (fff) said the *pre-enslavement* design "pruned cleanly to 138 members / 8.5 g" and
+only the enslavement design "trapped" — and it read the plateau as the build-support rule. **Both were
+published without measuring, and both are wrong.** The old design was gitignored and overwritten, so the
+138 came from stale doc numbers, not a run. Measured against the archived pre-enslavement front
+(`out_archive/pareto_seed1.pkl`), its knee **also prunes to a uniform membrane (754 members, 27.8 g)**, as
+does the current design *unconstrained* — no nozzle floor, no support protection (**1799 members,
+62.5 g**). The 138 / 8.5 g truss is from an **older design era** and is not reproducible on any recent
+design. The real cause: for the recent design family the buttons sit **62–71 mm from the anchors**, so
+keypress load fans out across the dorsal skin and every member carries an equal share — a **membrane**.
+Uniform strain energy means the sizer parks every radius at 0.90 mm (**p90/p10 = 1.00**) and greedy
+top-down deletion has no signal, so the prune dead-ends in a heavy uniform net: a **local optimum** the
+grow (bottom-up, free nodes) sidesteps. Enslavement only made it **1.5× heavier** (754 → 1154) by
+extending the fingers ~20 mm farther from the anchors. Render-from-grow stands; the reasoning is now
+measured, not inferred.
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) | `d7554838166f05418bfdce07440e704c6e520c22d213d5e3bdd670a18ccd6114` |
+| `MANIFEST.sha256` (hashes of all 90 source + doc files) | `40a7633e049358ff9ef1de1edad39a9eca7c585406b47337dd1832afd0ee5c8e` |
+
+Stamped: **2026-07-16T12:13:49Z** (UTC, submission time). Proofs: `VISION.md.ots`,
+`MANIFEST.sha256.ots`.
+
+⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
+the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+
+### Twelfth — RENDER THE BONE FROM THE GROW, not a print-time re-prune (§8.15k, claim fff)
+
+⚠ **Corrected by the current anchor above:** the plateau is a membrane *local optimum*, not the
+build-support rule, and it is **not** enslavement-specific (the pre-enslavement design membranes too). The
+"138-member" comparison below was unmeasured and is false. The render-from-grow fix itself stands.
 
 Regenerating the gauntlet for the enslavement design exposed a **print-pipeline trap**. The keypress
 bone had been re-derived for printing by an independent 8 mm re-prune (`size_and_prune`); on this design
@@ -27,14 +59,11 @@ re-prune it.
 
 | file | sha256 |
 |---|---|
-| `VISION.md` (the disclosure) | `40cc56d91cf9b307e0e283d3aecfbf85fb235ed3c78261985c459e543a619d26` |
-| `MANIFEST.sha256` (hashes of all 90 source + doc files) | `6bfc868638a875a8361b238d305413de283a097c9eca6a7e4a6ecced8e269c5c` |
+| `VISION.md` (as of 2026-07-16, 09:40Z) | `40cc56d91cf9b307e0e283d3aecfbf85fb235ed3c78261985c459e543a619d26` |
+| `MANIFEST.sha256` (90 files) | `6bfc868638a875a8361b238d305413de283a097c9eca6a7e4a6ecced8e269c5c` |
 
-Stamped: **2026-07-16T09:40:08Z** (UTC, submission time). Proofs: `VISION.md.ots`,
-`MANIFEST.sha256.ots`.
-
-⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
-the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+Stamped: **2026-07-16T09:40:08Z** (UTC, submission time). Proofs:
+`timestamps/VISION.md.2026-07-16b.ots`, `timestamps/MANIFEST.sha256.2026-07-16b.ots`.
 
 ### Eleventh — ENSLAVEMENT, grounded per finger, and the layout re-optimised under it (§6)
 

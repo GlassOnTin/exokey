@@ -1992,7 +1992,7 @@ move each free node toward axial equilibrium (the FEA residual points the way), 
 buttons and anchors fixed. It is the pass every *reported* structure is meant to get; `grow()` runs it
 *inside* the topology search, but the **grow-then-co-size** impact pipeline applied it only once at the
 end, and the old **size-then-prune-then-curve** keypress-bone pipeline not at all — and that pipeline is
-now abandoned, because on this design its re-prune trapped in a dense skin (**(fff)**). Adding the relax
+now abandoned, because its top-down re-prune dead-ends in a heavy membrane (**(fff)**). Adding the relax
 straightens the impact structure (**kinks > 75°: 37 → 12**, median through-turn **30° → 13°**) **and
 lightens it**: **26.3 → 23.2 g (−12%)**, gate still held. Straightening is the reason — a member sized
 thick to resist **bending** at its kink carries **axially** once straight, and axial members are thinner.
@@ -2039,24 +2039,42 @@ stadium of the final bone (§8.15d) — so it transfers as a ratio, not as grams
 hollow-stadium number is **11 g → 17 g at SF 2** (`out/robust.npz`, gate 498 → 114 µm, so thicker is
 also crisper). The fully-stressed floor oscillates at 36–39 MPa; both structures stay well under yield.
 
-**(fff) RENDER THE BONE FROM THE GROW, NOT A RE-PRUNE — THE PRINT PIPELINE CAN TRAP.** The keypress bone
-used to be re-derived from scratch for printing: `printable.py` re-grounds an 8 mm lattice and
-`size_and_prune` prunes it under the nozzle + build-direction support rules. On the pre-enslavement
-design that pruned cleanly to **138 members / 8.5 g**. On the enslavement design (§6) it **trapped**: the
-support rule (never delete a node's last down-strut) plateaued the prune at **1149 members / 33.9 g
-hollow** — a dense "skin" — with the worst well still at **338 µm**, well inside the 500 µm gate. So it
-stopped **support-limited, not stiffness-limited**, leaving mass on the table. The tell is physical: the
-**impact** structure carries the keypress *and* the 50 N knock at **23.2 g**, so a keypress-*only* bone
-cannot honestly need 33.9 g — and the grow already answers it, its own **410-strut** topology meeting the
-same gate at **7.5 g** beam. So `bone.py` now renders the **grown** topology directly (`out/final.npz` —
-the one the objective form-found off the grid): it rebuilds the anchor model with a cheap `ground()`
-call (the grow moved the nodes but kept every index, so anchors/buttons/bars line up exactly), then only
-**sizes** the struts to the ergonomic floor, curves and hollows them — **20.9 g solid → 12.7 g hollow,
-172 µm**, no prune. That lands within **6%** of the old committed hollow bone (12.0 g), confirming the
-33.9 g was the pruner's artefact, not the design's mass. The lesson: a topology the optimiser already
-grew should not be independently re-*searched* by a different algorithm at print time; **size it, don't
-re-prune it.** ⚠ The higher member count (410 vs 138) is only the grow's finer 4 mm pitch — shorter
-members, so the total mass tracks; it is not a heavier structure.
+**(fff) RENDER THE BONE FROM THE GROW, NOT A RE-PRUNE — THE TOP-DOWN PRUNE DEAD-ENDS IN A MEMBRANE.** The
+keypress bone used to be re-derived for printing by `printable.py`: re-ground an 8 mm lattice and
+`size_and_prune` it top-down (delete the lowest-strain-energy members, re-size, repeat). On the
+enslavement design (§6) that returned **1149 members / 33.9 g hollow** — 5× the grow's own 410-strut
+topology, which meets the *same* gate at **7.5 g** beam. The impact structure proves it is too heavy: it
+carries the keypress *and* the 50 N knock at **23.2 g**, so a keypress-only bone cannot honestly need 33.9 g.
+
+⚠ **CORRECTION, recorded because the failures are the method.** An earlier version of this claim said the
+*pre-enslavement* design "pruned cleanly to 138 members / 8.5 g" and only the enslavement design
+"trapped." **That was wrong, and I published it without measuring it** — the old design was gitignored and
+overwritten, so I took the 138 from stale doc numbers instead of a real run. The archive held a
+pre-enslavement front (`out_archive/pareto_seed1.pkl`); its knee **also prunes to a uniform membrane —
+754 members, 27.8 g** — and so does the current design *unconstrained* (no nozzle floor, no support
+protection: **1799 members, 62.5 g**). The 138 / 8.5 g truss is from an **older design era** and is **not
+reproducible** on any recent design. The trap is neither enslavement-specific nor an FDM artefact.
+
+**What it actually is.** For the recent design family the buttons (fingertips) sit **far from the dorsal
+anchors** — mean **62–71 mm** — so a keypress load must **fan out across the whole dorsal skin**. Every
+member then carries a similar small share: a **membrane**, not a truss. Uniform strain energy means the
+sizer cannot differentiate — it parks every radius at r0 = 0.90 mm (measured: **p90/p10 = 1.00**) — and
+greedy top-down deletion has no signal, so cutting *any* member breaches the gate. The prune dead-ends in
+a heavy uniform net: a **local optimum**. A light 7.5 g truss exists; the **grow** finds it because it
+works **bottom-up** — adding high-strain-energy members toward the load paths from a connected seed on a
+free-node 4 mm lattice — and so never forms the membrane it would then be unable to escape.
+
+**Enslavement's role is 1.5×, not 8×.** The re-opt landed on a **less-curled posture** (the long-finger
+tm drives fell ~0.42 → 0.11), extending the fingers and moving each button **15–22 mm farther from the
+anchors** (mean 62 → 71 mm). Farther buttons ⇒ a wider membrane ⇒ **754 → 1154 members, 27.8 → 41 g**.
+That is the entire "it got heavier" effect; the membrane itself was already there.
+
+**The fix.** `bone.py` renders the **grown** topology directly (`out/final.npz`): rebuild the anchor model
+with a cheap `ground()` call (the grow moved the nodes but kept every index, so anchors/buttons/bars line
+up), then only **size** the struts to the ergonomic floor, curve and hollow them — **20.9 g solid →
+12.7 g hollow, 172 µm**, no prune; within **6%** of the old committed 12.0 g. The lesson holds and is now
+better founded: a topology the optimiser already grew must not be re-**searched** by a greedy top-down
+prune that can dead-end in a membrane — **size it, don't re-prune it.**
 
 ### 8.16 Provenance
 
