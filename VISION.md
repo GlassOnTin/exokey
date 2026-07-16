@@ -1036,6 +1036,8 @@ These bound every conclusion above.
   |---|---|---|
   | `COMMON_DRIVE` | 0.15 | how differently neighbouring fingers may curl — a stand-in for **enslavement**, which MyoHand does not model at all. ⚠ **This guess is currently the binding constraint on the well layout.** A made-up number is deciding the design. |
   | `WELL_WALL` | 1.5 mm | wall between adjacent wells; never checked against a print |
+  | `REST_GAP` | 3.5 mm | magnet-face to Hall at rest (§8.15l). A frame dimension, not yet confirmed on a print; sets where the field sits in the sensor's range. |
+  | `CRADLE_LEVER` | 0.7 | lateral magnet travel per mm of fingertip tilt — sets each tilt direction's signal (§8.15l). A geometry guess until a stage-1 coupon measures it. |
   | `DEFLECTION_MAX` | 0.5 mm | above this a key "feels mushy" — a judgement, not a measurement |
   | `ADJUSTER_MASS` | 0.15 g/mm | mass of a per-finger slide; not from any real mechanism |
   | `COLUMN_SHIFT_COST` | 5e-6 | cost of translating the hand to the index's 2nd column |
@@ -2112,6 +2114,88 @@ per-member energy density (½·uᵀk u / L) falls out with no second solve. Meas
 (the truss lands unchanged, 253 → 250 members). ⚠ An earlier note estimated the extra solve at "~2× the
 prune time"; that was pessimistic — it was ~20%, because a prune step is dominated by the OC's own sizing
 solves, not the one ranking solve.
+
+### 8.15l THE READ-OUT — the field a moving magnet presents to the Hall, and the module that holds both
+
+§8.15g sized the restoring **spring** (a TPU dome, k ≈ 131 N/m) but explicitly deferred the
+**signal** — "NOT MODELLED HERE: the field a moving magnet presents to the Hall." This closes that
+gap and turns both into a printable **two-part module** (`manufacture/readout.py`,
+`manufacture/wellmod.py`, `scripts/readout.py`, `scripts/coupon.py`; `tests/test_readout.py`,
+`tests/test_wellmod.py`). Every number below is a **prediction** from a numpy field model
+(exact-cylinder on-axis + point dipole, no `magpylib`), to be checked on the stage-1 bench.
+
+**(mmm) THE SIGNAL SWAMPS THE SENSOR.** A **Ø3×1 mm N42** disc on the cradle over a **3-axis Hall**
+(TLI493D-W2BW class, 0.098 mT/LSB, ±130 mT, ~0.2 mT noise) at a **3.5 mm** rest gap:
+
+| | field | vs sensor |
+|---|---|---|
+| plunge (`click`) rest → full 1.5 mm | 19 → 61 mT | Δ **42 mT = 427 LSB ≈ 200× noise** |
+| at the 1.8 mm hard stop | 80 mT | 0.62 of range — no clipping |
+| weakest lateral tilt | ~7 mT | ~73 LSB ≈ 36× noise |
+
+The plunge uses the **exact** axial formula (a dipole is 15–35 % high in the near field); the four
+tilts use a dipole **difference** (posed − rest), so that bias cancels and what is left is the
+transverse field a sideways shift raises.
+
+**(nnn) THE FIVE DIRECTIONS ARE MUTUALLY LEGIBLE.** `click` is a pure +z swing; the four tilts are
+±x / ±y in the transverse plane. Their ΔB vectors sit **≥ 78° apart**, and a nearest-template
+classifier makes **0 errors in 10⁵ draws** at the datasheet noise. A ±0.5 mm build error in the gap
+keeps them ≥ 74° apart — a per-well calibration (read each direction's real ΔB once) absorbs it.
+
+**(ooo) CROSSTALK AND AMBIENT ARE BELOW THE FLOOR, AND BASELINED.** The tightest well pair
+(middle–ring, **18.6 mm**, from `out/final.npz`) leaks **0.23 mT static / 0.055 mT** full-travel
+modulation onto its neighbour's Hall — the modulation is **< 1 LSB and below noise**; the static
+part, like Earth's 0.05 mT, is a constant a **baseline tracker** removes. Every wider pair is
+smaller by 1/r³.
+
+**(ppp) THE MODULE: A RIGID FRAME AND A DROP-IN CRADLE.** Per finger, oriented by `well_frame`:
+- **PA frame** (part of the gauntlet solid, blends into the truss struts): a base plate seating a
+  6.4 mm Hall carrier, a collar, SKIN_R rims, and a **hard PA over-travel shelf at 1.8 mm** so a
+  knock bottoms on rigid plastic, not the dome. The Hall seat and wire slot are **carved** SDF
+  subtractions (`mesh.carve`, added for this).
+- **TPU cradle** (printed separately, **dropped in** — PA/TPU do not weld, so a **keyed snap**
+  holds it; hoop strain to seat the lip 4 %, ≤ 8 % elastic): the cup, the §8.15g dome, and a
+  Ø2.9 mm **press-fit** magnet pocket that opens through the dome centre toward the Hall (so the
+  magnet is the rigid centre and the flexure is the surviving annulus — a sealed pocket would be
+  unfillable). Travel 1.5 mm < stop 1.8 mm, and the dome's bending strain at the stop stays under
+  σ_fat/E with SF 2. The cup wall is ~470× stiffer than the dome, so ≥ 90 % of the fingertip's
+  motion reaches the magnet.
+
+**(qqq) THE HARNESS AND THE MCU.** Five sensors on the **nRF52840's two hardware I²C buses** using
+the W2BW address variants — no mux, no chip-select fan-out (the reason for choosing that part;
+confirm the exact address count against the ordered variant). Fine wires run in **re-entrant
+printed grooves** sunk into the dorsal strut surfaces (Dijkstra from each button to the nearest
+wrist anchor; 5 routes carved as 264 channel segments) to a **XIAO nRF52840 + 100 mAh LiPo** in a
+printed housing at the anchor cluster. A duty-cycled power **sketch** (SPEC/estimate): ~1.5 mA at a
+500 Hz scan → ~**68 h** on 100 mAh. Firmware is **outlined, not built** (no hardware to verify
+against here): boot baseline → 500 Hz scan → project ΔB onto the per-well calibrated 5×3 map →
+per-direction Schmitt (on 60 % / off 40 % of full-travel signal) → idle-gated baseline tracker →
+`action_map` → BLE HID.
+
+**(rrr) THE WHOLE PART, MEASURED.** With five modules, the harness grooves, and the housing carved
+in, `scripts/export_stl.py` meshes **one watertight, winding-consistent solid** (`out/gauntlet.stl`,
+100 × 152 × 91 mm) — the sensor subsystem is genuinely *part of the print*, not a bolt-on drawing.
+The modules + housing **add 13.5 g** over the bare struts (25.5 → **39.0 g** solid CF-PA12,
+measured off the mesh, not estimated) — the honest cost of contactless sensing at this gap, and a
+target for the cluster-packing rework that (sss) already needs.
+
+**(sss) ⚠ WHAT THIS DID NOT SETTLE.**
+- **The tightest module pair collides.** Sized independently, the **middle and ring** sensor tails
+  run nearly parallel and **interpenetrate** in the typing posture — their drop-in inserts do not
+  clear (`test_the_tightest_pair_needs_cluster_packing`, an `xfail` that flags itself when fixed).
+  Every other pair clears ≥ 2 mm. Resolving it needs a **cluster-level layout** (shared collar
+  walls, or staggered tail depth), which is future work — the per-finger module is the wrong unit
+  of design at that pitch.
+- **The dome membrane (~0.32 mm) is at the FDM single-perimeter floor** — it needs a 0.25 mm nozzle
+  or a corrugation, as §8.15g already flagged.
+- **`REST_GAP` (3.5 mm) and `CRADLE_LEVER` (0.7) are GUESSES** — the gap is a frame dimension not
+  yet confirmed on a print; the lever (lateral magnet travel per mm of fingertip tilt) sets the
+  tilt-direction signal and is a geometry guess until a stage-1 coupon measures it.
+- **The read-out is a model, not a measurement.** The stage-1 coupon family
+  (`scripts/coupon.py` → `out/coupon_*.stl`: TPU domes at t ∈ {0.25, 0.32, 0.40} mm × a ∈ {6, 7} mm,
+  a PA seat, a TLV493D breakout) is what measures k, mT-vs-displacement, the five-direction
+  confusion matrix, the 18.6 mm crosstalk, and 1k-cycle creep — with pass thresholds
+  pre-registered here before the print.
 
 ### 8.16 Provenance
 

@@ -89,6 +89,61 @@ SVALBOARD = Switch(
 
 
 # ---------------------------------------------------------------------------------------
+# THE READ-OUT. A disc magnet on the moving cradle over a fixed 3-axis Hall (manufacture.
+# readout). The magnet size and rest gap are declared together with the sensor's own
+# resolution and range, because the design point is a RELATION between them: the full-travel
+# field swing must dwarf the sensor's noise/LSB while the rest field stays inside its range.
+# Split them into unrelated constants and that relation can silently break. (SI throughout:
+# fields in tesla.)
+# ---------------------------------------------------------------------------------------
+MAGNET_BR = P("MAGNET_BR", 1.29, "T", Source.SPEC,
+              "N42 sintered NdFeB remanence, ~1.28-1.32 T (e.g. supermagnete S-03-01-N). "
+              "Grade sets the field; N42 is a common, unremarkable stock disc.",
+              describes="cradle magnet")
+MAGNET_D = P("MAGNET_D", 0.003, "m", Source.SPEC,
+             "Ø3 mm off-the-shelf disc. Diameter chosen (scripts/readout.py sweep) so the "
+             "1.5 mm plunge swing clears the Hall noise by >100 LSB while the rest field "
+             "stays under the sensor's range.",
+             describes="cradle magnet")
+MAGNET_L = P("MAGNET_L", 0.001, "m", Source.SPEC,
+             "1 mm thick disc (S-03-01-N). Thickness trades field for mass; 1 mm is enough "
+             "at a 3.5 mm gap.",
+             describes="cradle magnet")
+
+# The Hall. Typical Infineon TLx493D-family figures; reconfirm against the ordered
+# TLI493D-W2BW variant at BOM time (the exact LSB depends on the range mode selected).
+HALL_LSB = P("HALL_LSB", 0.098e-3, "T", Source.SPEC,
+             "0.098 mT per LSB, Infineon TLV493D/TLI493D 12-bit. The smallest field step "
+             "the sensor can report.",
+             describes="Hall sensor")
+HALL_RANGE = P("HALL_RANGE", 130e-3, "T", Source.SPEC,
+               "+-130 mT full scale, Infineon TLx493D. Beyond this the reading clips, so the "
+               "rest AND hard-stop fields must both sit inside it.",
+               describes="Hall sensor")
+HALL_NOISE = P("HALL_NOISE", 0.2e-3, "T", Source.SPEC,
+               "~0.2 mT RMS, Infineon TLx493D (datasheet band 0.1-0.4 depending on mode); "
+               "the mid value, swept in tests. The floor each direction's signal must clear.",
+               describes="Hall sensor")
+
+REST_GAP = P("REST_GAP", 0.0035, "m", Source.GUESS,
+             "Magnet rest face to Hall sensing point. Chosen so the modelled rest field "
+             "(~19 mT) sits low-mid range and the full plunge (~61 mT) still clears it by "
+             "hundreds of LSB. A frame dimension, not yet confirmed on a print.",
+             describes="magnetic read-out")
+
+CRADLE_LEVER = P("CRADLE_LEVER", 0.7, "mm lateral per mm travel", Source.GUESS,
+                 "How far the magnet translates sideways per mm of fingertip tilt travel. "
+                 "Sets the transverse field a lateral direction presents to the Hall. A "
+                 "geometry guess until a stage-1 coupon measures the cradle's real lever.",
+                 describes="cradle lever")
+
+EARTH_B = P("EARTH_B", 0.05e-3, "T", Source.LITERATURE,
+            "Earth's field magnitude ~50 uT at the surface (NOAA/IGRF). A static per-"
+            "orientation offset the baseline tracker removes; sanity bound on the read-out.",
+            describes="ambient field")
+
+
+# ---------------------------------------------------------------------------------------
 # THE WELL. Its radius is DERIVED per finger from that finger's own fingertip -- it is a
 # cavity the fingertip sits inside, so it cannot be a constant, and it certainly cannot be
 # the 12 mm keycap pitch it was inherited from.

@@ -8,11 +8,38 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** fifteen times. **All sixteen stamps stand**, and each
+The disclosure has been **extended and re-anchored** sixteen times. **All seventeen stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — RANK BY STRAIN ENERGY FOR FREE, off the OC's own solve (§8.15k, claim fff)
+### Current — THE READ-OUT: the field a moving magnet presents to the Hall, and the printed module (§8.15l)
+
+§8.15g sized the finger-well's restoring spring (a TPU dome) but **deferred the signal** — the field a
+moving magnet presents to the Hall. This closes it. A **Ø3×1 mm N42** disc on the cradle over a **3-axis
+Hall** reads a keypress at **~430 LSB — ~200× the sensor noise** (`manufacture/readout.py`, an analytic
+exact-cylinder + point-dipole model, no new dependency); the five joystick directions sit **≥78° apart**
+(0 nearest-template errors in 10⁵ draws at the datasheet noise), and the tightest well pair's crosstalk is
+**below the noise floor**, baselined out. The wells become a printable **two-part module**
+(`manufacture/wellmod.py`; a `carve()` SDF-subtraction added to `manufacture/mesh.py`): a rigid PA frame
+with the Hall seat and re-entrant wire grooves carved in, and a **drop-in keyed TPU cradle** holding a
+press-fit magnet over the §8.15g dome. The whole gauntlet — five modules, the harness grooves, a wrist
+nRF52840 housing — meshes **one watertight, winding-consistent solid** (39.0 g; **+13.5 g** measured for the
+sensors). ⚠ Stated, not hidden: the tightest module pair (**middle–ring**) interpenetrates and needs
+cluster-level packing; the read-out is a **model** the stage-1 coupon bench must confirm; the firmware is
+**outlined, not built**. 128 tests pass, 1 xfail marking that packing gap.
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) | `b7d68754afc631c980f8aa8b9c30d268dc33a5a3c06428ac3ff532f427b9029a` |
+| `MANIFEST.sha256` (hashes of all 96 source + doc files) | `ae16c7936218aa19408d1b14fc8b460fd462edd7d3359dbba1bae0d57b2f3a0d` |
+
+Stamped: **2026-07-16T22:09:56Z** (UTC, submission time). Proofs: `VISION.md.ots`,
+`MANIFEST.sha256.ots`.
+
+⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
+the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+
+### Sixteenth — RANK BY STRAIN ENERGY FOR FREE, off the OC's own solve (§8.15k, claim fff)
 
 The prune fix (14th anchor) ranked deletions by strain energy via a second FEM solve, and estimated that
 at "~2× the prune time." **Both the mechanism and the estimate are now improved.** `size` reads the strain
@@ -27,11 +54,8 @@ step is dominated by the OC's own sizing solves, not the one ranking solve. The 
 | `VISION.md` (the disclosure) | `21f5f3ef458a226fb30e2518418873cfc32ec2079fb072f1a62bd6ebe1952829` |
 | `MANIFEST.sha256` (hashes of all 90 source + doc files) | `8abf4d692e7278199bc423cf3926f2515e13c047ee7217e986567c53ee9d39bd` |
 
-Stamped: **2026-07-16T17:09:24Z** (UTC, submission time). Proofs: `VISION.md.ots`,
-`MANIFEST.sha256.ots`.
-
-⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
-the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+Stamped: **2026-07-16T17:09:24Z** (UTC, submission time). Proofs:
+`timestamps/VISION.md.2026-07-16f.ots`, `timestamps/MANIFEST.sha256.2026-07-16f.ots`.
 
 ### Fifteenth — RE-CHARACTERISE THE FRIENDLY COMPARISON UNDER THE FIXED PRUNE (§8.15v)
 

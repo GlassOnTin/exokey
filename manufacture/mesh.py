@@ -51,8 +51,76 @@ def _box_sdf(P, c, R, h):
     return outside + inside
 
 
-def field(struts, boxes, r, voxel=VOXEL, blend=BLEND, pad=0.006):
+def _cyl_sdf(P, a, b, r):
+    """SDF of a FLAT-CAPPED finite cylinder from a to b, radius r. Vectorised over P.
+
+    Unlike a capsule (a strut: rounded ends), this has flat caps and a crisp cylindrical wall --
+    which is what a magnet POCKET or a bolt BORE is. Used only for CARVING (subtraction), where a
+    rounded-end hole would be wrong for a press fit.
+    """
+    a = np.asarray(a, float)
+    ax = np.asarray(b, float) - a
+    hlen = 0.5 * float(np.linalg.norm(ax))
+    if hlen < 1e-9:
+        return np.linalg.norm(P - a, axis=-1) - r
+    ahat = ax / (2.0 * hlen)
+    local = P - (a + hlen * ahat)                       # from the cylinder's centre
+    da = np.abs(local @ ahat) - hlen                    # outside the flat caps
+    dr = np.linalg.norm(local - (local @ ahat)[..., None] * ahat, axis=-1) - r  # outside the wall
+    outside = np.sqrt(np.maximum(da, 0.0) ** 2 + np.maximum(dr, 0.0) ** 2)
+    inside = np.minimum(np.maximum(da, dr), 0.0)
+    return outside + inside
+
+
+def carve(f, origin, voxel, cyls=(), boxes=()):
+    """SUBTRACT pockets/channels from a built field: f <- max(f, -sdf), per primitive.
+
+    `field()` only smooth-UNIONS primitives; a magnet pocket, a Hall seat, or a wire groove is a
+    HOLE, and a hole is a subtraction. Takes `field()`'s own returned (f, origin, voxel) and
+    edits f in place. Safe against the edge pad: subtraction only makes f MORE positive (removes
+    material), so the border `field()` set to +10*blend stays positive and the mesh stays
+    watertight. Windowed exactly like `field()` -- a pocket touches only its own neighbourhood.
+
+    cyls  : [(a, b, r)]      flat-capped cylinders (magnet pockets, bores, wire grooves)
+    boxes : [(c, R, h)]      boxes (PCB seats, wire-exit slots, stop clearances)
+    """
+    lo = np.asarray(origin, float)
+    n = np.array(f.shape)
+
+    def window(pmin, pmax, reach):
+        i0 = np.maximum(np.floor((pmin - reach - lo) / voxel).astype(int), 0)
+        i1 = np.minimum(np.ceil((pmax + reach - lo) / voxel).astype(int) + 1, n)
+        if np.any(i1 <= i0):
+            return None
+        g = np.meshgrid(*[np.arange(i0[d], i1[d]) for d in range(3)], indexing="ij")
+        P = lo + np.stack(g, axis=-1) * voxel
+        return (slice(i0[0], i1[0]), slice(i0[1], i1[1]), slice(i0[2], i1[2])), P
+
+    for a, b, r in cyls:
+        a, b = np.asarray(a, float), np.asarray(b, float)
+        w = window(np.minimum(a, b), np.maximum(a, b), r + voxel)
+        if w is None:
+            continue
+        sl, P = w
+        f[sl] = np.maximum(f[sl], -_cyl_sdf(P, a, b, r))
+
+    for c, R, h in boxes:
+        c, R, h = np.asarray(c, float), np.asarray(R, float), np.asarray(h, float)
+        ext = np.abs(R).T @ h
+        w = window(c - ext, c + ext, voxel)
+        if w is None:
+            continue
+        sl, P = w
+        f[sl] = np.maximum(f[sl], -_box_sdf(P, c, R, h))
+
+    return f
+
+
+def field(struts, boxes, r, voxel=VOXEL, blend=BLEND, pad=0.006, cyls=()):
     """The smooth-min SDF of the whole part, on a grid. Returns (f, origin, voxel).
+
+    `cyls` = [(a, b, r)] flat-capped cylinders, blended in like struts and boxes -- a thin disc
+    (a flexure diaphragm) or a round boss a capsule cannot make (its min thickness is 2r).
 
     Accumulates exp(-d/k) PER PRIMITIVE, and only in that primitive's own neighbourhood -- a strut
     10 cm away contributes exp(-100) and is not worth 10 million distance evaluations to discover.
@@ -72,10 +140,12 @@ def field(struts, boxes, r, voxel=VOXEL, blend=BLEND, pad=0.006):
     R = np.broadcast_to(np.asarray(r, float), (len(struts),)) if len(struts) else np.zeros(0)
     rmax = float(R.max()) if len(R) else float(np.asarray(r, float).max())
 
+    crmax = max((rc for _a, _b, rc in cyls), default=0.0)
     pts = np.array([p for s in struts for p in s]
-                   + [c for c, _R, _h in boxes] or [[0, 0, 0]])
-    lo = pts.min(axis=0) - (rmax + pad)
-    hi = pts.max(axis=0) + (rmax + pad)
+                   + [c for c, _R, _h in boxes]
+                   + [q for a, b, _rc in cyls for q in (a, b)] or [[0, 0, 0]])
+    lo = pts.min(axis=0) - (max(rmax, crmax) + pad)
+    hi = pts.max(axis=0) + (max(rmax, crmax) + pad)
     n = np.ceil((hi - lo) / voxel).astype(int) + 1
     acc = np.zeros(tuple(n), np.float64)
 
@@ -106,6 +176,14 @@ def field(struts, boxes, r, voxel=VOXEL, blend=BLEND, pad=0.006):
         sl, P = w
         acc[sl] += np.exp(-_box_sdf(P, c, Rb, h) / blend)
 
+    for a, b, rc in cyls:
+        a, b = np.asarray(a, float), np.asarray(b, float)
+        w = window(np.minimum(a, b), np.maximum(a, b), 8.0 * blend + rc)
+        if w is None:
+            continue
+        sl, P = w
+        acc[sl] += np.exp(-_cyl_sdf(P, a, b, rc) / blend)
+
     f = np.where(acc > 1e-300, -blend * np.log(np.maximum(acc, 1e-300)), 10.0 * blend)
     # ⚠ THE FIELD MUST BE POSITIVE ON EVERY FACE OF THE GRID, or the surface runs off the edge and
     # marching cubes returns an OPEN mesh -- not watertight, not printable, and it says so quietly.
@@ -114,12 +192,19 @@ def field(struts, boxes, r, voxel=VOXEL, blend=BLEND, pad=0.006):
 
 
 def to_mesh(f, origin, voxel):
-    """Marching cubes on f = 0. One step, no booleans, watertight by construction."""
+    """Marching cubes on f = 0. One step, no booleans, watertight by construction.
+
+    ⚠ process=False. marching_cubes already returns a manifold with SHARED, indexed vertices;
+    trimesh's process=True re-welds them and, across a thin wall (a pocket margin, a tube bore),
+    merges two topologically-distinct vertices into one -- a non-manifold junction that makes the
+    otherwise-watertight surface report as NOT watertight (euler blows up). The raw output is the
+    clean mesh; leave it alone.
+    """
     import trimesh
     from skimage import measure
 
     v, faces, _n, _val = measure.marching_cubes(f, level=0.0, spacing=(voxel,) * 3)
-    return trimesh.Trimesh(vertices=v + origin, faces=faces, process=True)
+    return trimesh.Trimesh(vertices=v + origin, faces=faces, process=False)
 
 
 def well_boxes(h, q, fingers, wall=0.0015):

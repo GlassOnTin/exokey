@@ -13,7 +13,8 @@ import numpy as np
 from design.vector import posture, tm_of, tp_of
 from hand.flesh import skin
 from hand.myohand import FINGERS
-from manufacture.mesh import BLEND, VOXEL, field, to_mesh, well_boxes
+from manufacture import wellmod as wm
+from manufacture.mesh import BLEND, VOXEL, carve, field, to_mesh
 from opt.problem import hands
 from structure.frame import MATERIALS
 from structure.lattice import BAR_R
@@ -39,14 +40,57 @@ def main():
     r = z["radii"] if "radii" in z.files else float(BAR_R)
 
     struts = [(nodes[bars[e][0]], nodes[bars[e][1]]) for e in live]
-    boxes = well_boxes(h, q, FINGERS)
     rr = np.atleast_1d(np.asarray(r, float))
-    print(f"  {src}: {len(struts)} struts + {len(boxes)} well plates")
+    seg_r = {}                                          # node-pair -> its strut radius (for grooves)
+    for k, e in enumerate(live):
+        i, j = bars[e]
+        seg_r[frozenset((i, j))] = float(rr[k]) if rr.size > 1 else float(rr[0])
+
+    # THE SENSOR MODULES replace the bare well cups: a rigid PA frame per finger (Hall seat, collar,
+    # base) that blends into the struts, plus the wire grooves back to a wrist MCU housing.
+    anchors = [int(a) for a in z["anchors"]]
+    btn = {f: int(i) for f, i in zip(z["fingers"], z["buttons"])}
+    mods = [wm.module_frame(h, q, f) for f in FINGERS]
+    mboxes = [b for md in mods for b in md["boxes"]]
+    mcaps = [c[0] for md in mods for c in md["caps"]]
+    mcap_r = [c[1] for md in mods for c in md["caps"]]
+    mcyls = [c for md in mods for c in md["cyls"]]
+    cv_cyls = [c for md in mods for c in md["carve_cyls"]]
+    cv_boxes = [c for md in mods for c in md["carve_boxes"]]
+
+    # HOUSING for the XIAO nRF52840 + LiPo at the wrist anchor cluster.
+    hboxes, hcav = wm.housing(nodes[np.array(anchors)])
+
+    # WIRE GROOVES: sink a re-entrant capsule channel into each strut the route follows, on the
+    # dorsal (away-from-skin) surface so a wire never presses the hand.
+    from scipy.spatial import cKDTree
+    V, _ = skin(h, q)
+    stree = cKDTree(V)
+    routes = wm.harness_grooves(nodes, bars, live, btn, anchors)
+    gcyls = []
+    for route in routes:
+        for i, j in zip(route[:-1], route[1:]):
+            rs = seg_r.get(frozenset((i, j)), float(BAR_R))
+            off = max(rs - wm.GROOVE_BURY, 0.0)         # sink the channel to breach the surface
+            pa, pb = [], []
+            for nidx, store in ((i, pa), (j, pb)):
+                p = nodes[nidx]
+                away = p - V[stree.query(p)[1]]
+                away = away / (np.linalg.norm(away) + 1e-12)
+                store.append(p + off * away)
+            gcyls.append((pa[0], pb[0], wm.GROOVE_R))
+
+    allstruts = struts + mcaps
+    allr = list(rr) if rr.size > 1 else [float(rr[0])] * len(struts)
+    allr = allr + list(mcap_r)
+    print(f"  {src}: {len(struts)} struts + {len(mods)} sensor modules + housing")
+    print(f"  wire grooves: {len(routes)} routes, {len(gcyls)} channel segments")
     print(f"  rod r = {rr.min()*1000:.2f}-{rr.max()*1000:.2f} mm, fillet = {BLEND*1000:.1f} mm, "
           f"voxel = {VOXEL*1000:.1f} mm")
 
-    f, o, v = field(struts, boxes, r)
+    f, o, v = field(allstruts, mboxes + hboxes, allr, cyls=mcyls)
     print(f"  field {f.shape} = {f.size/1e6:.1f} M voxels")
+    carve(f, o, v, cyls=cv_cyls + gcyls, boxes=cv_boxes + hcav)
     m = to_mesh(f, o, v)
 
     rho = MATERIALS["cf_pa12"]["rho"]
@@ -81,10 +125,13 @@ def main():
     V, _ = skin(h, q)
     tree = cKDTree(V)
 
-    fs, os_, vs = field(struts, [], r)              # the STRUCTURE alone -- no cups
+    fs, os_, vs = field(struts, [], r)              # the STRUCTURE alone -- no cups, no modules
     ms = to_mesh(fs, os_, vs)
+    dg = (m.volume - ms.volume) * rho * 1000
+    print(f"\n  the SENSOR MODULES + housing add {dg:.1f} g over the bare struts "
+          f"({ms.volume*rho*1000:.1f} g -> {m.volume*rho*1000:.1f} g solid) -- MEASURED, not estimated.")
     ds = tree.query(ms.vertices)[0]
-    print(f"\n  clearance of the STRUCTURE (no cups) from the skin: "
+    print(f"  clearance of the STRUCTURE (no cups) from the skin: "
           f"min {ds.min()*1000:.2f} mm")
     d = tree.query(m.vertices)[0]
     print(f"  closest approach of the WHOLE part (cups included):  {d.min()*1000:.2f} mm  "
