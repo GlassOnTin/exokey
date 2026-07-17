@@ -2115,7 +2115,7 @@ per-member energy density (½·uᵀk u / L) falls out with no second solve. Meas
 prune time"; that was pessimistic — it was ~20%, because a prune step is dominated by the OC's own sizing
 solves, not the one ranking solve.
 
-### 8.15l THE READ-OUT — the field a moving magnet presents to the Hall, and the module that holds both
+### 8.15l THE READ-OUT — the field a moving magnet presents to the Hall (the mount that holds it is being redesigned, ppp)
 
 §8.15g sized the restoring **spring** (a TPU dome, k ≈ 131 N/m) but explicitly deferred the
 **signal** — "NOT MODELLED HERE: the field a moving magnet presents to the Hall." This closes that
@@ -2148,76 +2148,35 @@ modulation onto its neighbour's Hall — the modulation is **< 1 LSB and below n
 part, like Earth's 0.05 mT, is a constant a **baseline tracker** removes. Every wider pair is
 smaller by 1/r³.
 
-**(ppp) THE MODULE: A RIGID FRAME AND A DROP-IN CRADLE.** Per finger, oriented by `well_frame`:
-- **PA frame** (part of the gauntlet solid, blends into the truss struts): a base plate seating a
-  6.4 mm Hall carrier, a collar, SKIN_R rims, and a **hard PA over-travel shelf at 1.8 mm** so a
-  knock bottoms on rigid plastic, not the dome. The Hall seat and wire slot are **carved** SDF
-  subtractions (`mesh.carve`, added for this).
-- **TPU cradle** (printed separately, **dropped in** — PA/TPU do not weld, so a **keyed snap**
-  holds it; hoop strain to seat the lip 4 %, ≤ 8 % elastic): the cup, the §8.15g dome, and a
-  Ø2.9 mm **press-fit** magnet pocket that opens through the dome centre toward the Hall (so the
-  magnet is the rigid centre and the flexure is the surviving annulus — a sealed pocket would be
-  unfillable). Travel 1.5 mm < stop 1.8 mm, and the dome's bending strain at the stop stays under
-  σ_fat/E with SF 2. The cup wall is ~470× stiffer than the dome, so ≥ 90 % of the fingertip's
-  motion reaches the magnet.
+**(ppp) ⚠ THE MOUNT GEOMETRY IS BEING REDESIGNED — the first attempt did not model the finger's
+ENTRY ROUTE, and is withdrawn.** A printed PA frame + drop-in TPU cradle to hold the magnet and Hall
+were built and OTS-anchored (17th–20th), but checked only for the finger's *static seated* clearance
+— never for the **route the fingertip must traverse to enter the cup** (it slides in along the
+phalanx axis from the proximal-open end). A mount can clear a *seated* finger and still block it from
+ever *entering*, which is exactly what kept recurring (a strut across the entry; a rim over the cup).
+That geometry is **withdrawn from HEAD** (the anchors stand as dated floors on the read-out
+disclosure). The mount is being rebuilt with a **finger-entry-route swept-clearance as a first-class
+constraint** (`manufacture/entry.py`), the geometry validated against it by construction rather than
+by eye. The read-out physics above (mmm–ooo) is independent of the mount and stands.
 
-**(qqq) THE HARNESS AND THE MCU.** Five sensors on the **nRF52840's two hardware I²C buses** using
-the W2BW address variants — no mux, no chip-select fan-out (the reason for choosing that part;
-confirm the exact address count against the ordered variant). Fine wires run in **re-entrant
-printed grooves** sunk into the dorsal strut surfaces (Dijkstra from each button to the nearest
-wrist anchor; 5 routes carved as 264 channel segments) to a **XIAO nRF52840 + 100 mAh LiPo** in a
-printed housing at the anchor cluster. A duty-cycled power **sketch** (SPEC/estimate): ~1.5 mA at a
-500 Hz scan → ~**68 h** on 100 mAh. Firmware is **outlined, not built** (no hardware to verify
-against here): boot baseline → 500 Hz scan → project ΔB onto the per-well calibrated 5×3 map →
-per-direction Schmitt (on 60 % / off 40 % of full-travel signal) → idle-gated baseline tracker →
-`action_map` → BLE HID.
+**(qqq) THE HARNESS AND THE MCU (concept).** Five sensors on the **nRF52840's two hardware I²C
+buses** using the TLI493D-W2BW address variants — no mux, no chip-select fan-out (confirm the exact
+address count against the ordered variant). Fine wires route to a **XIAO nRF52840 + 100 mAh LiPo** at
+the wrist. A duty-cycled power **sketch** (SPEC/estimate): ~1.5 mA at a 500 Hz scan → ~**68 h** on
+100 mAh. Firmware is **outlined, not built**: boot baseline → 500 Hz scan → project ΔB onto the
+per-well calibrated 5×3 map → per-direction Schmitt (on 60 % / off 40 %) → idle-gated baseline
+tracker → `action_map` → BLE HID. The physical wire routing is part of the mount geometry (ppp).
 
-**(rrr) THE WHOLE PART, MEASURED — AND A CORRECTION.** With five modules, the harness grooves, and
-the housing meshed in, `scripts/export_stl.py` builds `out/gauntlet.stl` (100 × 152 × 91 mm). ⚠ The
-first cut of this claim said "one watertight solid" — it was watertight but in **31 pieces**: the
-modules and the MCU housing floated ~10 mm off the skeleton, because `well_frame`'s fingertip pad is
-**not** the structure's button node (`ground()` places them differently), and the housing neck
-anchored at the anchor *centroid*, which sits in empty space. Found only by counting components, not
-by the watertight check. Fixed by tying each frame to its button node with **stalks**, the housing
-to its nearest **live-strut nodes**, and dropping the sub-mm³ marching-cubes debris: now **one
-connected, watertight, winding-consistent body — measured at component count 1**. The modules +
-housing **add 16.7 g** over the bare struts (25.5 → **42.2 g** solid CF-PA12, measured off the mesh,
-not estimated — the four long fingers share one cluster carrier, see (sss)) — the honest cost of
-contactless sensing at this gap. The MCU box is also lifted along the local skin normal so it sits
-proud of the wrist instead of cutting into it.
-
-**(sss) ⚠ WHAT THIS DID NOT SETTLE.**
-- **The strut tie-in and the nesting, corrected.** The first module tied the truss in *down by the
-  magnet* (palmar) and — worse — its collar was **inboard of the insert cup** (±7.9 vs ±9.5 mm), so
-  the two parts could not even nest. Both are fixed: the collar now sits **outboard** of the cup (the
-  insert drops in between the walls), and the strut ties in on a **dorsal-lateral rim + distal
-  brace** — the nail side, **opposite the palmar magnet** and clear of the finger (measured 3.8 mm
-  from the skin). The whole part is one watertight solid (**42.2 g**, with the long fingers now on a
-  shared cluster — see below).
-- **The four long fingers now SHARE a cluster (was a per-finger collision).** A module wide enough to
-  nest its insert and carry the strut dorsally is wider than the ~18–26 mm finger pitch, so four
-  independent ones interpenetrated at every adjacent pair. Fixed: the long fingers share **one
-  carrier** (`wellmod.cluster_frame`) whose **inter-finger walls are shared** — the wall between two
-  fingers is a single wall, not two colliding ones — a palmar base spine links the Hall seats, and a
-  dorsal rim rail + the struts run along the **wall tops BETWEEN the fingers, never over a cup**, so
-  every finger drops into its cup and reaches its sensor freely (entries clear ≥ 3.3 mm; ⚠ a first
-  cut ran the rim over the finger centres and choked every entry to 0.1 mm — caught by eye in the
-  render, now guarded by `test_the_cluster_leaves_the_finger_entry_open`). It meshes to **one
-  watertight, non-self-colliding piece**, each cup walled off from its neighbours, and it is
-  **lighter** than the four modules were (whole part **42.2 g**, down from 49.9 g). The thumb keeps an
-  independent module and clears the cluster by 18 mm. ⚠ Remaining: the **drop-in inserts** are still
-  per-finger ±9.5 mm and overlap the shared walls at the tightest pair — they need matching narrower
-  (or webbed multi-cup) cradles, the one open detail.
+**(rrr) ⚠ WHAT IS NOT YET SETTLED (read-out).**
 - **The dome membrane (~0.32 mm) is at the FDM single-perimeter floor** — it needs a 0.25 mm nozzle
   or a corrugation, as §8.15g already flagged.
-- **`REST_GAP` (3.5 mm) and `CRADLE_LEVER` (0.7) are GUESSES** — the gap is a frame dimension not
-  yet confirmed on a print; the lever (lateral magnet travel per mm of fingertip tilt) sets the
-  tilt-direction signal and is a geometry guess until a stage-1 coupon measures it.
-- **The read-out is a model, not a measurement.** The stage-1 coupon family
-  (`scripts/coupon.py` → `out/coupon_*.stl`: TPU domes at t ∈ {0.25, 0.32, 0.40} mm × a ∈ {6, 7} mm,
-  a PA seat, a TLV493D breakout) is what measures k, mT-vs-displacement, the five-direction
-  confusion matrix, the 18.6 mm crosstalk, and 1k-cycle creep — with pass thresholds
-  pre-registered here before the print.
+- **`REST_GAP` (3.5 mm) and `CRADLE_LEVER` (0.7) are GUESSES** — the gap is a mount dimension not yet
+  confirmed on a print; the lever (lateral magnet travel per mm of fingertip tilt) sets the
+  tilt-direction signal and is a geometry guess until a bench coupon measures it.
+- **The read-out is a model, not a measurement.** A stage-1 coupon family (TPU domes across the
+  thickness/radius band, a PA seat, a TLV493D breakout) is what measures k, mT-vs-displacement, the
+  five-direction confusion matrix, the 18.6 mm crosstalk, and 1k-cycle creep — with pass thresholds
+  pre-registered before the print.
 
 ### 8.16 Provenance
 
