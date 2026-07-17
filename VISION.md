@@ -2198,6 +2198,28 @@ off — clears it by 1.7 mm, necked to the nearest live-strut nodes) and the **w
 grooves sunk into the dorsal strut surfaces (a shortest-path route from each sensor to the wrist,
 264 channel segments) — both far from the fingertips, so neither touches the entry route.
 
+**(qqq-2) MINIMAL-COPPER ROUTING — a shared power/signal BUS, not five point-to-point runs
+(analysed).** The harness above routes each sensor **independently** to the wrist — five 4-wire
+bundles, **~490 mm** of routed length, and where two paths overlap the copper is *duplicated*. But the
+sensors do not each need their own wires: the TLI493D-W2BW is **I²C**, so SDA/SCL are a **bus**, and
+VDD/GND are shared by every sensor whatever bus it sits on. The minimum-copper harness is therefore a
+**shared tree over the strut graph**, not a set of independent paths — **one power tree** (VDD/GND)
+spanning all five sensors + the MCU, with I²C **signal** riding the same trunk (one tree per bus).
+Measured on the shipped layout (`out/final.npz`, the routable graph = the live struts): the shared
+**Steiner tree is 283 mm** against the 490 mm of independent paths, so a 2-power + 2-signal bus is
+**~1130 vs ~1960 mm-equivalent of conductor — −42 %**. Two things fall out. **(1) It is not quite the
+travelling-salesman problem, though it looks like one.** TSP forces a single **daisy-chain** visiting
+every sensor once (one wire in, one out); letting the bus **branch** — a *Steiner* minimal tree over
+the strut graph, T-junctions allowed — beats the chain here, **283 vs 373 mm**. TSP is the special case
+with branching forbidden (which a strict daisy-chain, to avoid I²C stub reflections, may still prefer).
+**(2) The win is sharing, not tour-finding**: splitting signal across the two I²C buses the address
+limit needs costs ~nothing extra (**283 mm either way**), because the sensors are clustered and the
+power trunk is shared regardless. The per-sensor router (`mount.harness_routes`) stands as the
+baseline; the **Steiner-tree bus router is the disclosed replacement** — a minimum-Steiner-tree-in-a-
+graph problem (Dreyfus–Wagner exact for six terminals, or a metric-MST 2-approximation) over the same
+live-strut graph, the conductor count folded in per segment (4 on the shared trunk, 2 where only power
+runs). Analysed and measured here; not yet meshed into the export.
+
 **(rrr) ⚠ WHAT IS NOT YET SETTLED (read-out).**
 - **The dome membrane (~0.32 mm) is at the FDM single-perimeter floor** — it needs a 0.25 mm nozzle
   or a corrugation, as §8.15g already flagged.

@@ -8,11 +8,39 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** twenty-two times. **All twenty-three stamps stand**, and each
+The disclosure has been **extended and re-anchored** twenty-three times. **All twenty-four stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — THE ENTRY CHECK NOW COVERS THE GAUNTLET STRUTS, HOUSING AND WIRES (§8.15l ppp/qqq)
+### Current — THE FINGERTIP NOW SEATS IN ITS CUP; a minimal-copper harness BUS (§8.15l ppp-2/qqq-2)
+
+Two things. **(1) The finger was floating above its cup.** The entry check (21st–23rd) had a blind
+spot a render caught: `enters_freely` only rejects mount material *inside* the swept finger, so a cup
+the finger never reaches passes **vacuously** — and this one did (every fingertip hovered ~7–13 mm
+*above* its cup, **0–1 % of the skin inside it**). Cause: the cup was built at `well_frame["pos"] + r`
+assuming `pos` is the pulp *centre*, but `pad_pose` returns the pad **surface**. `manufacture/mount.py`
+now builds the cup to the **measured** pad and nail (the distal-phalanx skin's floor-direction extent):
+floor just palmar of the pad, flanks spanning the finger's real depth, strut to the **palmar sensor
+base** (the button node *is* the sensor — a strut to a dorsal edge crossed the finger). The pad now
+**contacts** the floor (0.4–0.8 mm), ~50–65 % of the skin cradled; one watertight solid, **40.2 g**.
+`test_the_finger_actually_seats_in_its_cup` fails if a fingertip floats again — the regression the
+vacuous entry check could not be. **(2) A minimal-copper harness bus (analysed).** The wires need not
+run point-to-point: the sensors are I²C, so SDA/SCL are a **bus** and VDD/GND are shared, making the
+minimum-copper harness a **shared Steiner tree over the strut graph** — one power tree over all five
+sensors + the MCU, signal riding the trunk. Measured on `out/final.npz`: **283 mm** shared vs **490 mm**
+of independent paths — a 2-power + 2-signal bus is **−42 %** copper. It is *not* quite TSP: the branching
+Steiner tree beats the single daisy-chain (**283 vs 373 mm**); TSP is the branch-forbidden special case.
+Disclosed as prior art (§8.15l qqq-2); the Steiner-tree router is not yet meshed into the export.
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) | `5375c98d984e95e7176ce20b7cbbeefb33005ce46ac2696f99fb696037c11d13` |
+| `MANIFEST.sha256` (hashes of all 98 source + doc files) | `e56670478ce176e1135a3844ff2873efef57e96c4397471eed38392446680efa` |
+
+Stamped: **2026-07-17T19:30:57Z** (UTC, submission time). Proofs: `VISION.md.ots`,
+`MANIFEST.sha256.ots`.
+
+### Twenty-third — THE ENTRY CHECK NOW COVERS THE GAUNTLET STRUTS, HOUSING AND WIRES (§8.15l ppp/qqq)
 
 Two gaps closed. **(1)** The finger-entry check ran only against the mount, not the **gauntlet
 struts** — but the truss wraps near the fingertips, so a strut across the slide-in would block just as
@@ -31,8 +59,8 @@ the entry route. One watertight solid, **41.1 g**. 131 tests pass.
 | `VISION.md` (the disclosure) | `cfd4640fa6d4c8eecf35802cd7830df973e9463cb5ce61209b27df0986e32fe3` |
 | `MANIFEST.sha256` (hashes of all 98 source + doc files) | `d87fd04bf8c640620421350f69a1cc2c1b953dc66eb0d09169ae857b7013c459` |
 
-Stamped: **2026-07-17T09:43:25Z** (UTC, submission time). Proofs: `VISION.md.ots`,
-`MANIFEST.sha256.ots`.
+Stamped: **2026-07-17T09:43:25Z** (UTC, submission time). Proofs:
+`timestamps/VISION.md.2026-07-17e.ots`, `timestamps/MANIFEST.sha256.2026-07-17e.ots`.
 
 ⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
 the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
