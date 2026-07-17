@@ -1,0 +1,164 @@
+"""THE SENSOR MOUNT — rebuilt ENTRY-FIRST, so the finger can actually get into its cup.
+
+The prior mount (withdrawn, VISION §8.15l ppp) was checked only for the finger's static seated
+clearance and kept blocking the ENTRY ROUTE. This one is built to the `manufacture.entry` constraint
+by construction and validated against it:
+
+    every piece is BESIDE the finger (a flank the phalanx slides between) or BELOW it (the palmar
+    sensor stack) or on the DORSAL-LATERAL edge (the strut) -- NOTHING crosses the proximal slide-in.
+
+Per finger the mount is, in the well's own frame (axis = distal, floor = palmar, lateral = across):
+  * CUP    two lateral flanks + a palmar floor, OPEN proximally (the phalanx slides in) and dorsally.
+  * SENSOR palmar of the floor: a Hall seat (carved PCB pocket) under the magnet gap. Below the finger.
+  * STRUT  a post from the structure's button node to the cup's dorsal-lateral edge -- the nail side,
+           opposite the palmar magnet, and clear of the entry.
+
+The magnet + dome cradle is the drop-in TPU part (`manufacture.flexure` sizes the dome); this file is
+the rigid PA frame the truss carries and the Hall sits in.
+"""
+from __future__ import annotations
+
+import numpy as np
+
+from design.params import MAGNET_D, MAGNET_L, REST_GAP, SVALBOARD
+from manufacture import mesh
+from manufacture.flexure import dome, spring_rate
+from manufacture.friendly import SKIN_R
+from structure.frame import MATERIALS
+
+K = spring_rate(float(SVALBOARD.force), float(SVALBOARD.travel))
+DOME_A = 0.006
+DOME_T = float(dome(K, DOME_A, MATERIALS["tpu"]["E"], MATERIALS["tpu"]["nu"]))
+CUP_WALL = 0.0022                          # flank thickness
+FLOOR_T = 0.0022                           # cup-floor thickness
+PA_WALL = 0.0016
+BASE_T = 0.0018
+PCB = (0.0064, 0.0064, 0.0018)             # Hall carrier (x along axis, y lateral, z palmar)
+STRUT_R = 0.0025
+MAGNET_POCKET_D = float(MAGNET_D) - 0.1e-3
+MAGNET_POCKET_DEPTH = float(MAGNET_L) + 0.2e-3
+
+
+def _frame(wf):
+    ax = np.asarray(wf["axis"], float)
+    fl = np.asarray(wf["floor"], float)
+    lat = np.asarray(wf["lateral"], float)
+    return ax, fl, lat, np.vstack([ax, fl, lat]), np.asarray(wf["pos"], float), wf["radius"], wf["half"]
+
+
+def _stack(r):
+    """Offsets along +floor (palmar) from the pad: cup floor, magnet face, Hall, base."""
+    s_floor = r                                  # the finger bottoms on the cup floor here
+    s_magface = s_floor + FLOOR_T                # magnet Hall-face just palmar of the floor
+    s_hall = s_magface + float(REST_GAP)
+    s_base = s_hall + 0.5 * PCB[2] + 0.5 * BASE_T
+    return dict(floor=s_floor, magface=s_magface, hall=s_hall, base=s_base)
+
+
+def well_mount(h, q, finger, mount_node, *, wire_len=0.010):
+    """The rigid PA frame for one well, ENTRY-FIRST. Returns the mesh-primitive dict."""
+    ax, fl, lat, R, pos, r, half = _frame(h.well_frame(q, finger))
+    s = _stack(r)
+    cc = pos - 0.5 * half * ax                   # channel centre (behind the pad)
+    boxes, caps, cyls, carve_cyls, carve_boxes = [], [], [], [], []
+
+    # CUP: two lateral flanks (BESIDE the finger -- guides, not blocks) + a palmar floor. OPEN
+    # proximally (finger slides in) and dorsally (nail). No distal end wall over the entry.
+    for side in (+1.0, -1.0):
+        boxes.append((cc + 0.5 * s["floor"] * fl + side * (r + 0.5 * CUP_WALL) * lat, R,
+                      np.array([half, 0.5 * s["floor"] + FLOOR_T, 0.5 * CUP_WALL])))
+    boxes.append((cc + (s["floor"] + 0.5 * FLOOR_T) * fl, R,
+                  np.array([half, 0.5 * FLOOR_T, r + CUP_WALL])))          # floor (palmar, below finger)
+
+    # SENSOR TAIL: a Hall seat palmar of the floor, PCB-width, below the finger and clear of the entry.
+    pcb_half = 0.5 * PCB[1] + PA_WALL
+    boxes.append((cc + s["base"] * fl, R, np.array([half, 0.5 * BASE_T, pcb_half])))
+    for side in (+1.0, -1.0):                    # two necks BESIDE the PCB pocket, or the carve severs it
+        caps.append(((cc + (s["floor"] + FLOOR_T) * fl + side * pcb_half * lat,
+                      cc + s["base"] * fl + side * pcb_half * lat), 0.5 * PA_WALL + 0.0006))
+    carve_boxes.append((cc + (s["hall"] + 0.5 * PCB[2]) * fl, R,
+                        np.array([0.5 * PCB[0], 0.5 * PCB[2], 0.5 * PCB[1]])))               # PCB pocket
+    slot = cc + s["hall"] * fl - (0.5 * half + 0.5 * wire_len) * ax
+    carve_boxes.append((slot, R, np.array([0.5 * wire_len + half, 0.0006, 0.0006])))         # wire slot
+
+    # STRUT: from the structure's button node to the cup's DORSAL-LATERAL edge (nail side, opposite
+    # the palmar magnet), never across the proximal entry.
+    edge = cc + (-0.15 * r) * fl + (r + 0.5 * CUP_WALL) * lat        # a dorsal-lateral flank-top point
+    caps.append(((np.asarray(mount_node, float), edge), STRUT_R))
+    caps.append(((edge, cc + (-0.15 * r) * fl - (r + 0.5 * CUP_WALL) * lat), float(SKIN_R)))  # dorsal rim
+
+    return dict(boxes=boxes, caps=caps, cyls=cyls, carve_cyls=carve_cyls, carve_boxes=carve_boxes)
+
+
+def _mesh(prims, struts=(), radii=0.0, voxel=4e-4):
+    caps = list(struts) + [c[0] for c in prims["caps"]]
+    rr = ([radii] * len(struts) if np.isscalar(radii) else list(radii)) + [c[1] for c in prims["caps"]]
+    f, o, v = mesh.field(caps, prims["boxes"], r=rr, voxel=voxel, cyls=prims["cyls"])
+    mesh.carve(f, o, v, cyls=prims["carve_cyls"], boxes=prims["carve_boxes"])
+    out = mesh.to_mesh(f, o, v)
+    import trimesh
+    bodies = out.split(only_watertight=False)
+    if len(bodies) > 1:
+        keep = [b for b in bodies if b.volume > 1e-9]
+        out = trimesh.util.concatenate(keep) if len(keep) > 1 else keep[0]
+    return out
+
+
+def well_mesh(h, q, finger, mount_node, struts=(), radii=0.0, *, voxel=4e-4):
+    return _mesh(well_mount(h, q, finger, mount_node), struts, radii, voxel)
+
+
+def cluster_mount(h, q, fingers, mount_nodes, *, wire_len=0.010):
+    """ONE carrier for a ROW of wells (the long fingers), SHARED flanks, ENTRY-FIRST.
+
+    The flanks between fingers are SHARED and run ALONG the axis (they guide the phalanx in, they do
+    not cross the proximal slide-in), a palmar base spine links the Hall seats, and each strut ties
+    the button node to a dorsal-lateral flank top. `fingers` in row order; `mount_nodes` = {f: node}.
+    """
+    wf = {f: h.well_frame(q, f) for f in fingers}
+    fr = {f: _frame(wf[f]) for f in fingers}         # (ax, fl, lat, R, pos, r, half)
+    s = {f: _stack(fr[f][5]) for f in fingers}
+    cc = {f: fr[f][4] - 0.5 * fr[f][6] * fr[f][0] for f in fingers}
+    pcb_half = 0.5 * PCB[1] + PA_WALL
+    boxes, caps, cyls, carve_cyls, carve_boxes = [], [], [], [], []
+
+    for f in fingers:
+        ax, fl, lat, R, pos, r, half = fr[f]
+        boxes.append((cc[f] + (s[f]["floor"] + 0.5 * FLOOR_T) * fl, R,
+                      np.array([half, 0.5 * FLOOR_T, r + CUP_WALL])))                       # cup floor
+        boxes.append((cc[f] + s[f]["base"] * fl, R, np.array([half, 0.5 * BASE_T, pcb_half])))  # Hall seat
+        for side in (+1.0, -1.0):
+            caps.append(((cc[f] + (s[f]["floor"] + FLOOR_T) * fl + side * pcb_half * lat,
+                          cc[f] + s[f]["base"] * fl + side * pcb_half * lat), 0.5 * PA_WALL + 0.0006))
+        carve_boxes.append((cc[f] + (s[f]["hall"] + 0.5 * PCB[2]) * fl, R,
+                            np.array([0.5 * PCB[0], 0.5 * PCB[2], 0.5 * PCB[1]])))           # PCB pocket
+        slot = cc[f] + s[f]["hall"] * fl - (0.5 * half + 0.5 * wire_len) * ax
+        carve_boxes.append((slot, R, np.array([0.5 * wire_len + half, 0.0006, 0.0006])))    # wire slot
+        edge = cc[f] + (-0.15 * r) * fl + (r + 0.5 * CUP_WALL) * lat
+        caps.append(((np.asarray(mount_nodes[f], float), edge), STRUT_R))                   # strut
+
+    # BASE SPINE (palmar) linking the Hall seats.
+    for a, b in zip(fingers, fingers[1:]):
+        caps.append(((cc[a] + s[a]["base"] * fl, cc[b] + s[b]["base"] * fl), 0.5 * BASE_T))
+
+    # SHARED FLANKS -- guide walls BESIDE the fingers, along the axis (open proximally). One between
+    # each adjacent pair + one outboard of each end. Each spans the cup height and ties to both floors.
+    def cupc(f):                                     # cup centre at floor height
+        return cc[f] + 0.5 * s[f]["floor"] * fl
+    fl0 = fr[fingers[0]][1]
+    flanks = [(fingers[0], cupc(fingers[0]) - (fr[fingers[0]][5] + CUP_WALL + 0.0015) * fr[fingers[0]][2])]
+    flanks += [(a, 0.5 * (cupc(a) + cupc(b))) for a, b in zip(fingers, fingers[1:])]
+    flanks.append((fingers[-1],
+                   cupc(fingers[-1]) + (fr[fingers[-1]][5] + CUP_WALL + 0.0015) * fr[fingers[-1]][2]))
+    for fref, m in flanks:
+        ax, fl, lat, R, pos, r, half = fr[fref]
+        Rw = np.vstack([ax, fl, lat])
+        boxes.append((m, Rw, np.array([half, 0.5 * s[fref]["floor"] + FLOOR_T, 0.5 * CUP_WALL])))
+        # tie the flank down to the base spine so it is one piece
+        caps.append(((m, cc[fref] + s[fref]["base"] * fl), 0.5 * PA_WALL + 0.0006))
+
+    return dict(boxes=boxes, caps=caps, cyls=cyls, carve_cyls=carve_cyls, carve_boxes=carve_boxes)
+
+
+def cluster_mesh(h, q, fingers, mount_nodes, struts=(), radii=0.0, *, voxel=4e-4):
+    return _mesh(cluster_mount(h, q, fingers, mount_nodes), struts, radii, voxel)

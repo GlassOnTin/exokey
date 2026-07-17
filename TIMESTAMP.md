@@ -8,11 +8,38 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** nineteen times. **All twenty stamps stand**, and each
+The disclosure has been **extended and re-anchored** twenty times. **All twenty-one stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — THE FOUR LONG FINGERS SHARE A CLUSTER, with open finger paths (§8.15l sss)
+### Current — THE FINGER-ENTRY ROUTE, and the mount rebuilt to it (§8.15l ppp)
+
+A correction to this session's own work. The sensor mount (17th–20th anchors) was built checking only
+the finger's **static seated** clearance and kept blocking the **route the finger enters by** — the
+fingertip slides into the cup along the phalanx axis from the proximal-open end, and a strut across
+that path or a rim over the cup leaves it nowhere to come in from. A mount can clear a *seated* finger
+and still be un-enterable. That geometry is **withdrawn**. The missing step is now a first-class model:
+`manufacture/entry.py` sweeps the distal-phalanx skin along the slide-in and tests it against the
+mount's exact primitive SDF, distinguishing a **block** (material *inside* the entering finger) from a
+**guide** (a flank *beside* it). `manufacture/mount.py` is rebuilt to pass it — cup open proximally,
+sensor palmar below the finger, strut on the dorsal-lateral edge, the four long fingers on a shared
+cluster — every finger **enters freely** (≥ 3.1 mm; `tests/test_entry.py`, `test_mount.py`), one
+watertight solid, **36.0 g**. The read-out physics (mmm–ooo) is unchanged. `out/entry.html` shows each
+finger's slide-in channel passing clear of the mount. The 17th–20th anchors stand as dated floors on
+the read-out disclosure; the mount *geometry* they carried is superseded here.
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) | `e048ee3b4d322891a12d6dfd8b1e8e23f6cea85dd093c1999eff0983c05104d3` |
+| `MANIFEST.sha256` (hashes of all 98 source + doc files) | `04838528e43a3ddab737ac2c539e2f54d698deede6183f5a96e85dc710a5c5a6` |
+
+Stamped: **2026-07-17T07:38:49Z** (UTC, submission time). Proofs: `VISION.md.ots`,
+`MANIFEST.sha256.ots`.
+
+⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
+the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+
+### Twentieth — THE FOUR LONG FINGERS SHARE A CLUSTER, with open finger paths (§8.15l sss)
 
 The 19th anchor flagged that four independent sensor modules are wider than the finger pitch and
 interpenetrate at every adjacent pair — needing a shared cluster. **Built** (`wellmod.cluster_frame`).
@@ -32,11 +59,8 @@ need matching narrower/webbed cups.
 | `VISION.md` (the disclosure) | `96505cbf5bf642442b2ae5701e6a80bb66b83072bffc33dac84ae56671ab4609` |
 | `MANIFEST.sha256` (hashes of all 98 source + doc files) | `eba779014fba7bc89817dd6435b67f883048ffb1b9c563537d74298ce2ec8eb1` |
 
-Stamped: **2026-07-17T06:52:11Z** (UTC, submission time). Proofs: `VISION.md.ots`,
-`MANIFEST.sha256.ots`.
-
-⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
-the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+Stamped: **2026-07-17T06:52:11Z** (UTC, submission time). Proofs:
+`timestamps/VISION.md.2026-07-17b.ots`, `timestamps/MANIFEST.sha256.2026-07-17b.ots`.
 
 ### Nineteenth — THE STRUT TIES IN DORSALLY, and the collar nests the insert (§8.15l rrr/sss)
 

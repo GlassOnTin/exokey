@@ -13,7 +13,8 @@ import numpy as np
 from design.vector import posture, tm_of, tp_of
 from hand.flesh import skin
 from hand.myohand import FINGERS
-from manufacture.mesh import BLEND, VOXEL, field, to_mesh, well_boxes
+from manufacture import mount as mnt
+from manufacture.mesh import BLEND, VOXEL, carve, field, to_mesh
 from opt.problem import hands
 from structure.frame import MATERIALS
 from structure.lattice import BAR_R
@@ -39,15 +40,39 @@ def main():
     r = z["radii"] if "radii" in z.files else float(BAR_R)
 
     struts = [(nodes[bars[e][0]], nodes[bars[e][1]]) for e in live]
-    boxes = well_boxes(h, q, FINGERS)
     rr = np.atleast_1d(np.asarray(r, float))
-    print(f"  {src}: {len(struts)} struts + {len(boxes)} well plates")
+    btn = {f: int(i) for f, i in zip(z["fingers"], z["buttons"])}
+
+    # THE SENSOR MOUNTS, rebuilt ENTRY-FIRST (manufacture.mount): the thumb an independent well, the
+    # four long fingers a shared cluster. Every finger's slide-in route is kept open by construction
+    # (manufacture.entry / tests/test_mount.py) -- the failure that withdrew the previous geometry.
+    LONG = ["index", "middle", "ring", "little"]
+    mods = [mnt.well_mount(h, q, "thumb", nodes[btn["thumb"]]),
+            mnt.cluster_mount(h, q, LONG, {f: nodes[btn[f]] for f in LONG})]
+    mboxes = [b for md in mods for b in md["boxes"]]
+    mcaps = [c[0] for md in mods for c in md["caps"]]
+    mcap_r = [c[1] for md in mods for c in md["caps"]]
+    mcyls = [c for md in mods for c in md["cyls"]]
+    cv_cyls = [c for md in mods for c in md["carve_cyls"]]
+    cv_boxes = [c for md in mods for c in md["carve_boxes"]]
+
+    allstruts = struts + mcaps
+    allr = (list(rr) if rr.size > 1 else [float(rr[0])] * len(struts)) + list(mcap_r)
+    print(f"  {src}: {len(struts)} struts + thumb well + long-finger cluster")
     print(f"  rod r = {rr.min()*1000:.2f}-{rr.max()*1000:.2f} mm, fillet = {BLEND*1000:.1f} mm, "
           f"voxel = {VOXEL*1000:.1f} mm")
 
-    f, o, v = field(struts, boxes, r)
+    f, o, v = field(allstruts, mboxes, allr, cyls=mcyls)
     print(f"  field {f.shape} = {f.size/1e6:.1f} M voxels")
+    carve(f, o, v, cyls=cv_cyls, boxes=cv_boxes)
     m = to_mesh(f, o, v)
+    import trimesh                                    # drop sub-mm^3 marching-cubes debris shells
+    bodies = m.split(only_watertight=False)
+    if len(bodies) > 1:
+        keep = [b for b in bodies if b.volume > 1e-9]
+        m = trimesh.util.concatenate(keep) if len(keep) > 1 else keep[0]
+        print(f"  dropped {len(bodies) - len(keep)} debris shells; kept {len(keep)} real")
+    print(f"  components       {getattr(m, 'body_count', 1)}")
 
     rho = MATERIALS["cf_pa12"]["rho"]
     print(f"\nTHE SOLID")

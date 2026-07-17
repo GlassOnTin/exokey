@@ -2115,7 +2115,7 @@ per-member energy density (½·uᵀk u / L) falls out with no second solve. Meas
 prune time"; that was pessimistic — it was ~20%, because a prune step is dominated by the OC's own sizing
 solves, not the one ranking solve.
 
-### 8.15l THE READ-OUT — the field a moving magnet presents to the Hall (the mount that holds it is being redesigned, ppp)
+### 8.15l THE READ-OUT — the field a moving magnet presents to the Hall, and the entry-first mount that holds it
 
 §8.15g sized the restoring **spring** (a TPU dome, k ≈ 131 N/m) but explicitly deferred the
 **signal** — "NOT MODELLED HERE: the field a moving magnet presents to the Hall." This closes that
@@ -2148,16 +2148,20 @@ modulation onto its neighbour's Hall — the modulation is **< 1 LSB and below n
 part, like Earth's 0.05 mT, is a constant a **baseline tracker** removes. Every wider pair is
 smaller by 1/r³.
 
-**(ppp) ⚠ THE MOUNT GEOMETRY IS BEING REDESIGNED — the first attempt did not model the finger's
-ENTRY ROUTE, and is withdrawn.** A printed PA frame + drop-in TPU cradle to hold the magnet and Hall
-were built and OTS-anchored (17th–20th), but checked only for the finger's *static seated* clearance
-— never for the **route the fingertip must traverse to enter the cup** (it slides in along the
-phalanx axis from the proximal-open end). A mount can clear a *seated* finger and still block it from
-ever *entering*, which is exactly what kept recurring (a strut across the entry; a rim over the cup).
-That geometry is **withdrawn from HEAD** (the anchors stand as dated floors on the read-out
-disclosure). The mount is being rebuilt with a **finger-entry-route swept-clearance as a first-class
-constraint** (`manufacture/entry.py`), the geometry validated against it by construction rather than
-by eye. The read-out physics above (mmm–ooo) is independent of the mount and stands.
+**(ppp) THE MOUNT — rebuilt ENTRY-FIRST.** The first mount (OTS-anchored 17th–20th, then withdrawn)
+was checked only for the finger's *static seated* clearance and kept blocking the **route the finger
+enters by** — the fingertip slides into the cup along the phalanx axis from the proximal-open end, and
+a strut across that path or a rim over the cup leaves it nowhere to come in from. A mount can clear a
+*seated* finger and still be un-enterable. So the route is now a **first-class constraint**:
+`manufacture/entry.py` sweeps the distal-phalanx skin along the slide-in and tests it against the
+mount's exact primitive SDF, distinguishing a **block** (material *inside* the entering finger) from a
+**guide** (a flank *beside* it — the finger is outside it). `manufacture/mount.py` is built to pass
+it: per finger a cup **open proximally** (flanks beside, floor below), the **sensor stack palmar**
+(below the finger), the **strut on the dorsal-lateral edge** — nothing across the slide-in. The four
+long fingers share **one cluster** with shared flanks; the thumb keeps an independent well. Every
+finger **enters freely** (measured **≥ 3.1 mm** clearance; `tests/test_entry.py`, `test_mount.py`),
+and the whole part is **one watertight solid, 36.0 g** — the render `out/entry.html` shows each
+finger's channel passing clear. The magnet + dome cradle is the drop-in TPU part (§8.15g).
 
 **(qqq) THE HARNESS AND THE MCU (concept).** Five sensors on the **nRF52840's two hardware I²C
 buses** using the TLI493D-W2BW address variants — no mux, no chip-select fan-out (confirm the exact

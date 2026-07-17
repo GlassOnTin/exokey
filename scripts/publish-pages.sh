@@ -12,7 +12,7 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 # the gallery = every viewer page + the data the fetch-based ones load (typing/anim/progress).
-pages=(index onstrap strap pareto typing anim progress impact)
+pages=(index onstrap strap pareto typing anim progress impact entry)
 data=(typing.json front.json live.json)
 
 WT="$(mktemp -d)"
