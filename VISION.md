@@ -2160,8 +2160,11 @@ it: per finger a cup **open proximally** (flanks beside, floor below), the **sen
 (below the finger), the **strut on the dorsal-lateral edge** — nothing across the slide-in. The four
 long fingers share **one cluster** with shared flanks; the thumb keeps an independent well. Every
 finger **enters freely** (measured **≥ 3.1 mm** clearance; `tests/test_entry.py`, `test_mount.py`),
-and the whole part is **one watertight solid, 36.0 g** — the render `out/entry.html` shows each
-finger's channel passing clear. The magnet + dome cradle is the drop-in TPU part (§8.15g).
+and the whole part is **one watertight solid, 36.0 g**. The **drop-in TPU cradle** — the magnet on the
+§8.15g dome, the cup the finger actually presses — passes the *same* entry check (its cup is open
+proximally too, nail hood and all): individually and **assembled with the frame** (both in
+`test_mount.py`). `out/entry.html` shows each finger's slide-in channel passing clear of the frame and
+the nested cradle.
 
 **(qqq) THE HARNESS AND THE MCU (concept).** Five sensors on the **nRF52840's two hardware I²C
 buses** using the TLI493D-W2BW address variants — no mux, no chip-select fan-out (confirm the exact

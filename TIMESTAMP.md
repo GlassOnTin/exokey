@@ -8,11 +8,32 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** twenty times. **All twenty-one stamps stand**, and each
+The disclosure has been **extended and re-anchored** twenty-one times. **All twenty-two stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — THE FINGER-ENTRY ROUTE, and the mount rebuilt to it (§8.15l ppp)
+### Current — THE DROP-IN CRADLE PASSES THE ENTRY CHECK TOO (§8.15l ppp)
+
+The 21st anchor rebuilt the sensor FRAME entry-first. This adds the **drop-in TPU cradle**
+(`mount.well_insert`) — the cup the finger actually presses, carrying the magnet on the §8.15g dome —
+and puts it through the *same* `manufacture.entry` check: the finger enters the cradle's cup (open
+proximally, flanks beside, floor below, nail hood and all) **freely**, both individually (≥ 1.6 mm) and
+**assembled with the frame** (`test_mount.py`). One watertight TPU piece per finger. `out/entry.html`
+now shows the nested cradles the slide-in channels pass through. The read-out physics (mmm–ooo) and the
+frame (21st) are unchanged.
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) | `0b9de23253f1d4427a9efe1d4574e63ae28ae4b0b83f78358fcbfa9504f15a5d` |
+| `MANIFEST.sha256` (hashes of all 98 source + doc files) | `d947d09cd78d3571e925f2b903e86503cdbc38c66d5d820c2e873594c2b6654b` |
+
+Stamped: **2026-07-17T08:39:04Z** (UTC, submission time). Proofs: `VISION.md.ots`,
+`MANIFEST.sha256.ots`.
+
+⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
+the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+
+### Twenty-first — THE FINGER-ENTRY ROUTE, and the mount rebuilt to it (§8.15l ppp)
 
 A correction to this session's own work. The sensor mount (17th–20th anchors) was built checking only
 the finger's **static seated** clearance and kept blocking the **route the finger enters by** — the
@@ -33,11 +54,8 @@ the read-out disclosure; the mount *geometry* they carried is superseded here.
 | `VISION.md` (the disclosure) | `e048ee3b4d322891a12d6dfd8b1e8e23f6cea85dd093c1999eff0983c05104d3` |
 | `MANIFEST.sha256` (hashes of all 98 source + doc files) | `04838528e43a3ddab737ac2c539e2f54d698deede6183f5a96e85dc710a5c5a6` |
 
-Stamped: **2026-07-17T07:38:49Z** (UTC, submission time). Proofs: `VISION.md.ots`,
-`MANIFEST.sha256.ots`.
-
-⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
-the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+Stamped: **2026-07-17T07:38:49Z** (UTC, submission time). Proofs:
+`timestamps/VISION.md.2026-07-17c.ots`, `timestamps/MANIFEST.sha256.2026-07-17c.ots`.
 
 ### Twentieth — THE FOUR LONG FINGERS SHARE A CLUSTER, with open finger paths (§8.15l sss)
 

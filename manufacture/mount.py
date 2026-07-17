@@ -93,7 +93,7 @@ def well_mount(h, q, finger, mount_node, *, wire_len=0.010):
 def _mesh(prims, struts=(), radii=0.0, voxel=4e-4):
     caps = list(struts) + [c[0] for c in prims["caps"]]
     rr = ([radii] * len(struts) if np.isscalar(radii) else list(radii)) + [c[1] for c in prims["caps"]]
-    f, o, v = mesh.field(caps, prims["boxes"], r=rr, voxel=voxel, cyls=prims["cyls"])
+    f, o, v = mesh.field(caps, prims["boxes"], r=(rr or 0.0), voxel=voxel, cyls=prims["cyls"])
     mesh.carve(f, o, v, cyls=prims["carve_cyls"], boxes=prims["carve_boxes"])
     out = mesh.to_mesh(f, o, v)
     import trimesh
@@ -162,3 +162,40 @@ def cluster_mount(h, q, fingers, mount_nodes, *, wire_len=0.010):
 
 def cluster_mesh(h, q, fingers, mount_nodes, struts=(), radii=0.0, *, voxel=4e-4):
     return _mesh(cluster_mount(h, q, fingers, mount_nodes), struts, radii, voxel)
+
+
+SKIRT_LEN = 0.003
+
+
+def well_insert(h, q, finger, *, nail_hood=True):
+    """The DROP-IN TPU cradle for one well -- the moving part the fingertip sits in and presses. It
+    carries the magnet on the §8.15g dome; the finger enters ITS cup, so it gets the same entry check
+    as the frame. Cup open proximally (flanks beside, floor below); dome + magnet pocket palmar."""
+    ax, fl, lat, R, pos, r, half = _frame(h.well_frame(q, finger))
+    s = _stack(r)
+    cc = pos - 0.5 * half * ax
+    boxes, caps, cyls, carve_cyls = [], [], [], []
+
+    # CUP (TPU): flanks beside the finger + floor below, OPEN proximally and dorsally.
+    for side in (+1.0, -1.0):
+        boxes.append((cc + 0.5 * s["floor"] * fl + side * (r + 0.5 * CUP_WALL) * lat, R,
+                      np.array([half, 0.5 * s["floor"] + FLOOR_T, 0.5 * CUP_WALL])))
+    boxes.append((cc + (s["floor"] + 0.5 * FLOOR_T) * fl, R,
+                  np.array([half, 0.5 * FLOOR_T, r + CUP_WALL])))
+    if nail_hood:                                    # a distal-dorsal lip so lift/contort transmit
+        boxes.append((cc + half * ax + (-0.1 * r) * fl, R, np.array([0.5 * CUP_WALL, 0.3 * r, r])))
+
+    # DOME flexure + SKIRT (palmar, below the floor -- out of the entry path).
+    dc = cc + (s["floor"] + FLOOR_T) * fl
+    cyls.append((dc, dc + DOME_T * fl, DOME_A))                       # the dome membrane
+    a_hi = cc + (s["floor"] + FLOOR_T + SKIRT_LEN) * fl
+    cyls.append((dc, a_hi, DOME_A + 0.0012))                         # skirt outer
+    carve_cyls.append((cc + (s["floor"] + FLOOR_T + DOME_T) * fl, a_hi + 0.001 * fl, DOME_A))  # bore
+    mp = cc + (s["floor"] + FLOOR_T + DOME_T) * fl                    # magnet pocket, opening palmar
+    carve_cyls.append((mp, mp - (DOME_T + MAGNET_POCKET_DEPTH) * fl, 0.5 * MAGNET_POCKET_D))
+
+    return dict(boxes=boxes, caps=caps, cyls=cyls, carve_cyls=carve_cyls, carve_boxes=[])
+
+
+def insert_mesh(h, q, finger, *, voxel=3e-4, nail_hood=True):
+    return _mesh(well_insert(h, q, finger, nail_hood=nail_hood), voxel=voxel)

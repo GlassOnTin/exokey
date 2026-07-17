@@ -62,3 +62,29 @@ def test_the_cluster_is_one_watertight_piece(posed):
     m = mount.cluster_mesh(h, q, LONG, {f: mounts[f] for f in LONG})
     assert m.is_watertight
     assert m.body_count == 1
+
+
+def test_every_drop_in_insert_lets_its_finger_in(posed):
+    """The finger enters the INSERT's cup (it is the cradle it sits in), so the drop-in TPU cradle
+    gets the same entry check as the frame -- its cup is open proximally too, nail hood and all."""
+    h, q, _, fingers = posed
+    for f in fingers:
+        p = mount.well_insert(h, q, f)
+        assert entry.enters_freely(h, q, f, boxes=p["boxes"], caps=p["caps"], cyls=p["cyls"]), f
+
+
+def test_every_drop_in_insert_is_one_watertight_piece(posed):
+    h, q, _, fingers = posed
+    for f in fingers:
+        m = mount.insert_mesh(h, q, f)
+        assert m.is_watertight and m.body_count == 1, f
+
+
+def test_the_assembled_frame_and_insert_let_the_finger_in(posed):
+    """In the assembled device the finger enters past BOTH the frame and the drop-in cradle; the
+    combined geometry must still leave the slide-in route open."""
+    h, q, mounts, fingers = posed
+    for f in fingers:
+        fr, ins = mount.well_mount(h, q, f, mounts[f]), mount.well_insert(h, q, f)
+        assert entry.enters_freely(h, q, f, boxes=fr["boxes"] + ins["boxes"],
+                                   caps=fr["caps"] + ins["caps"], cyls=fr["cyls"] + ins["cyls"]), f

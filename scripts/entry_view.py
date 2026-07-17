@@ -44,9 +44,19 @@ def main():
     if sk is not None:
         traces.append(sk)
     traces.append(go.Mesh3d(x=V[:, 0], y=V[:, 1], z=V[:, 2], i=F[:, 0], j=F[:, 1], k=F[:, 2],
-                            color="#9aa5b1", opacity=1.0, flatshading=True,
+                            color="#9aa5b1", opacity=0.55, flatshading=True,
                             lighting=dict(ambient=0.55, diffuse=0.9, specular=0.15),
-                            name="cluster mount (PA)", hoverinfo="name", showlegend=True))
+                            name="cluster mount (PA frame)", hoverinfo="name", showlegend=True))
+
+    # the DROP-IN CRADLES (TPU), nested in the frame -- the cup the finger actually enters and presses.
+    for i, f in enumerate(LONG):
+        im = mount.insert_mesh(h, q, f)
+        iv, iff = np.asarray(im.vertices), np.asarray(im.faces)
+        traces.append(go.Mesh3d(x=iv[:, 0], y=iv[:, 1], z=iv[:, 2], i=iff[:, 0], j=iff[:, 1], k=iff[:, 2],
+                                color="#e0a458", opacity=0.85, flatshading=True,
+                                lighting=dict(ambient=0.55, diffuse=0.9, specular=0.15),
+                                name="drop-in cradle (TPU)" if i == 0 else None,
+                                showlegend=(i == 0), hoverinfo="name"))
 
     clr = {}
     for f in LONG:
