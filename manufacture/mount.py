@@ -292,3 +292,71 @@ def harness_routes(nodes, bars, live, btn, anchors):
             path.append(k)
         routes.append(path)
     return routes
+
+
+def harness_bus(nodes, bars, live, btn, anchors, *, max_per_bus=4):
+    """MINIMAL-COPPER harness: a SHARED bus over the strut graph, not five point-to-point runs
+    (VISION §8.15l qqq-2). The sensors are I2C, so VDD/GND are shared by all and SDA/SCL are a bus:
+
+      * POWER (VDD/GND, 2 conductors) -- one Steiner tree over ALL sensors + the wrist MCU.
+      * SIGNAL (SDA/SCL, 2 conductors per I2C bus) -- one tree per bus, over that bus's sensors + MCU,
+        the sensors split into <= `max_per_bus` groups (the W2BW address limit) to minimise total length.
+
+    Each tree is a minimum Steiner-tree-in-a-graph over the live struts, approximated by the metric MST
+    (Dijkstra between terminals -> MST -> expand -> union). Returns `[(i, j, n_wires)]`: the groove
+    segments (live-strut node pairs) and how many conductors share each -- 2 where only power runs, up
+    to 6 on the trunk where power and both signal buses overlap. The caller sinks each into a groove
+    whose width follows `n_wires`. This is the disclosed replacement for the per-sensor `harness_routes`."""
+    import itertools
+
+    from scipy.sparse import csr_matrix
+    from scipy.sparse.csgraph import dijkstra, minimum_spanning_tree
+
+    X = np.asarray(nodes, float)
+    S = list(btn.values())
+    N = len(X); MCU = N                              # a virtual MCU node tied to every wrist anchor at ~0
+    rows, cols, w = [], [], []
+    for e in live:
+        i, j = bars[e]; d = float(np.linalg.norm(X[i] - X[j]))
+        rows += [i, j]; cols += [j, i]; w += [d, d]
+    for a in anchors:
+        rows += [int(a), MCU]; cols += [MCU, int(a)]; w += [1e-6, 1e-6]
+    G = csr_matrix((w, (rows, cols)), shape=(N + 1, N + 1))
+
+    DP = {t: dijkstra(G, indices=t, return_predecessors=True) for t in S + [MCU]}   # cache once
+
+    def steiner(terms):                             # metric-MST Steiner approx -> set of real edges
+        D = np.array([[DP[a][0][b] for b in terms] for a in terms])
+        mst = minimum_spanning_tree(D).toarray()
+        es = set()
+        for a in range(len(terms)):
+            for b in range(len(terms)):
+                if mst[a, b] > 0:
+                    pred = DP[terms[a]][1]; k = terms[b]
+                    while k != terms[a] and pred[k] >= 0:
+                        p = int(pred[k]); es.add(frozenset((k, p))); k = p
+        return es
+
+    def real_len(es):
+        return sum(float(np.linalg.norm(X[i] - X[j]))
+                   for i, j in (tuple(fe) for fe in es) if i < N and j < N)
+
+    power = steiner(S + [MCU])
+    best = None                                     # best split of sensors into two I2C buses
+    for r in range(1, len(S)):
+        for A in itertools.combinations(range(len(S)), r):
+            if r > max_per_bus or len(S) - r > max_per_bus:
+                continue
+            gA = [S[i] for i in A]; gB = [S[i] for i in range(len(S)) if i not in A]
+            eA, eB = steiner(gA + [MCU]), steiner(gB + [MCU])
+            c = real_len(eA) + real_len(eB)
+            if best is None or c < best[0]:
+                best = (c, eA, eB)
+    sig = [best[1], best[2]] if best else [power]
+
+    seg = {fe: 2 for fe in power}                   # 2 power conductors everywhere the power tree runs
+    for st in sig:
+        for fe in st:
+            seg[fe] = seg.get(fe, 0) + 2            # + 2 signal conductors per bus sharing the segment
+    return [(*sorted(tuple(fe)), nw) for fe, nw in seg.items()
+            if max(fe) < N]                         # drop the virtual MCU-anchor hops

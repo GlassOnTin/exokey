@@ -127,3 +127,36 @@ def test_the_finger_enters_past_the_gauntlet_struts_too(posed):
         assert entry.enters_freely(h, q, f, boxes=fr["boxes"] + ins["boxes"],
                                    caps=fr["caps"] + ins["caps"] + struts,
                                    cyls=fr["cyls"] + ins["cyls"]), f
+
+
+def test_the_harness_bus_is_a_shorter_shared_tree(posed):
+    """The minimal-copper harness (§8.15l qqq-2): a SHARED bus (Steiner tree over the struts) uses less
+    conductor than five point-to-point runs, still reaches every sensor, and lays only in live struts."""
+    import collections
+    z = np.load("out/final.npz", allow_pickle=True)
+    nodes = np.array(z["nodes"], float)
+    bars = [tuple(b) for b in z["bars"]]
+    live = [int(e) for e in z["live"]]
+    btn = {f: int(i) for f, i in zip(z["fingers"], z["buttons"])}
+    anchors = [int(a) for a in z["anchors"]]
+
+    bus = mount.harness_bus(nodes, bars, live, btn, anchors)
+    uniq = sum(float(np.linalg.norm(nodes[i] - nodes[j])) for i, j, _ in bus)      # shared groove length
+    routes = mount.harness_routes(nodes, bars, live, btn, anchors)                 # the baseline
+    base = sum(float(np.linalg.norm(nodes[r[k]] - nodes[r[k + 1]]))
+               for r in routes for k in range(len(r) - 1))
+    assert uniq < 0.85 * base, (uniq, base)                    # the shared bus is materially shorter
+
+    liveset = {frozenset(bars[e]) for e in live}
+    assert all(frozenset((i, j)) in liveset for i, j, _ in bus)  # only real struts carry wire
+    assert all(nw in (2, 4, 6) for *_, nw in bus)              # 2 power (+2 per signal bus) conductors
+
+    adj = collections.defaultdict(set)                         # every sensor must reach the wrist
+    for i, j, _ in bus:
+        adj[i].add(j); adj[j].add(i)
+    seen, stack = set(anchors), list(anchors)
+    while stack:
+        k = stack.pop()
+        for n in adj[k] - seen:
+            seen.add(n); stack.append(n)
+    assert all(btn[f] in seen for f in btn), [f for f in btn if btn[f] not in seen]

@@ -8,11 +8,33 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** twenty-three times. **All twenty-four stamps stand**, and each
+The disclosure has been **extended and re-anchored** twenty-four times. **All twenty-five stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — THE FINGERTIP NOW SEATS IN ITS CUP; a minimal-copper harness BUS (§8.15l ppp-2/qqq-2)
+### Current — THE MINIMAL-COPPER HARNESS BUS, meshed into the export (§8.15l qqq-2)
+
+The 24th anchor *disclosed* the minimal-copper harness (a shared bus, not five point-to-point runs);
+this **builds** it. `mount.harness_bus` routes the harness as a **shared Steiner tree over the strut
+graph** (a metric-MST approximation) — **one power tree** over all five sensors + the MCU, I²C **signal**
+per bus, the conductor count folded in per segment — and `scripts/export_stl.py` now sinks the wire
+grooves along that bus: **283 mm in 32 segments** (a uniform 4-wire bundle, the two I²C buses taking
+separate routes to the wrist) against the **490 mm** of five independent runs — **−42 % copper**, the
+groove widening with the conductor count. One watertight solid, **40.2 g**.
+`test_the_harness_bus_is_a_shorter_shared_tree` guards it: shorter than the baseline, every sensor
+reaches the wrist, and only live struts carry wire. The **branching** Steiner tree beats the single
+**daisy-chain** (283 vs 373 mm), so it is *not* quite the travelling-salesman problem — TSP is the
+special case with T-junctions forbidden.
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) | `1cf7f63cd701db816492fc162ef0506f2c24fd0b153ff6defceb8f443e703904` |
+| `MANIFEST.sha256` (hashes of all 98 source + doc files) | `d125a45deb5efc2920fc1673572745cb61a68eb250e1c7ee5e1d84f4f6afcbd1` |
+
+Stamped: **2026-07-17T21:06:58Z** (UTC, submission time). Proofs: `VISION.md.ots`,
+`MANIFEST.sha256.ots`.
+
+### Twenty-fourth — THE FINGERTIP NOW SEATS IN ITS CUP; a minimal-copper harness BUS (§8.15l ppp-2/qqq-2)
 
 Two things. **(1) The finger was floating above its cup.** The entry check (21st–23rd) had a blind
 spot a render caught: `enters_freely` only rejects mount material *inside* the swept finger, so a cup
@@ -37,8 +59,8 @@ Disclosed as prior art (§8.15l qqq-2); the Steiner-tree router is not yet meshe
 | `VISION.md` (the disclosure) | `5375c98d984e95e7176ce20b7cbbeefb33005ce46ac2696f99fb696037c11d13` |
 | `MANIFEST.sha256` (hashes of all 98 source + doc files) | `e56670478ce176e1135a3844ff2873efef57e96c4397471eed38392446680efa` |
 
-Stamped: **2026-07-17T19:30:57Z** (UTC, submission time). Proofs: `VISION.md.ots`,
-`MANIFEST.sha256.ots`.
+Stamped: **2026-07-17T19:30:57Z** (UTC, submission time). Proofs:
+`timestamps/VISION.md.2026-07-17f.ots`, `timestamps/MANIFEST.sha256.2026-07-17f.ots`.
 
 ### Twenty-third — THE ENTRY CHECK NOW COVERS THE GAUNTLET STRUTS, HOUSING AND WIRES (§8.15l ppp/qqq)
 

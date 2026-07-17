@@ -2195,8 +2195,8 @@ per-well calibrated 5×3 map → per-direction Schmitt (on 60 % / off 40 %) → 
 tracker → `action_map` → BLE HID. **The physical routing is now meshed in** (`manufacture/mount.py`):
 the **wrist housing** (XIAO + LiPo) sits *proud* of the wrist (thin axis along the skin normal, lifted
 off — clears it by 1.7 mm, necked to the nearest live-strut nodes) and the **wires** run in re-entrant
-grooves sunk into the dorsal strut surfaces (a shortest-path route from each sensor to the wrist,
-264 channel segments) — both far from the fingertips, so neither touches the entry route.
+grooves sunk into the dorsal strut surfaces (routed as a shared minimal-copper bus, qqq-2) — both far
+from the fingertips, so neither touches the entry route.
 
 **(qqq-2) MINIMAL-COPPER ROUTING — a shared power/signal BUS, not five point-to-point runs
 (analysed).** The harness above routes each sensor **independently** to the wrist — five 4-wire
@@ -2215,10 +2215,12 @@ with branching forbidden (which a strict daisy-chain, to avoid I²C stub reflect
 **(2) The win is sharing, not tour-finding**: splitting signal across the two I²C buses the address
 limit needs costs ~nothing extra (**283 mm either way**), because the sensors are clustered and the
 power trunk is shared regardless. The per-sensor router (`mount.harness_routes`) stands as the
-baseline; the **Steiner-tree bus router is the disclosed replacement** — a minimum-Steiner-tree-in-a-
-graph problem (Dreyfus–Wagner exact for six terminals, or a metric-MST 2-approximation) over the same
-live-strut graph, the conductor count folded in per segment (4 on the shared trunk, 2 where only power
-runs). Analysed and measured here; not yet meshed into the export.
+baseline; **`mount.harness_bus` is the built replacement** — a minimum-Steiner-tree-in-a-graph problem
+(a metric-MST 2-approximation here; Dreyfus–Wagner is exact for six terminals) over the same live-strut
+graph, the conductor count folded in per segment (2 power, +2 per I²C bus sharing it). **The export now
+sinks the grooves along this shared bus** — 283 mm in 32 segments, a uniform 4-wire bundle (the two I²C
+buses take separate routes to the wrist), the groove widening with the conductor count — instead of the
+five point-to-point runs. Guarded by `test_the_harness_bus_is_a_shorter_shared_tree`.
 
 **(rrr) ⚠ WHAT IS NOT YET SETTLED (read-out).**
 - **The dome membrane (~0.32 mm) is at the FDM single-perimeter floor** — it needs a 0.25 mm nozzle

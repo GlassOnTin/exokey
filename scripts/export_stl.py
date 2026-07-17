@@ -68,16 +68,17 @@ def main():
     hboxes, hcaps, hcav = mnt.housing(nodes[np.array(anchors)], outward, nodes[live_nodes])
     seg_r = {frozenset(bars[e]): (float(rr[k]) if rr.size > 1 else float(rr[0]))
              for k, e in enumerate(live)}
-    gcyls = []
-    for route in mnt.harness_routes(nodes, bars, live, btn, anchors):
-        for i, j in zip(route[:-1], route[1:]):
-            rs = seg_r.get(frozenset((i, j)), float(BAR_R))
-            off = max(rs - 0.0004, 0.0)                  # sink the 0.6 mm channel to breach the surface
-            pa = nodes[i] + off * ((nodes[i] - Vsk[stree.query(nodes[i])[1]]) /
-                                   (np.linalg.norm(nodes[i] - Vsk[stree.query(nodes[i])[1]]) + 1e-9))
-            pb = nodes[j] + off * ((nodes[j] - Vsk[stree.query(nodes[j])[1]]) /
-                                   (np.linalg.norm(nodes[j] - Vsk[stree.query(nodes[j])[1]]) + 1e-9))
-            gcyls.append((pa, pb, 0.0006))
+    gcyls = []                                       # MINIMAL-COPPER shared bus (§8.15l qqq-2), not
+    bus = mnt.harness_bus(nodes, bars, live, btn, anchors)   # five point-to-point runs
+    bus_len = sum(float(np.linalg.norm(nodes[i] - nodes[j])) for i, j, _ in bus)
+    for i, j, nw in bus:
+        rs = seg_r.get(frozenset((i, j)), float(BAR_R))
+        off = max(rs - 0.0004, 0.0)                  # sink the channel to breach the surface
+        pa = nodes[i] + off * ((nodes[i] - Vsk[stree.query(nodes[i])[1]]) /
+                               (np.linalg.norm(nodes[i] - Vsk[stree.query(nodes[i])[1]]) + 1e-9))
+        pb = nodes[j] + off * ((nodes[j] - Vsk[stree.query(nodes[j])[1]]) /
+                               (np.linalg.norm(nodes[j] - Vsk[stree.query(nodes[j])[1]]) + 1e-9))
+        gcyls.append((pa, pb, 0.0004 + 0.00007 * nw))   # groove widens with conductor count (2->0.54, 6->0.82 mm)
     mboxes += hboxes
     mcaps += [c[0] for c in hcaps]
     mcap_r += [c[1] for c in hcaps]
@@ -87,7 +88,7 @@ def main():
     allstruts = struts + mcaps
     allr = (list(rr) if rr.size > 1 else [float(rr[0])] * len(struts)) + list(mcap_r)
     print(f"  {src}: {len(struts)} struts + thumb well + long-finger cluster + housing + "
-          f"{len(gcyls)} wire-groove segs")
+          f"{len(gcyls)} bus-groove segs ({bus_len*1e3:.0f} mm shared harness)")
     print(f"  rod r = {rr.min()*1000:.2f}-{rr.max()*1000:.2f} mm, fillet = {BLEND*1000:.1f} mm, "
           f"voxel = {VOXEL*1000:.1f} mm")
 
