@@ -2157,9 +2157,11 @@ a strut across that path or a rim over the cup leaves it nowhere to come in from
 mount's exact primitive SDF, distinguishing a **block** (material *inside* the entering finger) from a
 **guide** (a flank *beside* it — the finger is outside it). `manufacture/mount.py` is built to pass
 it: per finger a cup **open proximally** (flanks beside, floor below), the **sensor stack palmar**
-(below the finger), the **strut on the dorsal-lateral edge** — nothing across the slide-in. The four
-long fingers share **one cluster** with shared flanks; the thumb keeps an independent well. Every
-finger **enters freely** (measured **≥ 3.1 mm** clearance; `tests/test_entry.py`, `test_mount.py`).
+(below the finger), and the **strut to that palmar sensor base** — the button node *is* the sensor,
+palmar of the pad, so a strut to a *dorsal* edge would run straight through the finger; nothing across
+the slide-in. The four long fingers share **one cluster** with shared flanks; the thumb keeps an
+independent well. Every finger **enters freely** (measured **+0.4–0.8 mm** — the cup now hugs the
+finger, see ppp-2; `tests/test_entry.py`, `test_mount.py`).
 ⚠ And the check is run against the **gauntlet struts too**, not the mount alone — the truss wraps near
 the fingertips, so a strut across the slide-in would block just as a mount wall would. Measured, the
 nearest strut sits **+3.2 mm** off the entry sweep, so the mount's own guide flanks stay the binding
@@ -2167,8 +2169,22 @@ constraint; but that is now *verified* (`test_the_finger_enters_past_the_gauntle
 assumed. The **drop-in TPU cradle** — the magnet on the §8.15g dome, the cup the finger actually
 presses — passes the *same* check (its cup is open proximally too, nail hood and all): individually and
 **assembled with the frame**. The whole printed solid — struts, mounts and wrist housing — is **one
-watertight body, 41.1 g**, and `out/entry.html` shows each finger's channel passing clear of *all* of
+watertight body, 40.2 g**, and `out/entry.html` shows each finger's channel passing clear of *all* of
 it, with the nested cradles it slides into.
+
+**(ppp-2) …but ENTERING is not SEATING — the fingertip was floating above its cup.** The entry check
+has a blind spot the eye caught (a screenshot: every coloured fingertip cloud hovering *above* the dark
+cups, not in them). `enters_freely` asks only that no mount material lie *inside* the swept finger — so
+a cup the finger never reaches passes **vacuously**, and this one did. Root cause: the cup was built at
+`well_frame["pos"] + r` on the assumption `pos` is the pulp *centre*, but `pad_pose` returns the pad
+**surface**. Measured in each cup's own frame, the distal-phalanx skin sat **7–13 mm dorsal of the
+floor — 0–1 % of it inside the cup**; the fingertip pressed nothing. The fix builds the cup to the
+**measured** pad and nail (the skin's floor-direction extent), not a `pos + r` guess: floor just palmar
+of the pad, flanks spanning the finger's *actual* depth, sensor palmar of that, with a `SEAT_CLEAR`
+gap so it slides in without biting. Now the pad **contacts** the floor (0.4–0.8 mm) and ~50–65 % of the
+skin is cradled. The large "≥ 3 mm clearance" the old geometry reported was the **symptom** — the cup
+standing off the finger it was meant to hold. A new test, `test_the_finger_actually_seats_in_its_cup`,
+fails if a fingertip ever floats again; it is the regression the vacuous entry check could not be.
 
 **(qqq) THE HARNESS AND THE MCU (concept).** Five sensors on the **nRF52840's two hardware I²C
 buses** using the TLI493D-W2BW address variants — no mux, no chip-select fan-out (confirm the exact

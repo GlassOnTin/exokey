@@ -41,6 +41,22 @@ def test_every_well_mount_lets_its_finger_in(posed):
         assert entry.enters_freely(h, q, f, boxes=p["boxes"], caps=p["caps"], cyls=p["cyls"]), f
 
 
+def test_the_finger_actually_seats_in_its_cup(posed):
+    """THE BUG THE ENTRY TEST MISSED. `enters_freely` passes VACUOUSLY for a cup the finger never
+    touches -- the fingertip floated ~7 mm above its cup because the cup was built to `pos + r` and
+    `well_frame["pos"]` is the pad SURFACE, not the pulp centre. So check the pad is right against the
+    cup floor, not hovering over it. (Regression for the 2026-07-17 'finger above the cup' report.)"""
+    h, q, mounts, fingers = posed
+    for f in fingers:
+        fl = np.asarray(h.well_frame(q, f)["floor"], float)
+        skin = entry.phalanx_skin(h, q, f)
+        pad = skin[np.argsort(skin @ fl)[-len(skin) // 4:]]   # the palmar-most quarter (the pad region)
+        p = mount.well_mount(h, q, f, mounts[f])
+        d = entry.mount_sdf(pad, boxes=p["boxes"], caps=p["caps"], cyls=p["cyls"])
+        assert d.min() < 0.0015, (f, float(d.min()))          # the pad CONTACTS the cup floor (~SEAT_CLEAR),
+        #                                                       not floating ~7 mm above it as it did
+
+
 def test_every_well_mount_is_one_watertight_piece(posed):
     h, q, mounts, fingers = posed
     for f in fingers:

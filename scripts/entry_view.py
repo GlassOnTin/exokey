@@ -24,7 +24,8 @@ from opt.problem import hands
 from viz.scene import skin_trace
 
 LONG = ["index", "middle", "ring", "little"]
-CH = {"index": "#1c7ed6", "middle": "#74b816", "ring": "#f08c00", "little": "#7048e8"}
+SHOW = ["thumb", "index", "middle", "ring", "little"]     # the thumb has its own well_mount; check it too
+CH = {"thumb": "#e03131", "index": "#1c7ed6", "middle": "#74b816", "ring": "#f08c00", "little": "#7048e8"}
 
 
 def _decimate(V, F, cell=0.0010):
@@ -71,22 +72,29 @@ def main():
     sk = skin_trace(h, q, opacity=0.12)
     if sk is not None:
         traces.append(sk)
-    traces.append(go.Mesh3d(x=V[:, 0], y=V[:, 1], z=V[:, 2], i=F[:, 0], j=F[:, 1], k=F[:, 2],
-                            color="#9aa5b1", opacity=0.45, flatshading=True,
-                            lighting=dict(ambient=0.55, diffuse=0.9, specular=0.15),
-                            name="the gauntlet (struts + mounts + housing)", hoverinfo="name",
-                            showlegend=True))
-    for i, f in enumerate(LONG):                        # the drop-in cradles the channels pass through
+    # SHADING: low ambient + strong diffuse + a directional light off the scene's corner, so surfaces
+    # at different angles read differently (a flat single colour makes the cups impossible to discern).
+    lo, hi = V.min(0), V.max(0)
+    c, L = (lo + hi) / 2, float((hi - lo).max())
+    d = np.array([-1.5, 0.8, 0.8]); d /= np.linalg.norm(d)   # the camera eye dir -> light the faces we see
+    lpos = dict(x=float(c[0] + d[0] * 2 * L), y=float(c[1] + d[1] * 2 * L), z=float(c[2] + d[2] * 2 * L))
+    LIGHT = dict(ambient=0.35, diffuse=1.0, specular=0.25, roughness=0.4, fresnel=0.1)
+
+    def lit(vv, ff, color, opacity, name, show):
+        return go.Mesh3d(x=vv[:, 0], y=vv[:, 1], z=vv[:, 2], i=ff[:, 0], j=ff[:, 1], k=ff[:, 2],
+                         color=color, opacity=opacity, flatshading=True, lighting=LIGHT,
+                         lightposition=lpos, name=name, hoverinfo="name", showlegend=show)
+
+    traces.append(lit(V, F, "#9aa5b1", 0.28, "the gauntlet (struts + mounts + housing)", True))
+    for i, f in enumerate(SHOW):                        # the drop-in cradles the channels pass through
         im = mount.insert_mesh(h, q, f)
-        iv, iff = np.asarray(im.vertices), np.asarray(im.faces)
-        traces.append(go.Mesh3d(x=iv[:, 0], y=iv[:, 1], z=iv[:, 2], i=iff[:, 0], j=iff[:, 1], k=iff[:, 2],
-                                color="#e0a458", opacity=0.9, flatshading=True,
-                                lighting=dict(ambient=0.55, diffuse=0.9, specular=0.15),
-                                name="drop-in cradle (TPU)" if i == 0 else None,
-                                showlegend=(i == 0), hoverinfo="name"))
+        imf = trimesh.Trimesh(im.vertices, im.faces, process=True)   # consistent normals -> real shading
+        imf.fix_normals()
+        traces.append(lit(np.asarray(imf.vertices), np.asarray(imf.faces), "#e0a458", 1.0,
+                          "drop-in cradle (TPU)" if i == 0 else None, i == 0))
 
     clr = {}
-    for f in LONG:
+    for f in SHOW:
         fr, ins = mount.well_mount(h, q, f, nodes[btn[f]]), mount.well_insert(h, q, f)
         clr[f] = entry.entry_clearance(h, q, f, boxes=fr["boxes"] + ins["boxes"],
                                        caps=fr["caps"] + ins["caps"] + struts,
