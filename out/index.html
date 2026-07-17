@@ -15,11 +15,10 @@
    takes the topology the objective grew bottom-up; a top-down re-prune instead dead-ends in a heavy
    uniform 34 g <b>membrane</b> — a local optimum it cannot escape (§8.15k).</p>
 <p class="k"><b>The sensor.</b> Each well is a contactless-Hall flexure — a magnet on a printed
-   <b>TPU dome</b> over a 3-axis Hall, soft in tilt and in plunge. <b>Every well is five-way</b> on
-   every finger (the ulnar "three-way" limit was a cradle artefact, not muscle). The read-out is now
-   modelled: a keypress swings the Hall <b>~430 LSB — 200× the sensor noise</b>, the five directions
-   ≥ 78° apart. It prints as a rigid PA frame + a drop-in keyed TPU cradle, and the Hall seats, wire
-   grooves and a wrist nRF52840 housing carve into <b>one watertight solid</b> (§8.15l).</p>
+   <b>TPU dome</b> over a 3-axis Hall. The read-out is modelled (a keypress swings <b>~430 LSB</b>,
+   200× the noise); the <b>mount</b> that holds the magnet + Hall is built <b>entry-first</b> — the
+   finger's slide-in route is a hard constraint, so nothing crosses the path the finger comes in by.
+   Four long fingers share one cluster; whole part <b>36 g</b>, one watertight solid.</p>
 <p class="k"><b>The strap.</b> The band is the convex hull of (skin ∪ device), so it rides
    <b>over</b> the gauntlet it holds down; a <b>watch-lug</b> captures a pin in shear at each anchor
    foot; one adjustable strap (21 mm range) fits the 5th–95th percentile population.</p>
@@ -29,15 +28,10 @@
    the stress, then <b>form-found</b> so its load paths straighten: <b>23.2 g</b>, <b>39% lighter</b>
    than bolting it on (37.7 g, §8.15k).</p>
 <ul>
-  <li><a href="sensor.html">sensor.html</a> — <b>one sensor, close up</b> (§8.15l). The finger-well
-      module cut away — the PA frame, the TPU cradle on its dome flexure, the Ø3×1 magnet in its
-      pocket, the 3-axis Hall in its seat below the gap — beside the <b>field change</b> that magnet
-      makes at the Hall for each finger motion: a press swings <b>~42 mT</b> axial (427 LSB), each
-      tilt a few mT transverse. So it is clear what signal to expect.</li>
-  <li><a href="gauntlet_solid.html">gauntlet_solid.html</a> — <b>the printable solid, sensor mounts
-      included</b> (§8.15l). The marching-cubes STL read back and rendered whole: the finger-well
-      frames, Hall seats, wire grooves and the wrist housing are part of the one print
-      (<b>39 g</b> CF-PA12, watertight), ghosted over the hand for scale.</li>
+  <li><a href="entry.html">entry.html</a> — <b>the finger-entry route</b> (§8.15l). The long-finger
+      cluster mount, and for each finger the <b>channel it slides in by</b> — the swept fingertip —
+      passing <b>clear of the mount</b>. This is the modelling step the sensor mount is now built to:
+      a cup a finger can actually get into, not just sit in.</li>
   <li><a href="onstrap.html">onstrap.html</a> — <b>the gauntlet on the OUTSIDE of the strap</b>
       (§8.15j, the current decision). Hand → soft strap (the only thing that touches the hand) →
       gauntlet. The strap cushions, tethers, and spreads; no hard bit meets the hand, and the gate
