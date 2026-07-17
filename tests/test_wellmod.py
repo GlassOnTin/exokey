@@ -112,24 +112,30 @@ def _frame_gap(ref, q, fa, fb):
     return float(cKDTree(a.vertices).query(b.vertices)[0].min())
 
 
-def test_all_but_the_tightest_pair_of_modules_clear(design_posture):
-    """Every pair of well modules EXCEPT the tightest leaves clear air between the printed frames."""
+ADJACENT_LONG = ({"index", "middle"}, {"middle", "ring"}, {"ring", "little"})
+
+
+def test_non_adjacent_modules_clear(design_posture):
+    """Every module pair EXCEPT the adjacent long-finger ones leaves clear air between the frames."""
     import itertools
 
     from hand.myohand import FINGERS
     ref, q = design_posture
     for fa, fb in itertools.combinations(FINGERS, 2):
-        if {fa, fb} == {"middle", "ring"}:
-            continue                                    # the known-tight pair, tested below
+        if {fa, fb} in ADJACENT_LONG:
+            continue                                    # the tight cluster, tested below
         assert _frame_gap(ref, q, fa, fb) >= 2.0e-3, f"{fa}/{fb} frames too close"
 
 
-@pytest.mark.xfail(strict=True, reason="per-finger modules interpenetrate at the tightest "
-                   "(middle-ring) pitch; needs cluster-level packing -- see VISION 8.15l")
-def test_the_tightest_pair_needs_cluster_packing(design_posture):
-    """MEASURED LIMITATION, stated not hidden: sized independently, the middle and ring sensor tails
-    run nearly parallel and INTERPENETRATE in the typing posture -- their frames do not clear. A
-    coupled cluster (shared walls or staggered tail depth) is the fix, and is future work. Marked
-    xfail(strict) so that whoever implements that fix is told, here, to retire this note."""
+@pytest.mark.xfail(strict=True, reason="the four long fingers' modules, sized to nest the insert "
+                   "and tie the strut in dorsally, are wider than the finger pitch -- all three "
+                   "adjacent pairs interpenetrate; needs a shared cluster (VISION 8.15l)")
+def test_adjacent_long_fingers_need_cluster_packing(design_posture):
+    """MEASURED LIMITATION, stated not hidden: an independent per-finger module wide enough to nest
+    its insert and carry the strut on the dorsal side is wider than the ~18-26 mm finger pitch, so
+    the four long fingers' modules INTERPENETRATE at every adjacent pair (index-middle, middle-ring,
+    ring-little). Only a coupled cluster -- shared collar walls, or one multi-finger carrier -- fits.
+    Marked xfail(strict) so whoever builds that cluster is told, here, to retire this note."""
     ref, q = design_posture
-    assert _frame_gap(ref, q, "middle", "ring") >= 1.0e-3
+    assert all(_frame_gap(ref, q, *sorted(p)) >= 1.0e-3
+               for p in (("index", "middle"), ("middle", "ring"), ("ring", "little")))

@@ -97,37 +97,41 @@ def module_frame(h, q, finger, *, mount=None, wire_len=0.010):
     cc = pos - 0.5 * half * ax                        # channel centre (behind the pad)
 
     boxes, caps, cyls, carve_cyls, carve_boxes = [], [], [], [], []
+    LAT = r + CUP_WALL + 0.0008 + 0.5 * PA_WALL       # collar OUTBOARD of the insert cup, so it nests
+    s_dorsal = -0.25 * r                              # the frame's dorsal edge (nail side of the pad)
 
-    # BASE PLATE -- carries the Hall PCB, palmar-most.
+    # BASE PLATE -- carries the Hall PCB, palmar-most; reaches the collar walls so the frame is one.
     boxes.append((cc + s["base_c"] * fl, R,
-                  np.array([half + PA_WALL, 0.5 * BASE_T, r + PA_WALL])))
+                  np.array([half + PA_WALL, 0.5 * BASE_T, LAT + 0.5 * PA_WALL])))
 
-    # COLLAR -- two lateral walls from the cup rim to the base, the fixed guide the skirt keys into.
-    # ⚠ These frames are sized per finger INDEPENDENTLY. At the tightest pitch (middle-ring, ~18-20
-    # mm) the two sensor tails run nearly parallel and INTERPENETRATE (test_wellmod). Resolving that
-    # needs a cluster-level layout -- shared walls or staggered tail depth -- which is future work
-    # (VISION 8.15l). Every other pair clears; this one is a named, measured limitation.
-    wall_lo, wall_hi = s["cup_dorsal"], s["base_c"]
+    # COLLAR -- two lateral walls OUTBOARD of the insert cup (the insert drops in between them),
+    # spanning from the DORSAL edge (where the strut ties in, opposite the palmar magnet) to the
+    # base. ⚠ Sized per finger INDEPENDENTLY -- at the tightest pitch (middle-ring) the modules
+    # interpenetrate, and nesting the collar outboard widened them, so this is worse until the
+    # cluster-level layout (shared walls / staggered depth) that VISION 8.15l flags.
+    wall_lo, wall_hi = s_dorsal, s["base_c"]
     wc = 0.5 * (wall_lo + wall_hi)
     wh = 0.5 * (wall_hi - wall_lo)
     for side in (+1.0, -1.0):
-        boxes.append((cc + wc * fl + side * (r + 0.5 * PA_WALL) * lat, R,
-                      np.array([half, wh, 0.5 * PA_WALL])))
+        boxes.append((cc + wc * fl + side * LAT * lat, R, np.array([half, wh, 0.5 * PA_WALL])))
     # DISTAL END WALL (open proximally so the finger enters and wires exit).
-    boxes.append((cc + wc * fl + half * ax, R, np.array([0.5 * PA_WALL, wh, r + PA_WALL])))
+    boxes.append((cc + wc * fl + half * ax, R, np.array([0.5 * PA_WALL, wh, LAT + 0.5 * PA_WALL])))
 
-    # SKIN_R RIM BEADS -- round the two touchable dorsal edges of the collar walls (strut landings).
+    # DORSAL-LATERAL RIM + DISTAL BRACE -- the strut tie-in: the nail-side top edges and the
+    # fingertip end, OPPOSITE the palmar magnet and clear of the finger cavity and the proximal
+    # entry. The truss lands here, not down by the sensor.
     for side in (+1.0, -1.0):
-        a = cc - half * ax + side * (r + 0.5 * PA_WALL) * lat + s["cup_dorsal"] * fl
-        b = cc + half * ax + side * (r + 0.5 * PA_WALL) * lat + s["cup_dorsal"] * fl
-        caps.append(((a, b), float(SKIN_R)))
+        a = cc - half * ax + side * LAT * lat + s_dorsal * fl
+        b = cc + half * ax + side * LAT * lat + s_dorsal * fl
+        caps.append(((a, b), float(SKIN_R)))                       # dorsal-lateral rim rail
+    dl = cc + half * ax + s_dorsal * fl
+    caps.append(((dl - LAT * lat, dl + LAT * lat), float(SKIN_R)))  # distal brace across the rims
 
-    # STALKS -- tie the frame to the structure's button node (where the truss struts land), on both
-    # sides, or the whole module floats free of the gauntlet (measured: it did, ~10 mm away). They
-    # run to the collar walls, clear of the central cup/dome/sensor stack.
+    # STALKS -- tie the button node (where the struts land) UP to the dorsal-lateral rim on both
+    # sides, staying outboard so the load path is on the nail side, never across the pad or magnet.
     src = np.asarray(mount, float) if mount is not None else pos
     for side in (+1.0, -1.0):
-        tip = cc + wc * fl + side * (r + 0.5 * PA_WALL) * lat
+        tip = cc - 0.3 * half * ax + side * LAT * lat + s_dorsal * fl
         caps.append(((src, tip), STALK_R))
 
     # CARVE: the PCB seat, opening palmar.

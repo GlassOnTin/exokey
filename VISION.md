@@ -2181,17 +2181,25 @@ anchored at the anchor *centroid*, which sits in empty space. Found only by coun
 by the watertight check. Fixed by tying each frame to its button node with **stalks**, the housing
 to its nearest **live-strut nodes**, and dropping the sub-mm³ marching-cubes debris: now **one
 connected, watertight, winding-consistent body — measured at component count 1**. The modules +
-housing **add 16.6 g** over the bare struts (25.5 → **42.1 g** solid CF-PA12, measured off the mesh,
-not estimated) — the honest cost of contactless sensing at this gap. The MCU box is also lifted
-along the local skin normal so it sits proud of the wrist instead of cutting into it.
+housing **add 24.4 g** over the bare struts (25.5 → **49.9 g** solid CF-PA12, measured off the mesh,
+not estimated — heavier once the collar is sized to *nest* the insert, see (sss)) — the honest cost
+of contactless sensing at this gap. The MCU box is also lifted along the local skin normal so it
+sits proud of the wrist instead of cutting into it.
 
 **(sss) ⚠ WHAT THIS DID NOT SETTLE.**
-- **The tightest module pair collides.** Sized independently, the **middle and ring** sensor tails
-  run nearly parallel and **interpenetrate** in the typing posture — their drop-in inserts do not
-  clear (`test_the_tightest_pair_needs_cluster_packing`, an `xfail` that flags itself when fixed).
-  Every other pair clears ≥ 2 mm. Resolving it needs a **cluster-level layout** (shared collar
-  walls, or staggered tail depth), which is future work — the per-finger module is the wrong unit
-  of design at that pitch.
+- **The strut tie-in and the nesting, corrected.** The first module tied the truss in *down by the
+  magnet* (palmar) and — worse — its collar was **inboard of the insert cup** (±7.9 vs ±9.5 mm), so
+  the two parts could not even nest. Both are fixed: the collar now sits **outboard** of the cup (the
+  insert drops in between the walls), and the strut ties in on a **dorsal-lateral rim + distal
+  brace** — the nail side, **opposite the palmar magnet** and clear of the finger (measured 3.8 mm
+  from the skin). The whole part is one watertight solid, **49.9 g** (the correct nesting is heavier).
+- **The four long fingers need a shared cluster, not per-finger modules.** A module wide enough to
+  nest its insert and carry the strut dorsally is **wider than the ~18–26 mm finger pitch**, so
+  **all three adjacent long-finger pairs** (index-middle, middle-ring, ring-little) interpenetrate —
+  their drop-in inserts cannot all fit (`test_adjacent_long_fingers_need_cluster_packing`, an
+  `xfail` that flags itself when fixed). Non-adjacent and thumb pairs clear ≥ 2 mm. The per-finger
+  module is the wrong unit at this pitch; the fix is a **coupled cluster** (shared collar walls, or
+  one multi-finger carrier), which is the next real piece of work.
 - **The dome membrane (~0.32 mm) is at the FDM single-perimeter floor** — it needs a 0.25 mm nozzle
   or a corrugation, as §8.15g already flagged.
 - **`REST_GAP` (3.5 mm) and `CRADLE_LEVER` (0.7) are GUESSES** — the gap is a frame dimension not

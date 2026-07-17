@@ -8,11 +8,35 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** seventeen times. **All eighteen stamps stand**, and each
+The disclosure has been **extended and re-anchored** eighteen times. **All nineteen stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — CORRECTION: the sensor part was 31 pieces, not one solid; now tied into one (§8.15l rrr)
+### Current — THE STRUT TIES IN DORSALLY, and the collar nests the insert (§8.15l rrr/sss)
+
+Two module bugs the one-sensor render exposed. **(1)** The truss tied into the frame **down by the palmar
+magnet** — the wrong side; it now lands on a **dorsal-lateral rim + distal brace** (the nail side,
+**opposite the magnet**, measured **3.8 mm** clear of the finger). **(2)** The frame collar was **inboard
+of the insert cup** (±7.9 vs ±9.5 mm), so the two parts could not nest; the collar now sits **outboard**
+and the insert drops in between the walls. Still one watertight solid (component count 1), but **49.9 g** —
+proper nesting is heavier. Sizing the collar to nest widened every module past the finger pitch, so **all
+three adjacent long-finger pairs** now interpenetrate (index-middle, middle-ring, ring-little), not just
+middle-ring: the four long fingers need a **shared cluster**, the next real piece of work
+(`test_adjacent_long_fingers_need_cluster_packing`, an `xfail`). A new `scripts/sensor_view.py` renders one
+module cut away beside the field-vs-motion signal — which is what caught all of this.
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) | `dbefe524ccec8f018bb48b96861a1250ef3ceeedc37b1d5a67424cdaa9c20ffd` |
+| `MANIFEST.sha256` (hashes of all 98 source + doc files) | `1915ea9d2a35fcbc56f10b14e9ba84b921f4cfce69dcad22c33080e4ef03af78` |
+
+Stamped: **2026-07-17T05:52:34Z** (UTC, submission time). Proofs: `VISION.md.ots`,
+`MANIFEST.sha256.ots`.
+
+⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
+the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+
+### Eighteenth — CORRECTION: the sensor part was 31 pieces, not one solid; now tied into one (§8.15l rrr)
 
 The 17th anchor claimed the sensor gauntlet meshed as "one watertight solid." It was watertight but in
 **31 disconnected pieces**: the five modules and the MCU housing floated **~10 mm off the skeleton**,
@@ -30,11 +54,8 @@ sensors flagged in contrasting colour, so the mounts are visible.
 | `VISION.md` (the disclosure) | `ad483d8c11148d49c234160da6d5fe21ce83a0be9dd19a0bddfb8c887c06a81a` |
 | `MANIFEST.sha256` (hashes of all 97 source + doc files) | `d4861889384256b712e9391b64011cd3eb35c02dc1fb5cdb0ab65e1fef1b3533` |
 
-Stamped: **2026-07-16T22:53:48Z** (UTC, submission time). Proofs: `VISION.md.ots`,
-`MANIFEST.sha256.ots`.
-
-⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
-the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+Stamped: **2026-07-16T22:53:48Z** (UTC, submission time). Proofs:
+`timestamps/VISION.md.2026-07-16h.ots`, `timestamps/MANIFEST.sha256.2026-07-16h.ots`.
 
 ### Seventeenth — THE READ-OUT: the field a moving magnet presents to the Hall, and the printed module (§8.15l)
 
