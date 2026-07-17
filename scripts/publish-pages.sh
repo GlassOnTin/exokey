@@ -14,7 +14,7 @@ cd "$(git rev-parse --show-toplevel)"
 # the gallery = every viewer page + the data the fetch-based ones load. The optimisation renders
 # (anim/progress/pareto) were dropped: they can only be refreshed by re-running the whole NSGA-II
 # search, so they went stale and confused the gallery -- the design is shown by the live renders.
-pages=(index onstrap strap typing impact entry)
+pages=(index onstrap strap typing impact entry harness)
 data=(typing.json)
 
 WT="$(mktemp -d)"

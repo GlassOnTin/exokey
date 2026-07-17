@@ -34,6 +34,11 @@
       the mount and the struts</b>. The cup is built to the <b>measured pad</b>, so the finger both
       gets in <em>and</em> seats (a render caught it floating ~7&nbsp;mm above its cup; now it rests
       on the floor, 0.4–0.8&nbsp;mm).</li>
+  <li><a href="harness.html">harness.html</a> — <b>the minimal-copper harness bus</b> (§8.15l qqq-2).
+      The sensors are I²C, so the wires need not run point-to-point: VDD/GND are shared and SDA/SCL are
+      a bus. The harness is a <b>shared Steiner tree over the struts</b> — <b>283&nbsp;mm</b> against
+      <b>490&nbsp;mm</b> of five independent runs, <b>−42% copper</b>. Toggle the old routing in the
+      legend to see the sharing. (Not quite TSP — the branching tree beats the daisy-chain.)</li>
   <li><a href="onstrap.html">onstrap.html</a> — <b>the gauntlet on the OUTSIDE of the strap</b>
       (§8.15j, the current decision). Hand → soft strap (the only thing that touches the hand) →
       gauntlet. The strap cushions, tethers, and spreads; no hard bit meets the hand, and the gate
