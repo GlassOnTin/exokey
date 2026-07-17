@@ -2181,10 +2181,10 @@ anchored at the anchor *centroid*, which sits in empty space. Found only by coun
 by the watertight check. Fixed by tying each frame to its button node with **stalks**, the housing
 to its nearest **live-strut nodes**, and dropping the sub-mm³ marching-cubes debris: now **one
 connected, watertight, winding-consistent body — measured at component count 1**. The modules +
-housing **add 24.4 g** over the bare struts (25.5 → **49.9 g** solid CF-PA12, measured off the mesh,
-not estimated — heavier once the collar is sized to *nest* the insert, see (sss)) — the honest cost
-of contactless sensing at this gap. The MCU box is also lifted along the local skin normal so it
-sits proud of the wrist instead of cutting into it.
+housing **add 16.7 g** over the bare struts (25.5 → **42.2 g** solid CF-PA12, measured off the mesh,
+not estimated — the four long fingers share one cluster carrier, see (sss)) — the honest cost of
+contactless sensing at this gap. The MCU box is also lifted along the local skin normal so it sits
+proud of the wrist instead of cutting into it.
 
 **(sss) ⚠ WHAT THIS DID NOT SETTLE.**
 - **The strut tie-in and the nesting, corrected.** The first module tied the truss in *down by the
@@ -2192,14 +2192,22 @@ sits proud of the wrist instead of cutting into it.
   the two parts could not even nest. Both are fixed: the collar now sits **outboard** of the cup (the
   insert drops in between the walls), and the strut ties in on a **dorsal-lateral rim + distal
   brace** — the nail side, **opposite the palmar magnet** and clear of the finger (measured 3.8 mm
-  from the skin). The whole part is one watertight solid, **49.9 g** (the correct nesting is heavier).
-- **The four long fingers need a shared cluster, not per-finger modules.** A module wide enough to
-  nest its insert and carry the strut dorsally is **wider than the ~18–26 mm finger pitch**, so
-  **all three adjacent long-finger pairs** (index-middle, middle-ring, ring-little) interpenetrate —
-  their drop-in inserts cannot all fit (`test_adjacent_long_fingers_need_cluster_packing`, an
-  `xfail` that flags itself when fixed). Non-adjacent and thumb pairs clear ≥ 2 mm. The per-finger
-  module is the wrong unit at this pitch; the fix is a **coupled cluster** (shared collar walls, or
-  one multi-finger carrier), which is the next real piece of work.
+  from the skin). The whole part is one watertight solid (**42.2 g**, with the long fingers now on a
+  shared cluster — see below).
+- **The four long fingers now SHARE a cluster (was a per-finger collision).** A module wide enough to
+  nest its insert and carry the strut dorsally is wider than the ~18–26 mm finger pitch, so four
+  independent ones interpenetrated at every adjacent pair. Fixed: the long fingers share **one
+  carrier** (`wellmod.cluster_frame`) whose **inter-finger walls are shared** — the wall between two
+  fingers is a single wall, not two colliding ones — a palmar base spine links the Hall seats, and a
+  dorsal rim rail + the struts run along the **wall tops BETWEEN the fingers, never over a cup**, so
+  every finger drops into its cup and reaches its sensor freely (entries clear ≥ 3.3 mm; ⚠ a first
+  cut ran the rim over the finger centres and choked every entry to 0.1 mm — caught by eye in the
+  render, now guarded by `test_the_cluster_leaves_the_finger_entry_open`). It meshes to **one
+  watertight, non-self-colliding piece**, each cup walled off from its neighbours, and it is
+  **lighter** than the four modules were (whole part **42.2 g**, down from 49.9 g). The thumb keeps an
+  independent module and clears the cluster by 18 mm. ⚠ Remaining: the **drop-in inserts** are still
+  per-finger ±9.5 mm and overlap the shared walls at the tightest pair — they need matching narrower
+  (or webbed multi-cup) cradles, the one open detail.
 - **The dome membrane (~0.32 mm) is at the FDM single-perimeter floor** — it needs a 0.25 mm nozzle
   or a corrugation, as §8.15g already flagged.
 - **`REST_GAP` (3.5 mm) and `CRADLE_LEVER` (0.7) are GUESSES** — the gap is a frame dimension not

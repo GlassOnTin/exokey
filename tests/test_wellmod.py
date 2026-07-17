@@ -105,37 +105,50 @@ def design_posture():
     return ref, q
 
 
-def _frame_gap(ref, q, fa, fb):
+LONG = ["index", "middle", "ring", "little"]
+
+
+def _mounts():
+    z = np.load("out/final.npz", allow_pickle=True)
+    nodes = np.array(z["nodes"], float)
+    return {f: nodes[int(i)] for f, i in zip(z["fingers"], z["buttons"])}
+
+
+def test_the_long_finger_cluster_is_one_watertight_piece(design_posture):
+    """The fix for the packing limit: the four long fingers share ONE carrier with shared
+    inter-finger walls, so instead of four independent modules interpenetrating there is a single
+    connected, non-self-colliding, watertight piece."""
+    ref, q = design_posture
+    m = wm.cluster_mesh(ref, q, LONG, _mounts())
+    assert m.is_watertight
+    assert m.body_count == 1
+
+
+def test_the_cluster_separates_the_cups_and_clears_the_thumb(design_posture):
+    """A shared wall sits between each adjacent pair, so the fingers stay distinct cups; and the
+    cluster still clears the independent thumb module."""
     from scipy.spatial import cKDTree
-    a = wm.frame_mesh(ref, q, fa)
-    b = wm.frame_mesh(ref, q, fb)
-    return float(cKDTree(a.vertices).query(b.vertices)[0].min())
-
-
-ADJACENT_LONG = ({"index", "middle"}, {"middle", "ring"}, {"ring", "little"})
-
-
-def test_non_adjacent_modules_clear(design_posture):
-    """Every module pair EXCEPT the adjacent long-finger ones leaves clear air between the frames."""
-    import itertools
-
-    from hand.myohand import FINGERS
     ref, q = design_posture
-    for fa, fb in itertools.combinations(FINGERS, 2):
-        if {fa, fb} in ADJACENT_LONG:
-            continue                                    # the tight cluster, tested below
-        assert _frame_gap(ref, q, fa, fb) >= 2.0e-3, f"{fa}/{fb} frames too close"
+    m = wm.cluster_mesh(ref, q, LONG, _mounts())
+    tree = cKDTree(m.vertices)
+    for a, b in zip(LONG, LONG[1:]):
+        mid = 0.5 * (np.asarray(ref.well_frame(q, a)["pos"])
+                     + np.asarray(ref.well_frame(q, b)["pos"]))
+        assert tree.query(mid)[0] < 3e-3, f"no wall between {a}/{b}"   # frame surface near midpoint
+    thumb = wm.frame_mesh(ref, q, "thumb")
+    assert tree.query(thumb.vertices)[0].min() >= 2e-3
 
 
-@pytest.mark.xfail(strict=True, reason="the four long fingers' modules, sized to nest the insert "
-                   "and tie the strut in dorsally, are wider than the finger pitch -- all three "
-                   "adjacent pairs interpenetrate; needs a shared cluster (VISION 8.15l)")
-def test_adjacent_long_fingers_need_cluster_packing(design_posture):
-    """MEASURED LIMITATION, stated not hidden: an independent per-finger module wide enough to nest
-    its insert and carry the strut on the dorsal side is wider than the ~18-26 mm finger pitch, so
-    the four long fingers' modules INTERPENETRATE at every adjacent pair (index-middle, middle-ring,
-    ring-little). Only a coupled cluster -- shared collar walls, or one multi-finger carrier -- fits.
-    Marked xfail(strict) so whoever builds that cluster is told, here, to retire this note."""
+def test_the_cluster_leaves_the_finger_entry_open(design_posture):
+    """Each finger must drop into its cup and reach its sensor -- the cluster's walls and rim sit
+    BETWEEN the fingers, never over a cup centre, so the dorsal entry stays open. (An earlier
+    cluster ran the rim over the finger centres and blocked every entry to 0.1 mm.)"""
+    from scipy.spatial import cKDTree
     ref, q = design_posture
-    assert all(_frame_gap(ref, q, *sorted(p)) >= 1.0e-3
-               for p in (("index", "middle"), ("middle", "ring"), ("ring", "little")))
+    m = wm.cluster_mesh(ref, q, LONG, _mounts())
+    tree = cKDTree(m.vertices)
+    for f in LONG:
+        wf = ref.well_frame(q, f)
+        pos, fl = np.asarray(wf["pos"]), np.asarray(wf["floor"])
+        entry = pos + np.linspace(-0.008, 0.004, 25)[:, None] * fl   # the dorsal entry region
+        assert tree.query(entry)[0].min() >= 0.8e-3, f"{f} entry blocked by the cluster"

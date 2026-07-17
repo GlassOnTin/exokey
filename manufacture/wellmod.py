@@ -145,6 +145,104 @@ def module_frame(h, q, finger, *, mount=None, wire_len=0.010):
                 carve_cyls=carve_cyls, carve_boxes=carve_boxes, wf=wf, stack=s)
 
 
+def _unit(v):
+    v = np.asarray(v, float)
+    return v / (np.linalg.norm(v) + 1e-12)
+
+
+def cluster_frame(h, q, fingers, mounts, *, wire_len=0.010):
+    """ONE PA carrier for a ROW of wells (the long fingers), with SHARED inter-finger walls.
+
+    An independent per-finger frame wide enough to nest its insert is wider than the finger pitch,
+    so four of them interpenetrate (§8.15l). The cluster fixes that: the wall BETWEEN two fingers is
+    a SINGLE shared wall, not two colliding ones. Per finger it still carries a Hall seat and a cup;
+    the cups are the gaps between shared walls, and one continuous base spine + dorsal rim (following
+    the fingertip arc) tie the row together and take the struts on the dorsal side.
+
+    `fingers` must be given in ROW ORDER (index..little). `mounts` = {finger: button-node position}.
+    Returns the same primitive dict as module_frame.
+    """
+    wf = {f: h.well_frame(q, f) for f in fingers}
+    fl = {f: _unit(wf[f]["floor"]) for f in fingers}
+    ax = {f: _unit(wf[f]["axis"]) for f in fingers}
+    lt = {f: _unit(wf[f]["lateral"]) for f in fingers}
+    r = {f: wf[f]["radius"] for f in fingers}
+    half = {f: wf[f]["half"] for f in fingers}
+    cc = {f: np.asarray(wf[f]["pos"], float) - 0.5 * half[f] * ax[f] for f in fingers}
+    s = {f: _stack(wf[f]) for f in fingers}
+    s_dorsal = {f: -0.25 * r[f] for f in fingers}
+
+    boxes, caps, cyls, carve_cyls, carve_boxes = [], [], [], [], []
+    for f in fingers:
+        R = np.vstack([ax[f], fl[f], lt[f]])
+        # BASE PLATE + Hall seat, palmar, PCB-width (the sensor tail is narrow -- it is the collars
+        # that collided, and those are now shared).
+        pcb_half = 0.5 * PCB[1] + PA_WALL
+        boxes.append((cc[f] + s[f]["base_c"] * fl[f], R,
+                      np.array([half[f] + PA_WALL, 0.5 * BASE_T, pcb_half])))
+        carve_boxes.append((cc[f] + s[f]["pcb_c"] * fl[f], R,
+                            np.array([0.5 * PCB[0], 0.5 * PCB[2], 0.5 * PCB[1]])))
+        slot_c = cc[f] + s[f]["hall"] * fl[f] - (0.5 * half[f] + 0.5 * wire_len) * ax[f]
+        carve_boxes.append((slot_c, R, np.array([0.5 * wire_len + half[f], GROOVE_R, GROOVE_R])))
+    # BASE SPINE (palmar) -- runs BELOW the fingers, connecting the Hall seats.
+    for a, b in zip(fingers, fingers[1:]):
+        caps.append(((cc[a] + s[a]["base_c"] * fl[a], cc[b] + s[b]["base_c"] * fl[b]), 0.5 * BASE_T))
+
+    # WALLS at the 5 lateral positions (2 outer + 3 shared), each spanning the dorsal rim down to the
+    # base. ⚠ They sit BETWEEN the fingers -- NEVER over a cup centre -- so each finger drops into its
+    # cup freely from the dorsal/proximal side. Each wall's dorsal edge is a RIM NODE; the rim rail
+    # and the struts tie in there, on the nail side and opposite the palmar magnet.
+    def mid_pt(f):
+        return cc[f] + 0.5 * (s_dorsal[f] + s[f]["base_c"]) * fl[f]
+
+    walls = [(fingers[0], mid_pt(fingers[0]) - (r[fingers[0]] + CUP_WALL + 0.0025) * lt[fingers[0]])]
+    walls += [(a, 0.5 * (mid_pt(a) + mid_pt(b))) for a, b in zip(fingers, fingers[1:])]
+    walls.append((fingers[-1],
+                  mid_pt(fingers[-1]) + (r[fingers[-1]] + CUP_WALL + 0.0025) * lt[fingers[-1]]))
+
+    rim_pts = []
+    for fref, m in walls:
+        u = _unit(fl[fref])
+        Rw = np.vstack([_unit(ax[fref]), u, _unit(lt[fref])])
+        wh_fl = 0.5 * (s[fref]["base_c"] - s_dorsal[fref])
+        boxes.append((m, Rw, np.array([half[fref] + PA_WALL, wh_fl, 0.5 * PA_WALL])))
+        rim_pts.append(m - wh_fl * u)                 # the wall's DORSAL edge = a rim node
+    # DORSAL RIM rail only along the INTERNAL wall tops -- a rail to an OUTER wall would cross OVER
+    # the end finger (measured: it blocked little's entry). The outer walls tie to the base instead.
+    internal = rim_pts[1:-1]
+    for a, b in zip(internal, internal[1:]):
+        caps.append(((a, b), float(SKIN_R)))
+    for end in (0, -1):                               # base spine runs only between wells; add the ends
+        caps.append(((cc[fingers[end]] + s[fingers[end]]["base_c"] * fl[fingers[end]],
+                      walls[end][1]), STALK_R))
+
+    # STRUTS -- each finger's button node ties to the NEAREST internal rim node (a shared-wall top,
+    # BESIDE the finger between it and a neighbour), so the load path never crosses the cup or sensor.
+    for f in fingers:
+        src = np.asarray(mounts[f], float)
+        tip = min(internal, key=lambda p: float(np.linalg.norm(p - src)))
+        caps.append(((src, tip), STALK_R))
+
+    return dict(boxes=boxes, caps=caps, cyls=cyls,
+                carve_cyls=carve_cyls, carve_boxes=carve_boxes)
+
+
+def cluster_mesh(h, q, fingers, mounts, struts=(), radii=0.0, *, voxel=4e-4):
+    """The long-finger cluster frame as a watertight trimesh (optionally with its landing struts)."""
+    m = cluster_frame(h, q, fingers, mounts)
+    caps = list(struts) + [c[0] for c in m["caps"]]
+    rr = ([radii] * len(struts) if np.isscalar(radii) else list(radii)) + [c[1] for c in m["caps"]]
+    f, o, v = mesh.field(caps, m["boxes"], r=rr, voxel=voxel, cyls=m["cyls"])
+    mesh.carve(f, o, v, cyls=m["carve_cyls"], boxes=m["carve_boxes"])
+    out = mesh.to_mesh(f, o, v)
+    import trimesh
+    bodies = out.split(only_watertight=False)          # drop sub-mm^3 marching-cubes debris shells
+    if len(bodies) > 1:
+        keep = [b for b in bodies if b.volume > 1e-9]
+        out = trimesh.util.concatenate(keep) if len(keep) > 1 else keep[0]
+    return out
+
+
 def _insert_primitives(wf, *, nail_hood=True, dome_a=DOME_A, dome_t=DOME_T):
     """The TPU cradle as primitive lists in world coords (its own small part)."""
     pos = np.asarray(wf["pos"], float)

@@ -8,11 +8,37 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** eighteen times. **All nineteen stamps stand**, and each
+The disclosure has been **extended and re-anchored** nineteen times. **All twenty stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — THE STRUT TIES IN DORSALLY, and the collar nests the insert (§8.15l rrr/sss)
+### Current — THE FOUR LONG FINGERS SHARE A CLUSTER, with open finger paths (§8.15l sss)
+
+The 19th anchor flagged that four independent sensor modules are wider than the finger pitch and
+interpenetrate at every adjacent pair — needing a shared cluster. **Built** (`wellmod.cluster_frame`).
+The long fingers share **one carrier** with **shared inter-finger walls** (the wall between two fingers is
+one wall, not two), a palmar base spine linking the Hall seats, and a dorsal rim rail + the struts running
+along the wall tops **BETWEEN the fingers, never over a cup** — so every finger drops into its cup and
+reaches its sensor freely (entries clear **≥ 3.3 mm**). ⚠ A first cut ran the rim over the finger centres
+and choked every entry to 0.1 mm — caught **by eye in the render**, now guarded by
+`test_the_cluster_leaves_the_finger_entry_open`. It meshes to **one watertight, non-self-colliding
+piece**, each cup walled off, and is **lighter** than the four modules were (whole part **42.2 g**, down
+from 49.9). The thumb keeps an independent module. The packing `xfail` is retired; **130 tests pass**. ⚠
+Open: the drop-in inserts are still per-finger and overlap the shared walls at the tightest pair — they
+need matching narrower/webbed cups.
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) | `96505cbf5bf642442b2ae5701e6a80bb66b83072bffc33dac84ae56671ab4609` |
+| `MANIFEST.sha256` (hashes of all 98 source + doc files) | `eba779014fba7bc89817dd6435b67f883048ffb1b9c563537d74298ce2ec8eb1` |
+
+Stamped: **2026-07-17T06:52:11Z** (UTC, submission time). Proofs: `VISION.md.ots`,
+`MANIFEST.sha256.ots`.
+
+⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
+the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+
+### Nineteenth — THE STRUT TIES IN DORSALLY, and the collar nests the insert (§8.15l rrr/sss)
 
 Two module bugs the one-sensor render exposed. **(1)** The truss tied into the frame **down by the palmar
 magnet** — the wrong side; it now lands on a **dorsal-lateral rim + distal brace** (the nail side,
@@ -30,11 +56,8 @@ module cut away beside the field-vs-motion signal — which is what caught all o
 | `VISION.md` (the disclosure) | `dbefe524ccec8f018bb48b96861a1250ef3ceeedc37b1d5a67424cdaa9c20ffd` |
 | `MANIFEST.sha256` (hashes of all 98 source + doc files) | `1915ea9d2a35fcbc56f10b14e9ba84b921f4cfce69dcad22c33080e4ef03af78` |
 
-Stamped: **2026-07-17T05:52:34Z** (UTC, submission time). Proofs: `VISION.md.ots`,
-`MANIFEST.sha256.ots`.
-
-⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
-the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+Stamped: **2026-07-17T05:52:34Z** (UTC, submission time). Proofs:
+`timestamps/VISION.md.2026-07-17a.ots`, `timestamps/MANIFEST.sha256.2026-07-17a.ots`.
 
 ### Eighteenth — CORRECTION: the sensor part was 31 pieces, not one solid; now tied into one (§8.15l rrr)
 

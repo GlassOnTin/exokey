@@ -50,7 +50,11 @@ def main():
     # base) that blends into the struts, plus the wire grooves back to a wrist MCU housing.
     anchors = [int(a) for a in z["anchors"]]
     btn = {f: int(i) for f, i in zip(z["fingers"], z["buttons"])}
-    mods = [wm.module_frame(h, q, f, mount=nodes[btn[f]]) for f in FINGERS]
+    # The THUMB keeps an independent module; the four LONG fingers share ONE cluster carrier (their
+    # independent modules were wider than the finger pitch and interpenetrated -- §8.15l).
+    LONG = ["index", "middle", "ring", "little"]
+    mods = [wm.module_frame(h, q, "thumb", mount=nodes[btn["thumb"]]),
+            wm.cluster_frame(h, q, LONG, {f: nodes[btn[f]] for f in LONG})]
     mboxes = [b for md in mods for b in md["boxes"]]
     mcaps = [c[0] for md in mods for c in md["caps"]]
     mcap_r = [c[1] for md in mods for c in md["caps"]]
