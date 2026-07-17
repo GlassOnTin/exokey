@@ -1,15 +1,17 @@
-"""THE FINGER-ENTRY ROUTE, shown — the channel each fingertip slides in by, and the mount clearing it.
+"""THE FINGER-ENTRY ROUTE, shown against the WHOLE gauntlet — struts, mounts and all.
 
     PYTHONPATH=. .venv/bin/python scripts/entry_view.py   ->  out/entry.html
 
-The complaint that started the rebuild was "I can't see the path the finger takes to the sensor."
-This shows exactly that: the long-finger cluster mount (solid), and for each finger the ENTRY SWEEP
-(`manufacture.entry`) — the distal-phalanx skin swept along the slide-in — as a translucent channel.
-A channel that passes clear of the mount is a finger that can get in; the numbers on the title are
-the measured clearances.
+The complaint that started the rebuild was "I can't see the path the finger takes to the sensor,"
+then "the render doesn't show the gauntlet — and the gauntlet is what blocks entry." Both are fixed
+here: the render is the WHOLE printed solid (`out/gauntlet.stl` — struts, the sensor mounts, the
+wrist housing), translucent, with each finger's ENTRY SWEEP (`manufacture.entry`) drawn as a channel,
+and the drop-in cradles it passes through. The clearance on the title is measured against **everything
+near the finger — the gauntlet struts AND the mount**, not the mount alone.
 """
 from __future__ import annotations
 
+import os
 import pickle
 
 import numpy as np
@@ -25,63 +27,87 @@ LONG = ["index", "middle", "ring", "little"]
 CH = {"index": "#1c7ed6", "middle": "#74b816", "ring": "#f08c00", "little": "#7048e8"}
 
 
+def _decimate(V, F, cell=0.0010):
+    key = np.floor((V - V.min(0)) / cell).astype(np.int64)
+    _, inv = np.unique(key, axis=0, return_inverse=True)
+    inv = np.asarray(inv).ravel()
+    n = int(inv.max()) + 1
+    nV = np.zeros((n, 3))
+    cnt = np.zeros(n)
+    np.add.at(nV, inv, V)
+    np.add.at(cnt, inv, 1)
+    nV /= cnt[:, None]
+    nF = inv[F]
+    good = (nF[:, 0] != nF[:, 1]) & (nF[:, 1] != nF[:, 2]) & (nF[:, 0] != nF[:, 2])
+    return nV, nF[good]
+
+
 def main():
+    import trimesh
+    if not os.path.exists("out/gauntlet.stl"):
+        raise SystemExit("run scripts/export_stl.py first (need out/gauntlet.stl)")
     h = hands()[50]
     x = pickle.load(open("out/final_design.pkl", "rb"))["x"]
     q = h.compose({f: posture(h, f, tp_of(x, f), tm_of(x, f), float(x.get(f"ab_{f}", 0.0)))
                    for f in FINGERS})
     z = np.load("out/final.npz", allow_pickle=True)
     nodes = np.array(z["nodes"], float)
+    bars = [tuple(b) for b in z["bars"]]
+    live = [int(e) for e in z["live"]]
+    rr = np.atleast_1d(np.asarray(z["radii"] if "radii" in z.files else 0.0009, float))
     btn = {f: int(i) for f, i in zip(z["fingers"], z["buttons"])}
-    mounts = {f: nodes[btn[f]] for f in LONG}
+    struts = [((nodes[bars[e][0]], nodes[bars[e][1]]), float(rr[k]) if rr.size > 1 else float(rr[0]))
+              for k, e in enumerate(live)]
 
-    m = mount.cluster_mesh(h, q, LONG, mounts)
-    grams = float(m.volume) * 1060 * 1000
-    V, F = np.asarray(m.vertices), np.asarray(m.faces)
+    # THE WHOLE PRINTED SOLID (struts + mounts + housing), decimated, normals fixed, translucent.
+    gm = trimesh.load("out/gauntlet.stl", process=True)
+    Vd, Fd = _decimate(np.asarray(gm.vertices), np.asarray(gm.faces))
+    md = trimesh.Trimesh(Vd, Fd, process=True)
+    md.fix_normals()
+    V, F = np.asarray(md.vertices), np.asarray(md.faces)
+    grams = float(gm.volume) * 1060 * 1000
 
     traces = []
-    sk = skin_trace(h, q, opacity=0.14)
+    sk = skin_trace(h, q, opacity=0.12)
     if sk is not None:
         traces.append(sk)
     traces.append(go.Mesh3d(x=V[:, 0], y=V[:, 1], z=V[:, 2], i=F[:, 0], j=F[:, 1], k=F[:, 2],
-                            color="#9aa5b1", opacity=0.55, flatshading=True,
+                            color="#9aa5b1", opacity=0.45, flatshading=True,
                             lighting=dict(ambient=0.55, diffuse=0.9, specular=0.15),
-                            name="cluster mount (PA frame)", hoverinfo="name", showlegend=True))
-
-    # the DROP-IN CRADLES (TPU), nested in the frame -- the cup the finger actually enters and presses.
-    for i, f in enumerate(LONG):
+                            name="the gauntlet (struts + mounts + housing)", hoverinfo="name",
+                            showlegend=True))
+    for i, f in enumerate(LONG):                        # the drop-in cradles the channels pass through
         im = mount.insert_mesh(h, q, f)
         iv, iff = np.asarray(im.vertices), np.asarray(im.faces)
         traces.append(go.Mesh3d(x=iv[:, 0], y=iv[:, 1], z=iv[:, 2], i=iff[:, 0], j=iff[:, 1], k=iff[:, 2],
-                                color="#e0a458", opacity=0.85, flatshading=True,
+                                color="#e0a458", opacity=0.9, flatshading=True,
                                 lighting=dict(ambient=0.55, diffuse=0.9, specular=0.15),
                                 name="drop-in cradle (TPU)" if i == 0 else None,
                                 showlegend=(i == 0), hoverinfo="name"))
 
     clr = {}
     for f in LONG:
-        p = mount.cluster_mount(h, q, LONG, mounts)
-        clr[f] = entry.entry_clearance(h, q, f, boxes=p["boxes"], caps=p["caps"], cyls=p["cyls"])
-        sweep = entry.entry_sweep(h, q, f, length=0.018, n=12)[::4]      # the channel, subsampled
-        traces.append(go.Scatter3d(
-            x=sweep[:, 0], y=sweep[:, 1], z=sweep[:, 2], mode="markers",
-            marker=dict(size=1.6, color=CH[f], opacity=0.35),
-            name=f"{f} entry channel", hoverinfo="name"))
+        fr, ins = mount.well_mount(h, q, f, nodes[btn[f]]), mount.well_insert(h, q, f)
+        clr[f] = entry.entry_clearance(h, q, f, boxes=fr["boxes"] + ins["boxes"],
+                                       caps=fr["caps"] + ins["caps"] + struts,
+                                       cyls=fr["cyls"] + ins["cyls"])          # vs struts AND mount
+        sweep = entry.entry_sweep(h, q, f, length=0.018, n=12)[::4]
+        traces.append(go.Scatter3d(x=sweep[:, 0], y=sweep[:, 1], z=sweep[:, 2], mode="markers",
+                                   marker=dict(size=1.6, color=CH[f], opacity=0.35),
+                                   name=f"{f} entry channel", hoverinfo="name"))
 
     worst = min(clr.values()) * 1e3
     fig = go.Figure(traces)
     fig.update_layout(
-        title=f"ExoKey — the finger-entry route.  Each coloured cloud is the channel a fingertip "
-              f"slides in by; it passes <b>clear of the mount</b> (worst clearance "
-              f"<b>{worst:+.1f} mm</b>).  Cluster mount {grams:.1f} g.",
-        scene=dict(aspectmode="data", xaxis_visible=False, yaxis_visible=False,
-                   zaxis_visible=False,
+        title=f"ExoKey — the finger-entry route, against the whole gauntlet.  Each coloured cloud is "
+              f"the channel a fingertip slides in by; measured against the struts AND the mounts it "
+              f"passes <b>clear</b> (worst <b>{worst:+.1f} mm</b>).  Whole part {grams:.1f} g.",
+        scene=dict(aspectmode="data", xaxis_visible=False, yaxis_visible=False, zaxis_visible=False,
                    camera=dict(eye=dict(x=-1.5, y=0.8, z=0.8))),
         margin=dict(l=0, r=0, t=70, b=0), template="plotly_white",
         legend=dict(x=0.02, y=0.98, bgcolor="rgba(255,255,255,0.6)"))
     fig.write_html("out/entry.html", include_plotlyjs="cdn")
-    import os
-    print("  entry clearances (mm):", {f: round(v * 1e3, 1) for f, v in clr.items()})
+    print("  entry clearances vs struts+mount (mm):", {f: round(v * 1e3, 1) for f, v in clr.items()})
     print(f"\nbrowser view: out/entry.html  ({os.path.getsize('out/entry.html')/1e6:.1f} MB)")
 
 

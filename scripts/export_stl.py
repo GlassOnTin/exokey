@@ -56,9 +56,38 @@ def main():
     cv_cyls = [c for md in mods for c in md["carve_cyls"]]
     cv_boxes = [c for md in mods for c in md["carve_boxes"]]
 
+    # WRIST MCU HOUSING + WIRE ROUTING -- far from the fingertips (they do not touch the entry route),
+    # but the housing must clear the wrist and the wires sink into the dorsal strut surfaces.
+    from scipy.spatial import cKDTree
+    Vsk, _ = skin(h, q)
+    stree = cKDTree(Vsk)
+    anchors = [int(a) for a in z["anchors"]]
+    live_nodes = np.array(sorted({i for e in live for i in bars[e]}))
+    anchor_c = nodes[np.array(anchors)].mean(axis=0)
+    outward = anchor_c - Vsk[stree.query(anchor_c)[1]]
+    hboxes, hcaps, hcav = mnt.housing(nodes[np.array(anchors)], outward, nodes[live_nodes])
+    seg_r = {frozenset(bars[e]): (float(rr[k]) if rr.size > 1 else float(rr[0]))
+             for k, e in enumerate(live)}
+    gcyls = []
+    for route in mnt.harness_routes(nodes, bars, live, btn, anchors):
+        for i, j in zip(route[:-1], route[1:]):
+            rs = seg_r.get(frozenset((i, j)), float(BAR_R))
+            off = max(rs - 0.0004, 0.0)                  # sink the 0.6 mm channel to breach the surface
+            pa = nodes[i] + off * ((nodes[i] - Vsk[stree.query(nodes[i])[1]]) /
+                                   (np.linalg.norm(nodes[i] - Vsk[stree.query(nodes[i])[1]]) + 1e-9))
+            pb = nodes[j] + off * ((nodes[j] - Vsk[stree.query(nodes[j])[1]]) /
+                                   (np.linalg.norm(nodes[j] - Vsk[stree.query(nodes[j])[1]]) + 1e-9))
+            gcyls.append((pa, pb, 0.0006))
+    mboxes += hboxes
+    mcaps += [c[0] for c in hcaps]
+    mcap_r += [c[1] for c in hcaps]
+    cv_cyls += gcyls
+    cv_boxes += hcav
+
     allstruts = struts + mcaps
     allr = (list(rr) if rr.size > 1 else [float(rr[0])] * len(struts)) + list(mcap_r)
-    print(f"  {src}: {len(struts)} struts + thumb well + long-finger cluster")
+    print(f"  {src}: {len(struts)} struts + thumb well + long-finger cluster + housing + "
+          f"{len(gcyls)} wire-groove segs")
     print(f"  rod r = {rr.min()*1000:.2f}-{rr.max()*1000:.2f} mm, fillet = {BLEND*1000:.1f} mm, "
           f"voxel = {VOXEL*1000:.1f} mm")
 

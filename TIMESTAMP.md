@@ -8,11 +8,36 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** twenty-one times. **All twenty-two stamps stand**, and each
+The disclosure has been **extended and re-anchored** twenty-two times. **All twenty-three stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — THE DROP-IN CRADLE PASSES THE ENTRY CHECK TOO (§8.15l ppp)
+### Current — THE ENTRY CHECK NOW COVERS THE GAUNTLET STRUTS, HOUSING AND WIRES (§8.15l ppp/qqq)
+
+Two gaps closed. **(1)** The finger-entry check ran only against the mount, not the **gauntlet
+struts** — but the truss wraps near the fingertips, so a strut across the slide-in would block just as
+a mount wall would. Now checked against the struts too
+(`test_the_finger_enters_past_the_gauntlet_struts_too`): the nearest strut sits **+3.2 mm** off the
+entry sweep, so the mount's guide flanks stay the binding constraint — *verified, not assumed*. And
+`out/entry.html` now renders the **whole gauntlet** (struts + mounts + housing) so the path is shown
+against what could block it, not the mount in isolation. **(2)** The **wrist MCU housing + wire
+routing**, dropped in the entry-first rebuild, are meshed back in (`mount.housing`,
+`mount.harness_routes`): the housing sits **proud of the wrist** (clears 1.7 mm, necked to live-strut
+nodes), the wires in **dorsal grooves** (264 segments) — both far from the fingertips, neither touches
+the entry route. One watertight solid, **41.1 g**. 131 tests pass.
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) | `cfd4640fa6d4c8eecf35802cd7830df973e9463cb5ce61209b27df0986e32fe3` |
+| `MANIFEST.sha256` (hashes of all 98 source + doc files) | `d87fd04bf8c640620421350f69a1cc2c1b953dc66eb0d09169ae857b7013c459` |
+
+Stamped: **2026-07-17T09:43:25Z** (UTC, submission time). Proofs: `VISION.md.ots`,
+`MANIFEST.sha256.ots`.
+
+⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
+the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+
+### Twenty-second — THE DROP-IN CRADLE PASSES THE ENTRY CHECK TOO (§8.15l ppp)
 
 The 21st anchor rebuilt the sensor FRAME entry-first. This adds the **drop-in TPU cradle**
 (`mount.well_insert`) — the cup the finger actually presses, carrying the magnet on the §8.15g dome —
@@ -27,11 +52,8 @@ frame (21st) are unchanged.
 | `VISION.md` (the disclosure) | `0b9de23253f1d4427a9efe1d4574e63ae28ae4b0b83f78358fcbfa9504f15a5d` |
 | `MANIFEST.sha256` (hashes of all 98 source + doc files) | `d947d09cd78d3571e925f2b903e86503cdbc38c66d5d820c2e873594c2b6654b` |
 
-Stamped: **2026-07-17T08:39:04Z** (UTC, submission time). Proofs: `VISION.md.ots`,
-`MANIFEST.sha256.ots`.
-
-⚠ `TIMESTAMP.md` is deliberately **not** in the manifest. It is written *after* the stamp — it holds
-the stamp's own hashes and time — so including it would guarantee `sha256sum -c` failed forever.
+Stamped: **2026-07-17T08:39:04Z** (UTC, submission time). Proofs:
+`timestamps/VISION.md.2026-07-17d.ots`, `timestamps/MANIFEST.sha256.2026-07-17d.ots`.
 
 ### Twenty-first — THE FINGER-ENTRY ROUTE, and the mount rebuilt to it (§8.15l ppp)
 

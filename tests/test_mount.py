@@ -88,3 +88,26 @@ def test_the_assembled_frame_and_insert_let_the_finger_in(posed):
         fr, ins = mount.well_mount(h, q, f, mounts[f]), mount.well_insert(h, q, f)
         assert entry.enters_freely(h, q, f, boxes=fr["boxes"] + ins["boxes"],
                                    caps=fr["caps"] + ins["caps"], cyls=fr["cyls"] + ins["cyls"]), f
+
+
+def _gauntlet_struts():
+    z = np.load("out/final.npz", allow_pickle=True)
+    nodes = np.array(z["nodes"], float)
+    bars = [tuple(b) for b in z["bars"]]
+    live = [int(e) for e in z["live"]]
+    rr = np.atleast_1d(np.asarray(z["radii"] if "radii" in z.files else 0.0009, float))
+    return [((nodes[bars[e][0]], nodes[bars[e][1]]), float(rr[k]) if rr.size > 1 else float(rr[0]))
+            for k, e in enumerate(live)]
+
+
+def test_the_finger_enters_past_the_gauntlet_struts_too(posed):
+    """The entry route must clear the GAUNTLET STRUTS as well as the mount -- the truss wraps near the
+    fingertips, and a strut across the slide-in would block the finger just as a mount wall would. So
+    the check is run against frame + cradle + every live strut, not the mount alone."""
+    h, q, mounts, fingers = posed
+    struts = _gauntlet_struts()
+    for f in fingers:
+        fr, ins = mount.well_mount(h, q, f, mounts[f]), mount.well_insert(h, q, f)
+        assert entry.enters_freely(h, q, f, boxes=fr["boxes"] + ins["boxes"],
+                                   caps=fr["caps"] + ins["caps"] + struts,
+                                   cyls=fr["cyls"] + ins["cyls"]), f

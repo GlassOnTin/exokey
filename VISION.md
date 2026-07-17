@@ -2159,12 +2159,16 @@ mount's exact primitive SDF, distinguishing a **block** (material *inside* the e
 it: per finger a cup **open proximally** (flanks beside, floor below), the **sensor stack palmar**
 (below the finger), the **strut on the dorsal-lateral edge** — nothing across the slide-in. The four
 long fingers share **one cluster** with shared flanks; the thumb keeps an independent well. Every
-finger **enters freely** (measured **≥ 3.1 mm** clearance; `tests/test_entry.py`, `test_mount.py`),
-and the whole part is **one watertight solid, 36.0 g**. The **drop-in TPU cradle** — the magnet on the
-§8.15g dome, the cup the finger actually presses — passes the *same* entry check (its cup is open
-proximally too, nail hood and all): individually and **assembled with the frame** (both in
-`test_mount.py`). `out/entry.html` shows each finger's slide-in channel passing clear of the frame and
-the nested cradle.
+finger **enters freely** (measured **≥ 3.1 mm** clearance; `tests/test_entry.py`, `test_mount.py`).
+⚠ And the check is run against the **gauntlet struts too**, not the mount alone — the truss wraps near
+the fingertips, so a strut across the slide-in would block just as a mount wall would. Measured, the
+nearest strut sits **+3.2 mm** off the entry sweep, so the mount's own guide flanks stay the binding
+constraint; but that is now *verified* (`test_the_finger_enters_past_the_gauntlet_struts_too`), not
+assumed. The **drop-in TPU cradle** — the magnet on the §8.15g dome, the cup the finger actually
+presses — passes the *same* check (its cup is open proximally too, nail hood and all): individually and
+**assembled with the frame**. The whole printed solid — struts, mounts and wrist housing — is **one
+watertight body, 41.1 g**, and `out/entry.html` shows each finger's channel passing clear of *all* of
+it, with the nested cradles it slides into.
 
 **(qqq) THE HARNESS AND THE MCU (concept).** Five sensors on the **nRF52840's two hardware I²C
 buses** using the TLI493D-W2BW address variants — no mux, no chip-select fan-out (confirm the exact
@@ -2172,7 +2176,11 @@ address count against the ordered variant). Fine wires route to a **XIAO nRF5284
 the wrist. A duty-cycled power **sketch** (SPEC/estimate): ~1.5 mA at a 500 Hz scan → ~**68 h** on
 100 mAh. Firmware is **outlined, not built**: boot baseline → 500 Hz scan → project ΔB onto the
 per-well calibrated 5×3 map → per-direction Schmitt (on 60 % / off 40 %) → idle-gated baseline
-tracker → `action_map` → BLE HID. The physical wire routing is part of the mount geometry (ppp).
+tracker → `action_map` → BLE HID. **The physical routing is now meshed in** (`manufacture/mount.py`):
+the **wrist housing** (XIAO + LiPo) sits *proud* of the wrist (thin axis along the skin normal, lifted
+off — clears it by 1.7 mm, necked to the nearest live-strut nodes) and the **wires** run in re-entrant
+grooves sunk into the dorsal strut surfaces (a shortest-path route from each sensor to the wrist,
+264 channel segments) — both far from the fingertips, so neither touches the entry route.
 
 **(rrr) ⚠ WHAT IS NOT YET SETTLED (read-out).**
 - **The dome membrane (~0.32 mm) is at the FDM single-perimeter floor** — it needs a 0.25 mm nozzle

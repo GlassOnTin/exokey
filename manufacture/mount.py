@@ -199,3 +199,67 @@ def well_insert(h, q, finger, *, nail_hood=True):
 
 def insert_mesh(h, q, finger, *, voxel=3e-4, nail_hood=True):
     return _mesh(well_insert(h, q, finger, nail_hood=nail_hood), voxel=voxel)
+
+
+def _unit(v):
+    v = np.asarray(v, float)
+    return v / (np.linalg.norm(v) + 1e-12)
+
+
+def housing(anchor_nodes, outward, live_nodes, *, xiao=(0.021, 0.0178, 0.0035),
+            lipo=(0.020, 0.012, 0.006), clear=0.003, wall=0.0015):
+    """The wrist XIAO nRF52840 + LiPo box, sitting PROUD of the wrist (thin axis along the skin
+    normal, lifted off), necked to the nearest LIVE-strut nodes so it cannot detach. Far from the
+    fingertips -- it does not touch the finger-entry route -- but it must clear the wrist and attach.
+    Returns (boxes, caps, carve_boxes)."""
+    A = np.asarray(anchor_nodes, float)
+    C = A.mean(axis=0)
+    z = _unit(outward)
+    x = np.cross(z, np.array([0.0, 0.0, 1.0]))
+    if np.linalg.norm(x) < 1e-6:
+        x = np.cross(z, np.array([0.0, 1.0, 0.0]))
+    x = _unit(x)
+    y = np.cross(z, x)
+    R = np.vstack([x, y, z])
+    half = np.array([0.5 * xiao[0], 0.5 * (xiao[1] + lipo[1]), 0.5 * max(xiao[2], lipo[2])]) + wall
+    center = C + (clear + half[2]) * z
+    boxes = [(center, R, half)]
+    L = np.asarray(live_nodes, float)
+    near = L[np.argsort(np.linalg.norm(L - center, axis=1))[:3]]
+    caps = [((n, center), STRUT_R) for n in near]
+    cav = []
+    for comp, sy in ((xiao, +1.0), (lipo, -1.0)):
+        ch = 0.5 * np.asarray(comp, float)
+        cav.append((center + sy * 0.25 * (xiao[1] + lipo[1]) * y + (half[2] - ch[2]) * z, R, ch))
+    return boxes, caps, cav
+
+
+def harness_routes(nodes, bars, live, btn, anchors):
+    """Wire routes: the shortest path over live struts from each sensor (button) to its nearest wrist
+    anchor. Returns [list of node indices]. The caller sinks each into a re-entrant surface groove."""
+    from scipy.sparse import csr_matrix
+    from scipy.sparse.csgraph import dijkstra
+
+    X = np.asarray(nodes, float)
+    rows, cols, w = [], [], []
+    for e in live:
+        i, j = bars[e]
+        d = float(np.linalg.norm(X[i] - X[j]))
+        rows += [i, j]
+        cols += [j, i]
+        w += [d, d]
+    G = csr_matrix((w, (rows, cols)), shape=(len(X), len(X)))
+    anch = list(anchors)
+    routes = []
+    for b in btn.values():
+        dist, pred = dijkstra(G, indices=b, return_predecessors=True)
+        reach = [(dist[a], a) for a in anch if np.isfinite(dist[a])]
+        if not reach:
+            continue
+        _, tgt = min(reach)
+        path, k = [tgt], tgt
+        while k != b and pred[k] >= 0:
+            k = int(pred[k])
+            path.append(k)
+        routes.append(path)
+    return routes
