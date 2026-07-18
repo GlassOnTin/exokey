@@ -129,6 +129,60 @@ def test_the_finger_enters_past_the_gauntlet_struts_too(posed):
                                    cyls=fr["cyls"] + ins["cyls"]), f
 
 
+def _impact_struts():
+    """The impact-aware structure's struts (scripts/impact_opt.py -> out/impact_opt.npz)."""
+    if not os.path.exists("out/impact_opt.npz"):
+        return None
+    z = np.load("out/impact_opt.npz", allow_pickle=True)
+    nodes = np.array(z["nodes"], float)
+    bars = [tuple(b) for b in z["bars"]]
+    live = [int(e) for e in z["live"]]
+    rr = np.atleast_1d(np.asarray(z["radii"] if "radii" in z.files else 0.0009, float))
+    return [((nodes[bars[e][0]], nodes[bars[e][1]]), float(rr[k]) if rr.size > 1 else float(rr[0]))
+            for k, e in enumerate(live)]
+
+
+def test_the_impact_bone_struts_clear_the_finger_entry_too(posed):
+    """The broad, knock-resisting impact grow must ALSO leave every finger's slide-in open -- the
+    entry constraint added to scripts/impact_opt.py. Regression for the pre-8.15l impact structure,
+    grown before the entry route was modelled, whose struts crossed the fingertips."""
+    struts = _impact_struts()
+    if struts is None:
+        pytest.skip("needs out/impact_opt.npz (run scripts/impact_opt.py)")
+    h, q, _mounts, fingers = posed
+    for f in fingers:
+        assert entry.enters_freely(h, q, f, caps=struts), f
+
+
+def test_the_impact_bone_keeps_its_free_struts_off_the_flesh(posed):
+    """The knock-resisting impact grow used to hug the fingers at ~1.1 mm -- its thick knock-struts,
+    sized up to R_MAX and then relaxed toward the skin, ate the grow's clearance floor. The fix
+    (scripts/impact_opt.py) makes the node-relaxation FLESH-AWARE: it raises each node's skin-band floor
+    by the rod radius so the relaxation MOVES the free struts off the finger (toward a 3 mm standoff)
+    instead of deleting them -- the struts carry the 50 N knock, and deleting them fails it. So the BULK
+    clears 3 mm while the knock survives, and only a few chord-dip residuals (a straight member dipping
+    over a convex finger) stay near 2 mm. Button struts are exempt: the sensor mount touches the finger
+    by design. Regression for the tight-hug 'struts through the fingers' look."""
+    from hand.flesh import skin
+    from manufacture.mesh import _seg_dist
+    if not os.path.exists("out/impact_opt.npz"):
+        pytest.skip("needs out/impact_opt.npz (run scripts/impact_opt.py)")
+    z = np.load("out/impact_opt.npz", allow_pickle=True)
+    nodes = np.array(z["nodes"], float)
+    bars = [tuple(b) for b in z["bars"]]
+    live = [int(e) for e in z["live"]]
+    rr = np.atleast_1d(np.asarray(z["radii"], float))
+    buttons = {int(b) for b in z["buttons"]}
+    h, q, _m, _f = posed
+    V = np.asarray(skin(h, q, labels=True)[0])
+    free = np.array([float(_seg_dist(V, nodes[bars[e][0]], nodes[bars[e][1]]).min()) - float(rr[k])
+                     for k, e in enumerate(live)
+                     if bars[e][0] not in buttons and bars[e][1] not in buttons])
+    assert free.min() >= 1.8e-3, f"a free strut hugs the flesh at {free.min()*1e3:.2f} mm (< 1.8 mm)"
+    assert np.median(free) >= 3.0e-3, \
+        f"flesh-aware relaxation did not push the bulk off the skin (median {np.median(free)*1e3:.2f} mm < 3 mm)"
+
+
 def test_the_harness_bus_is_a_shorter_shared_tree(posed):
     """The minimal-copper harness (§8.15l qqq-2): a SHARED bus (Steiner tree over the struts) uses less
     conductor than five point-to-point runs, still reaches every sensor, and lays only in live struts."""

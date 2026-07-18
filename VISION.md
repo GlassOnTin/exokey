@@ -204,7 +204,7 @@ directions — only hardware and thumb *time*.)
 
 ## 4. Design gates
 
-Each is a pass/fail test defined *before* the work. `pytest tests/ -q` — **137 passing** (run
+Each is a pass/fail test defined *before* the work. `pytest tests/ -q` — **139 passing** (run
 `make test` for the live count).
 
 ### Passed
@@ -2116,6 +2116,27 @@ per-member energy density (½·uᵀk u / L) falls out with no second solve. Meas
 prune time"; that was pessimistic — it was ~20%, because a prune step is dominated by the OC's own sizing
 solves, not the one ranking solve.
 
+**(ggg) THE IMPACT GROW HUGGED THE FINGERS, AND 3 mm CLEARANCE FAILS THE KNOCK.** The impact render
+looked like struts passed *through* the fingers. Measured (`scripts/impact_opt.py`): they did not —
+every strut cleared the flesh — but the broad knock-bearing grow hugged it at **~1.1 mm** against the
+main design's **~3.4 mm**. Cause: the grow's clearance floor (SEG_CLEAR·hug = 3 mm) is checked at the
+*nominal* rod radius, but the impact sizer fattens struts to R_MAX (2.5 mm) and then node-relaxation
+pulls them toward the skin, so the fat members ate the standoff. The entry-route check (§8.15l) passes
+*vacuously* here — the slide-in is clear; the binding quantity is flesh standoff, not entry. Re-imposing
+it at the *sized* radius has two levers, and only one is cheap. **Removing** the hugging struts to reach
+3 mm fails the knock — measured, dropping them drops the design below SF 2 ("no design survived") —
+because the knock lands at the buttons, which sit near the fingers, so those struts *are* the load path
+(2 mm was the most that survived removal alone). The cheap lever is **moving** them: make the node-
+relaxation **flesh-aware** — raise each free node's skin-band floor by its rod radius (`relax_nodes` now
+takes a per-node `hug`), so the form-finding pushes the fat struts *off* the finger toward the standoff
+instead of pinning them near it. That costs the knock nothing (it keeps the strut), and it does the bulk
+of the work: **95 % of free struts now clear ≥ 3 mm (median 5.9 mm)** while the knock holds at 36 MPa
+(714 struts, 24.2 g, SF 2). `clearance_prune` then culls only the residuals still under a gentler 2 mm
+floor — a handful of **chord dips** (a straight member dipping over a convex finger), which relaxation
+cannot remove without deleting the member. Free-strut minimum ≈ 2.0 mm; the **button struts stay close
+(~1.5 mm) by design — the sensor mount touches the finger.** Guarded by
+`test_the_impact_bone_keeps_its_free_struts_off_the_flesh` (min ≥ 1.8 mm and median ≥ 3 mm).
+
 ### 8.15l THE READ-OUT — the field a moving magnet presents to the Hall, and the entry-first mount that holds it
 
 §8.15g sized the restoring **spring** (a TPU dome, k ≈ 131 N/m) but explicitly deferred the
@@ -2263,7 +2284,7 @@ opt/        problem.py   pymoo NSGA-II, 9 hard constraints
             merge.py     merge Pareto fronts across seeds
 viz/        scene.py     browser views (Plotly, self-contained HTML)
 cloud/      hetzner.sh   burst the optimisation onto a cloud box, then delete it
-tests/      137 gates
+tests/      139 gates
 ```
 
 Everything here is ours and freely publishable. The muscle-effort model, the population

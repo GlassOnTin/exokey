@@ -1023,6 +1023,11 @@ def relax_nodes(fr, U, nodes, bars, live, buttons, anchor_k, skin_V, skin_N,
 
     layer = float(LAYER) if layer is None else layer
     X = np.array(nodes, float)
+    # `hug` (node-centre-to-skin band floor) may be a SCALAR or a PER-NODE array. The array form lets a
+    # caller push individual nodes further off the skin -- e.g. so a node carrying a fat strut keeps its
+    # SURFACE clear of the flesh (impact_opt sets hug_i = standoff + rod radius), moving the strut off
+    # the finger instead of deleting it. Scalar broadcasts to every node (the default, unchanged).
+    hug = np.full(len(X), float(hug)) if np.ndim(hug) == 0 else np.asarray(hug, float)
     held = set(buttons.values()) | set(anchor_k)
     lb = [bars[e] for e in live]
     tree = cKDTree(skin_V)
@@ -1058,5 +1063,5 @@ def relax_nodes(fr, U, nodes, bars, live, buttons, anchor_k, skin_V, skin_N,
         lo, hi = hug, hug + layer
         bad = (d < lo) | (d > hi)
         if bad.any():
-            X[bad] = skin_V[k[bad]] + out[bad] * np.clip(d[bad], lo, hi)[:, None]
+            X[bad] = skin_V[k[bad]] + out[bad] * np.clip(d[bad], lo[bad], hi[bad])[:, None]
     return X

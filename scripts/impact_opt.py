@@ -33,10 +33,13 @@ import numpy as np
 from design.params import DEFLECTION_MAX
 from design.qwerty import used_actions
 from design.vector import evaluate, posture, tm_of, tp_of
+from hand.flesh import skin
 from hand.myohand import FINGERS
+from manufacture.entry import TOUCH_TOL, entry_sweep
+from manufacture.mesh import _seg_dist
 from opt.problem import hands
 from structure.frame import MATERIALS, hand_axes
-from structure.lattice import STRAP_K, grow, ground, load_cases
+from structure.lattice import STRAP_K, connected, grow, ground, load_cases
 from structure.sizing import Sizer, size_and_prune
 
 KNOCK_N = 50.0
@@ -46,6 +49,22 @@ R_PRINT = 2.5e-4
 R_MAX = 2.5e-3
 A_ANCHOR = 1.0e-4
 CACHE = "out/grow_pair.npz"
+# Flesh standoff the SIZED (free, non-button) struts must keep from the skin. The grow enforces
+# SEG_CLEAR*hug = 3 mm but only at the NOMINAL rod radius (structure.lattice), so the broad impact grow
+# -- which sizes struts up to R_MAX and then RELAXES the nodes toward the skin -- ate the standoff and
+# hugged the fingers at ~1 mm (vs the main design's ~3.4 mm). clearance_prune re-imposes it at the
+# ACTUAL sized radius. It subsumes the entry route (the finger IS the flesh).
+# The grow's own 3 mm floor, now reached by MOVING the struts (flesh-aware node-relaxation) instead of
+# DELETING them: removal alone dropped the design below the SF-2 knock ("no design survived", 2 mm was
+# the most it survived), because the hugging struts carry the knock (it lands at the buttons, near the
+# fingers). The relaxation raises each free node's band floor to standoff + rod radius, pushing the
+# struts off the finger while keeping them; clearance_prune only mops up the chord-dip residuals.
+# Button struts are exempt throughout: the sensor mount touches the finger by design.
+FLESH_STANDOFF = 3.0e-3
+# Removal floor for clearance_prune. The relaxation aims for FLESH_STANDOFF but CANNOT clear a chord
+# whose midpoint dips over a convex finger; those residuals are load-bearing (the knock is at its
+# SF-2 limit) so deleting them to reach 3 mm fails it. Cull only what stays below this gentler floor.
+REMOVE_FLOOR = 2.0e-3
 
 
 def main():
@@ -86,6 +105,39 @@ def main():
         bars = [tuple(b) for b in bars_k]                 # same ground bars for both grows
         np.savez(CACHE, nodes_k=nodes_k, nodes_i=nodes_i, bars=np.array(bars),
                  live_k=np.array(live_k), live_i=np.array(live_i))
+
+    # ── ENTRY CONSTRAINT (§8.15l): no strut may block a finger's slide-in route ───────────────────
+    # A strut of radius r blocks finger f iff its centreline comes within r of f's swept phalanx skin
+    # (manufacture.entry). Screening at R_MAX keeps only struts that clear EVERY finger at ANY sized
+    # radius (r <= R_MAX), so the sized result passes entry.enters_freely -- the same gate the main
+    # design already meets (tests/test_mount.py). The impact grow is deliberately broad and redundant
+    # (a knock wants many members sharing the load), so dropping the few that cross a fingertip
+    # re-routes the load onto their neighbours rather than leaving a hole. Applied per node set, so
+    # the relaxed geometry is re-screened after form-finding moves the nodes.
+    sweeps = [entry_sweep(ref, q, f) for f in FINGERS]
+
+    def entry_clean(nodes, live):
+        return [e for e in live
+                if all(_seg_dist(sw, nodes[bars[e][0]], nodes[bars[e][1]]).min() >= R_MAX - TOUCH_TOL
+                       for sw in sweeps)]
+
+    _nk = len(live_k)
+    live_k = entry_clean(nodes_k, live_k)
+    print(f"entry constraint: keypress topology {_nk}->{len(live_k)} struts "
+          f"({_nk - len(live_k)} crossed a finger route)", flush=True)
+
+    # ── FLESH STANDOFF -- the constraint that actually binds ──────────────────────────────────────
+    # The entry check above passes vacuously here (the slide-in routes are already clear). What the eye
+    # catches is the SIZED struts hugging the flesh (~1 mm) far tighter than the main design (~3.4 mm),
+    # because the grow's clearance floor is set at the nominal rod radius, not the sized one. `_surf`
+    # is a strut's SURFACE-to-skin gap at its sized radius; clearance_prune (below) drops any strut
+    # under FLESH_STANDOFF and re-sizes, so the load re-routes onto members with room.
+    from scipy.spatial import cKDTree
+    _skin_tree = cKDTree(np.asarray(skin(ref, q, labels=True)[0]))
+
+    def _surf(nodes, i, j, r):
+        pts = np.linspace(nodes[i], nodes[j], 8)
+        return float(_skin_tree.query(pts)[0].min()) - r
 
     cases = load_cases(ref, q, btn, wired=wired)
     akc = {i: 1.0 / (1.0 / ak[i] + 1.0 / (E_TPU * A_ANCHOR / 0.002)) for i in ak}
@@ -162,8 +214,8 @@ def main():
     # Prune it to 695 struts and it gets HEAVIER (29.4 -> 31.0 g), because fewer members sharing the
     # same 50 N blow must each be thicker; below ~700 struts the knock fails outright. A knock WANTS a
     # broad, redundant skeleton, so the minimum-mass answer IS the dense one.
-    def co_size(nodes, tag):
-        sb, stress, mass = prep(nodes, live_i)
+    def co_size(nodes, live, tag):
+        sb, stress, mass = prep(nodes, live)
         sig0, _w0 = stress(np.full(len(sb), 9e-4))       # the knock's load path on the dense grow
         rlo = fsd(np.full(len(sb), 9e-4), sig0)
         rlo[rlo < R_PRINT * 1.5] = R_PRINT
@@ -184,6 +236,51 @@ def main():
             print(f"  {tag}: {len(bst[0])} struts, {bst[2]*1e3:.1f} g, {bst[3]*1e6:.0f} um, "
                   f"knock {bst[4]/1e6:.0f} MPa", flush=True)
         return bst, sb
+
+    bnodes = {int(btn[f]) for f in FINGERS}     # the sensor buttons: the knock LANDS here, so their
+    #                                             struts are load-critical AND the mount sits against
+    #                                             the finger anyway -- never drop a strut touching one.
+
+    def clearance_prune(nodes, live, tag):
+        """co_size, then drop every NON-button strut whose SIZED surface comes within REMOVE_FLOOR of
+        the skin and re-size, until the structure clears -- the residual cull AFTER the flesh-aware
+        relaxation has already pushed the bulk toward FLESH_STANDOFF. The redundant impact grow re-
+        routes the load onto members with room. Removal is connectivity-guarded (never severs a button
+        from the anchors) and the knock is re-checked by co_size each pass, so a design that cannot
+        clear AND survive is reported (best=None), not silently shipped."""
+        cur = list(live)
+        best = sb = None
+        for it in range(8):
+            best, sb = co_size(nodes, cur, tag if it == 0 else f"{tag} +clear{it}")
+            if best is None:
+                return best, sb
+            clr = {cur[e]: _surf(nodes, sb[e][0], sb[e][1], float(best[1][k]))
+                   for k, e in enumerate(best[0])}
+            viol = [b for k, e in enumerate(best[0]) for b in [cur[e]]
+                    if clr[b] < REMOVE_FLOOR and sb[e][0] not in bnodes and sb[e][1] not in bnodes]
+            if not viol:
+                nonb = [clr[cur[e]] for k, e in enumerate(best[0])
+                        if sb[e][0] not in bnodes and sb[e][1] not in bnodes]
+                nb = sum(1 for k, e in enumerate(best[0])
+                         if (sb[e][0] in bnodes or sb[e][1] in bnodes) and clr[cur[e]] < REMOVE_FLOOR)
+                print(f"    flesh clear: free struts >= {(min(nonb) if nonb else 0)*1e3:.2f} mm off the skin"
+                      f"{'' if it == 0 else f' (after {it} prune(s))'}"
+                      f"{f'; {nb} button strut(s) sit closer -- the mount touches the finger' if nb else ''}",
+                      flush=True)
+                return best, sb
+            drop = set()                                    # greedily drop the ones that keep buttons anchored
+            for b in sorted(viol, key=lambda b: clr[b]):
+                trial = [e for e in cur if e not in drop and e != b]
+                if connected(bars, trial, ak, btn, len(nodes))[1]:
+                    drop.add(b)
+            if not drop:
+                print(f"    {len(viol)} flesh-violating struts are all load-critical (removing any "
+                      f"severs a button) -- keeping them", flush=True)
+                return best, sb
+            cur = [e for e in cur if e not in drop]
+            print(f"    {len(drop)} struts within {REMOVE_FLOOR*1e3:.0f} mm of flesh -> drop, "
+                  f"re-size ({len(cur)} left)", flush=True)
+        return best, sb
 
     def kink_stats(nodes, sb, lb):
         """(median best-through-turn deg, count of kinks > 75 deg) -- the shape-convergence measure."""
@@ -208,7 +305,12 @@ def main():
         return float(np.median(t)), int((t > 75).sum())
 
     print("IN-THE-LOOP -- impact topology, sized for gate AND knock:", flush=True)
-    best, sb_i = co_size(nodes_i, "as grown")
+    _li = entry_clean(nodes_i, live_i)
+    print(f"entry constraint: impact topology {len(live_i)}->{len(_li)} struts "
+          f"({len(live_i) - len(_li)} crossed a finger route)", flush=True)
+    # Just SIZE the as-grown structure -- the flesh standoff comes from the flesh-aware RELAXATION
+    # below (push the struts off the finger), not from removing them here.
+    best, sb_i = co_size(nodes_i, _li, "as grown")
 
     # ---- SHAPE CONVERGENCE: RELAX THE NODES, then re-size. Every REPORTED structure gets this --
     # grow does it during the search, but the dense impact grow STARVED it, leaving ~8% of nodes
@@ -227,13 +329,31 @@ def main():
         rr0 = float(BAR_R)
         lbars = [sb_i[e] for e in best[0]]
         k0 = kink_stats(nodes_i, sb_i, best[0])
+        # FLESH-AWARE BAND. The relaxation drifts free nodes toward axial equilibrium inside a band a
+        # fixed `hug` off the skin -- and with a uniform hug it hugged the fingers (the band floor is
+        # the node CENTRE, so a fat strut's surface sits `radius` closer). Raise the floor PER NODE to
+        # standoff + that node's fattest strut radius, so the relaxation pushes the free struts off the
+        # finger to clear FLESH_STANDOFF at the SURFACE -- keeping the strut (and its knock load path)
+        # instead of deleting it. Buttons/anchors are held, so their struts still touch (by design).
+        node_hug = np.full(len(nodes_i), 0.004)
+        rmax_at: dict = {}
+        for k, e in enumerate(best[0]):
+            for n in sb_i[e]:
+                rmax_at[n] = max(rmax_at.get(n, 0.0), float(best[1][k]))
+        for n, r in rmax_at.items():
+            node_hug[n] = max(0.004, FLESH_STANDOFF + r)
         Xr = nodes_i.copy()
         for _ in range(15):
             fr = Frame(Xr, lbars, E, E / 2.6, np.pi * rr0 ** 2, np.pi * rr0 ** 4 / 4,
                        np.pi * rr0 ** 4 / 2, spring={i: k for i, k in akc.items()})
             U = fr.solve([c[2] for c in cases])
-            Xr = relax_nodes(fr, U, Xr, lbars, list(range(len(lbars))), btn, akc, Vs, Ns, hug=0.004)
-        best_r, sb_r = co_size(Xr, "relaxed  ")
+            Xr = relax_nodes(fr, U, Xr, lbars, list(range(len(lbars))), btn, akc, Vs, Ns, hug=node_hug)
+        # the relaxation pushed the bulk off the flesh; clearance_prune mops up only the residuals that
+        # still hug below REMOVE_FLOOR (a straight chord between two cleared nodes dips at its midpoint
+        # over a convex finger). REMOVE_FLOOR < FLESH_STANDOFF on purpose: the knock sits near its SF-2
+        # limit, so removing a load-bearing strut is expensive -- the relaxation (which MOVES struts,
+        # for free) does the bulk of the clearing, and removal only culls the few that stay truly close.
+        best_r, sb_r = clearance_prune(Xr, entry_clean(Xr, live_i), "relaxed  ")
         if best_r is not None:
             k1 = kink_stats(Xr, sb_r, best_r[0])
             print(f"  kinks > 75 deg: {k0[1]} -> {k1[1]}   median through-turn "

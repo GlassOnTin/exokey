@@ -144,7 +144,7 @@ The structure is the finished part of this project. These are **not**:
 ## Errata (numbers that disagree across the repo)
 
 - **Gate count.** The `README` historically said "109" and `VISION.md` said "57"; the suite
-  currently collects **137**. `make test` is the authoritative, live count.
+  currently collects **139**. `make test` is the authoritative, live count.
 - **Stale file names.** `VISION.md §8.15l` cites `manufacture/wellmod.py`, `scripts/coupon.py`,
   and `tests/test_wellmod.py` — none of which exist. Their logic was consolidated into
   `manufacture/readout.py`, `manufacture/mount.py`, and `manufacture/entry.py` (tested by
