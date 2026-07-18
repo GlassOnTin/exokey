@@ -8,11 +8,36 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** twenty-five times. **All twenty-six stamps stand**, and each
+The disclosure has been **extended and re-anchored** twenty-six times. **All twenty-seven stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — THE HARNESS BUS IS NOW EXACT (Dreyfus–Wagner), provably minimal (§8.15l qqq-2)
+### Current — THE IMPACT BONE HELD OFF THE FINGERS by a flesh-aware relaxation (§8.15k ggg)
+
+The impact-aware structure looked like its struts passed *through* the fingers. Measured, they did
+not — every strut cleared the flesh — but the broad knock-bearing grow hugged it at **~1.1 mm**
+against the main design's ~3.4 mm, because the grow's clearance floor is checked at the *nominal* rod
+radius while the impact sizer fattens struts to R_MAX and node-relaxation then pulls them toward the
+skin. The novelty disclosed here is the fix: those hugging struts **carry the 50 N knock** (it lands at
+the buttons, near the fingers), so *deleting* them to win clearance fails SF 2 — **2 mm is the most
+removal alone survives**. Instead **move** them: make the form-finding node-relaxation **flesh-aware**
+— raise each free node's skin-band floor by its own rod radius (`relax_nodes` takes a per-node `hug`),
+so the relaxation pushes the fat struts off the finger at **no knock cost**. Result: **95 % of free
+struts clear ≥ 3 mm** (median 5.9 mm) with the knock held at 36 MPa (714 struts, 24.2 g, SF 2); only a
+few chord-dip residuals and the intrinsic button/mount struts stay closer. Guarded by
+`test_the_impact_bone_keeps_its_free_struts_off_the_flesh`. This anchor also packages the project for
+build (`BUILD.md`, `BOM.md`, a one-command `Makefile`, pinned `requirements.txt`, and a per-hand STL
+fit) — repo hygiene, not disclosure. (Manifest now **104 files**.)
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) | `9b10e86724f558c8783ec708235636fc4c2faba93974ecd31987884fa1bfa266` |
+| `MANIFEST.sha256` (hashes of all 104 source + doc files) | `e5c4ab5b41b30f1b59744e32678e4429e22ad89aaba2a1fbaa67e0502e1bf0de` |
+
+Stamped: **2026-07-18T14:40:50Z** (UTC, submission time). Proofs: `VISION.md.ots`,
+`MANIFEST.sha256.ots`.
+
+### Twenty-sixth — THE HARNESS BUS IS NOW EXACT (Dreyfus–Wagner), provably minimal (§8.15l qqq-2)
 
 The 25th anchor meshed the minimal-copper harness with a **metric-MST 2-approximation**; this makes it
 **exact**. `mount._steiner_exact` (Dreyfus–Wagner with edge recovery) computes the **true minimum
