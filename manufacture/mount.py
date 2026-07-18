@@ -294,6 +294,62 @@ def harness_routes(nodes, bars, live, btn, anchors):
     return routes
 
 
+def _steiner_exact(adj, sssp, N, terminals):
+    """EXACT minimum Steiner tree in a graph (Dreyfus-Wagner) over `terminals`. `adj[u]` = [(v, w)];
+    `sssp[t]` = (dist, pred) from a single-source Dijkstra at terminal t (cached, shared across calls).
+    Returns the physical edge set (frozensets, the virtual node N dropped). For the handful of terminals
+    here this is cheap and OPTIMAL, where the metric MST is only a 2-approximation."""
+    import heapq
+
+    k = len(terminals); V = N + 1
+    dp = {1 << i: sssp[terminals[i]][0] for i in range(k)}          # dp[mask][v]: tree spanning mask + v
+    merge_val, split, pred_r = {}, {}, {}
+    for size in range(2, k + 1):
+        for mask in (m for m in range(1, 1 << k) if bin(m).count("1") == size):
+            cur = np.full(V, np.inf); sp = np.full(V, -1, dtype=np.int64)
+            sub = (mask - 1) & mask
+            while sub:                                              # two subtrees meeting at each vertex
+                other = mask ^ sub
+                if other:
+                    cand = dp[sub] + dp[other]; b = cand < cur
+                    cur[b] = cand[b]; sp[b] = sub
+                sub = (sub - 1) & mask
+            merge_val[mask] = cur.copy()
+            dist = cur.copy(); pr = np.full(V, -1, dtype=np.int64)  # then grow along graph edges
+            pq = [(float(dist[v]), int(v)) for v in np.where(np.isfinite(dist))[0]]
+            heapq.heapify(pq)
+            while pq:
+                d, u = heapq.heappop(pq)
+                if d > dist[u]:
+                    continue
+                for v, wt in adj[u]:
+                    nd = d + wt
+                    if nd < dist[v]:
+                        dist[v] = nd; pr[v] = u; heapq.heappush(pq, (nd, v))
+            dp[mask], split[mask], pred_r[mask] = dist, sp, pr
+
+    full = (1 << k) - 1
+    edges, stack = set(), [(full, int(np.argmin(dp[full])))]
+    while stack:                                                   # backtrack the DP into an edge set
+        mask, v = stack.pop()
+        if bin(mask).count("1") == 1:                              # a single terminal: its path to v
+            pred = sssp[terminals[mask.bit_length() - 1]][1]; x = v
+            while pred[x] >= 0:
+                p = int(pred[x])
+                if x < N and p < N:
+                    edges.add(frozenset((x, p)))
+                x = p
+        elif pred_r[mask][v] >= 0 and dp[mask][v] < merge_val[mask][v] - 1e-12:
+            u = int(pred_r[mask][v])                               # reached v along a graph edge
+            if v < N and u < N:
+                edges.add(frozenset((v, u)))
+            stack.append((mask, u))
+        else:                                                      # v is where two subtrees merged
+            sub = int(split[mask][v])
+            stack.append((sub, v)); stack.append((mask ^ sub, v))
+    return edges
+
+
 def harness_bus(nodes, bars, live, btn, anchors, *, max_per_bus=4):
     """MINIMAL-COPPER harness: a SHARED bus over the strut graph, not five point-to-point runs
     (VISION §8.15l qqq-2). The sensors are I2C, so VDD/GND are shared by all and SDA/SCL are a bus:
@@ -302,11 +358,11 @@ def harness_bus(nodes, bars, live, btn, anchors, *, max_per_bus=4):
       * SIGNAL (SDA/SCL, 2 conductors per I2C bus) -- one tree per bus, over that bus's sensors + MCU,
         the sensors split into <= `max_per_bus` groups (the W2BW address limit) to minimise total length.
 
-    Each tree is a minimum Steiner-tree-in-a-graph over the live struts, approximated by the metric MST
-    (Dijkstra between terminals -> MST -> expand -> union). Returns `[(i, j, n_wires)]`: the groove
-    segments (live-strut node pairs) and how many conductors share each -- 2 where only power runs, up
-    to 6 on the trunk where power and both signal buses overlap. The caller sinks each into a groove
-    whose width follows `n_wires`. This is the disclosed replacement for the per-sensor `harness_routes`."""
+    Each tree is the EXACT minimum Steiner-tree-in-a-graph over the live struts (`_steiner_exact`,
+    Dreyfus-Wagner), not a metric-MST approximation. Returns `[(i, j, n_wires)]`: the groove segments
+    (live-strut node pairs) and how many conductors share each -- 2 where only power runs, up to 6 on
+    the trunk where power and both signal buses overlap. The caller sinks each into a groove whose width
+    follows `n_wires`. This is the disclosed replacement for the per-sensor `harness_routes`."""
     import itertools
 
     from scipy.sparse import csr_matrix
@@ -316,47 +372,38 @@ def harness_bus(nodes, bars, live, btn, anchors, *, max_per_bus=4):
     S = list(btn.values())
     N = len(X); MCU = N                              # a virtual MCU node tied to every wrist anchor at ~0
     rows, cols, w = [], [], []
+    adj = [[] for _ in range(N + 1)]
+
+    def _add(i, j, d):
+        rows.append(i); cols.append(j); w.append(d); adj[i].append((j, d))
+
     for e in live:
-        i, j = bars[e]; d = float(np.linalg.norm(X[i] - X[j]))
-        rows += [i, j]; cols += [j, i]; w += [d, d]
+        i, j = bars[e]; d = float(np.linalg.norm(X[i] - X[j])); _add(i, j, d); _add(j, i, d)
     for a in anchors:
-        rows += [int(a), MCU]; cols += [MCU, int(a)]; w += [1e-6, 1e-6]
+        _add(int(a), MCU, 1e-6); _add(MCU, int(a), 1e-6)
     G = csr_matrix((w, (rows, cols)), shape=(N + 1, N + 1))
 
-    DP = {t: dijkstra(G, indices=t, return_predecessors=True) for t in S + [MCU]}   # cache once
+    sssp = {t: dijkstra(G, indices=t, return_predecessors=True) for t in S + [MCU]}   # cache once
+    tree = lambda terms: _steiner_exact(adj, sssp, N, terms)        # exact Steiner tree -> edge set
 
-    def steiner(terms):                             # metric-MST Steiner approx -> set of real edges
-        D = np.array([[DP[a][0][b] for b in terms] for a in terms])
-        mst = minimum_spanning_tree(D).toarray()
-        es = set()
-        for a in range(len(terms)):
-            for b in range(len(terms)):
-                if mst[a, b] > 0:
-                    pred = DP[terms[a]][1]; k = terms[b]
-                    while k != terms[a] and pred[k] >= 0:
-                        p = int(pred[k]); es.add(frozenset((k, p))); k = p
-        return es
+    def mst_w(terms):                               # cheap metric-MST weight, only to pick the bus split
+        D = np.array([[sssp[a][0][b] for b in terms] for a in terms])
+        return float(minimum_spanning_tree(D).toarray().sum())
 
-    def real_len(es):
-        return sum(float(np.linalg.norm(X[i] - X[j]))
-                   for i, j in (tuple(fe) for fe in es) if i < N and j < N)
-
-    power = steiner(S + [MCU])
-    best = None                                     # best split of sensors into two I2C buses
+    power = tree(S + [MCU])
+    best = None                                     # split sensors into two I2C buses (cheap MST proxy)
     for r in range(1, len(S)):
         for A in itertools.combinations(range(len(S)), r):
             if r > max_per_bus or len(S) - r > max_per_bus:
                 continue
             gA = [S[i] for i in A]; gB = [S[i] for i in range(len(S)) if i not in A]
-            eA, eB = steiner(gA + [MCU]), steiner(gB + [MCU])
-            c = real_len(eA) + real_len(eB)
+            c = mst_w(gA + [MCU]) + mst_w(gB + [MCU])
             if best is None or c < best[0]:
-                best = (c, eA, eB)
-    sig = [best[1], best[2]] if best else [power]
+                best = (c, gA, gB)
+    sig = [tree(best[1] + [MCU]), tree(best[2] + [MCU])] if best else [power]
 
     seg = {fe: 2 for fe in power}                   # 2 power conductors everywhere the power tree runs
     for st in sig:
         for fe in st:
             seg[fe] = seg.get(fe, 0) + 2            # + 2 signal conductors per bus sharing the segment
-    return [(*sorted(tuple(fe)), nw) for fe, nw in seg.items()
-            if max(fe) < N]                         # drop the virtual MCU-anchor hops
+    return [(*sorted(tuple(fe)), nw) for fe, nw in seg.items() if max(fe) < N]

@@ -2206,21 +2206,24 @@ VDD/GND are shared by every sensor whatever bus it sits on. The minimum-copper h
 **shared tree over the strut graph**, not a set of independent paths — **one power tree** (VDD/GND)
 spanning all five sensors + the MCU, with I²C **signal** riding the same trunk (one tree per bus).
 Measured on the shipped layout (`out/final.npz`, the routable graph = the live struts): the shared
-**Steiner tree is 283 mm** against the 490 mm of independent paths, so a 2-power + 2-signal bus is
-**~1130 vs ~1960 mm-equivalent of conductor — −42 %**. Two things fall out. **(1) It is not quite the
+**Steiner tree is 275 mm** (exact — see below) against the 490 mm of independent paths, so a
+2-power + 2-signal bus is **~1100 vs ~1960 mm-equivalent of conductor — −44 %**. Two things fall out. **(1) It is not quite the
 travelling-salesman problem, though it looks like one.** TSP forces a single **daisy-chain** visiting
 every sensor once (one wire in, one out); letting the bus **branch** — a *Steiner* minimal tree over
-the strut graph, T-junctions allowed — beats the chain here, **283 vs 373 mm**. TSP is the special case
+the strut graph, T-junctions allowed — beats the chain here, **275 vs 373 mm**. TSP is the special case
 with branching forbidden (which a strict daisy-chain, to avoid I²C stub reflections, may still prefer).
 **(2) The win is sharing, not tour-finding**: splitting signal across the two I²C buses the address
-limit needs costs ~nothing extra (**283 mm either way**), because the sensors are clustered and the
+limit needs costs ~nothing extra (**275 mm either way**), because the sensors are clustered and the
 power trunk is shared regardless. The per-sensor router (`mount.harness_routes`) stands as the
-baseline; **`mount.harness_bus` is the built replacement** — a minimum-Steiner-tree-in-a-graph problem
-(a metric-MST 2-approximation here; Dreyfus–Wagner is exact for six terminals) over the same live-strut
-graph, the conductor count folded in per segment (2 power, +2 per I²C bus sharing it). **The export now
-sinks the grooves along this shared bus** — 283 mm in 32 segments, a uniform 4-wire bundle (the two I²C
-buses take separate routes to the wrist), the groove widening with the conductor count — instead of the
-five point-to-point runs. Guarded by `test_the_harness_bus_is_a_shorter_shared_tree`.
+baseline; **`mount.harness_bus` is the built replacement** — the **exact** minimum Steiner-tree-in-a-
+graph (`_steiner_exact`, **Dreyfus–Wagner** with edge recovery) over the live-strut graph, the
+conductor count folded in per segment (2 power, +2 per I²C bus sharing it). The exact tree is **275 mm**;
+the metric-MST 2-approximation it replaced was **283 mm**, so going exact shaves a further **2.8 %** and
+makes the router provably optimal, not just near-optimal. **The export sinks the grooves along this
+shared bus** — 275 mm on the layout (258 mm on the finer print bone, `out/bone.npz`), a uniform 4-wire
+bundle (the two I²C buses take separate routes to the wrist), the groove widening with the conductor
+count — instead of the five point-to-point runs. Guarded by
+`test_the_harness_bus_is_a_shorter_shared_tree`.
 
 **(rrr) ⚠ WHAT IS NOT YET SETTLED (read-out).**
 - **The dome membrane (~0.32 mm) is at the FDM single-perimeter floor** — it needs a 0.25 mm nozzle

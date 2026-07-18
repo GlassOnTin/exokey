@@ -8,11 +8,32 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** twenty-four times. **All twenty-five stamps stand**, and each
+The disclosure has been **extended and re-anchored** twenty-five times. **All twenty-six stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — THE MINIMAL-COPPER HARNESS BUS, meshed into the export (§8.15l qqq-2)
+### Current — THE HARNESS BUS IS NOW EXACT (Dreyfus–Wagner), provably minimal (§8.15l qqq-2)
+
+The 25th anchor meshed the minimal-copper harness with a **metric-MST 2-approximation**; this makes it
+**exact**. `mount._steiner_exact` (Dreyfus–Wagner with edge recovery) computes the **true minimum
+Steiner tree** over the live struts. On the shipped layout the exact tree is **275 mm** against the
+approximation's 283 mm — a **further 2.8 %** — so the 2-power + 2-signal bus is **~1100 mm-equivalent of
+conductor, −44 %** against the 490 mm of five independent runs. The router is now **provably optimal**,
+not merely near-optimal — the branching Steiner tree still beats the daisy-chain (275 vs 373 mm), so it
+is *not* the travelling-salesman problem. The export sinks the wire grooves along the exact tree
+(258 mm on the finer print bone); one watertight solid, **40.2 g**, `test_the_harness_bus_is_a_shorter_
+shared_tree` and 9 other mount tests pass. Also folds in the `harness.html` gallery view added between
+anchors. (Manifest now **99 files** — the view scripts joined it.)
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) | `026748b264f8fe8f2b4967a9fdeecf617f1500e4827cccd807a44252da39b0e3` |
+| `MANIFEST.sha256` (hashes of all 99 source + doc files) | `d93b719af895052f4964fdc3d7b9b00247f6a829d198614816963483e39d6d7c` |
+
+Stamped: **2026-07-18T09:32:41Z** (UTC, submission time). Proofs: `VISION.md.ots`,
+`MANIFEST.sha256.ots`.
+
+### Twenty-fifth — THE MINIMAL-COPPER HARNESS BUS, meshed into the export (§8.15l qqq-2)
 
 The 24th anchor *disclosed* the minimal-copper harness (a shared bus, not five point-to-point runs);
 this **builds** it. `mount.harness_bus` routes the harness as a **shared Steiner tree over the strut
@@ -31,8 +52,8 @@ special case with T-junctions forbidden.
 | `VISION.md` (the disclosure) | `1cf7f63cd701db816492fc162ef0506f2c24fd0b153ff6defceb8f443e703904` |
 | `MANIFEST.sha256` (hashes of all 98 source + doc files) | `d125a45deb5efc2920fc1673572745cb61a68eb250e1c7ee5e1d84f4f6afcbd1` |
 
-Stamped: **2026-07-17T21:06:58Z** (UTC, submission time). Proofs: `VISION.md.ots`,
-`MANIFEST.sha256.ots`.
+Stamped: **2026-07-17T21:06:58Z** (UTC, submission time). Proofs:
+`timestamps/VISION.md.2026-07-17g.ots`, `timestamps/MANIFEST.sha256.2026-07-17g.ots`.
 
 ### Twenty-fourth — THE FINGERTIP NOW SEATS IN ITS CUP; a minimal-copper harness BUS (§8.15l ppp-2/qqq-2)
 
