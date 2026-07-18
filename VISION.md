@@ -204,7 +204,8 @@ directions — only hardware and thumb *time*.)
 
 ## 4. Design gates
 
-Each is a pass/fail test defined *before* the work. `pytest tests/ -q` — **57 passing.**
+Each is a pass/fail test defined *before* the work. `pytest tests/ -q` — **137 passing** (run
+`make test` for the live count).
 
 ### Passed
 
@@ -2120,8 +2121,8 @@ solves, not the one ranking solve.
 §8.15g sized the restoring **spring** (a TPU dome, k ≈ 131 N/m) but explicitly deferred the
 **signal** — "NOT MODELLED HERE: the field a moving magnet presents to the Hall." This closes that
 gap and turns both into a printable **two-part module** (`manufacture/readout.py`,
-`manufacture/wellmod.py`, `scripts/readout.py`, `scripts/coupon.py`; `tests/test_readout.py`,
-`tests/test_wellmod.py`). Every number below is a **prediction** from a numpy field model
+`manufacture/mount.py`, `manufacture/entry.py`, `scripts/readout.py`; `tests/test_readout.py`,
+`tests/test_mount.py`, `tests/test_entry.py`). Every number below is a **prediction** from a numpy field model
 (exact-cylinder on-axis + point dipole, no `magpylib`), to be checked on the stage-1 bench.
 
 **(mmm) THE SIGNAL SWAMPS THE SENSOR.** A **Ø3×1 mm N42** disc on the cradle over a **3-axis Hall**
@@ -2262,7 +2263,7 @@ opt/        problem.py   pymoo NSGA-II, 9 hard constraints
             merge.py     merge Pareto fronts across seeds
 viz/        scene.py     browser views (Plotly, self-contained HTML)
 cloud/      hetzner.sh   burst the optimisation onto a cloud box, then delete it
-tests/      57 gates
+tests/      137 gates
 ```
 
 Everything here is ours and freely publishable. The muscle-effort model, the population

@@ -6,22 +6,35 @@ why the result looks like bone rather than like plumbing.
 """
 from __future__ import annotations
 
+import argparse
 import pickle
 
 import numpy as np
 
 from design.vector import posture, tm_of, tp_of
 from hand.flesh import skin
-from hand.myohand import FINGERS
+from hand.myohand import FINGERS, MyoHand
+from hand.scaling import ANSUR_HAND_LENGTH_MM, REFERENCE_PERCENTILE
 from manufacture import mount as mnt
 from manufacture.mesh import BLEND, VOXEL, carve, field, to_mesh
-from opt.problem import hands
 from structure.frame import MATERIALS
 from structure.lattice import BAR_R
 
+REF_MM = ANSUR_HAND_LENGTH_MM[REFERENCE_PERCENTILE]   # 185 mm = the median hand the model IS
 
-def main():
-    h = hands()[50]
+
+def main(hand_mm=REF_MM, out_path="out/gauntlet.stl"):
+    # PER-USER FIT (partial, first-order). The hand AND the frame nodes below are both scaled by
+    # s, so cups, sensor seats and skeleton stay aligned -- a uniformly-scaled median device
+    # (Buchholz to first order). What does NOT re-fit: the optimised TOPOLOGY (which struts exist
+    # and how they connect), the rod radii (the 1.5 mm floor is a human tissue constant, not a hand
+    # dimension), and the component pockets (real part sizes). A fully re-optimised skeleton for one
+    # hand size means re-running the optimiser at that scale.
+    s = hand_mm / REF_MM
+    h = MyoHand(scale=s)
+    if abs(s - 1.0) > 1e-9:
+        print(f"HAND FIT: {hand_mm:.0f} mm hand -> scale {s:.3f} (median is {REF_MM:.0f} mm). "
+              f"Cups/seats re-fitted; frame topology stays population-median.")
     fd = pickle.load(open("out/final_design.pkl", "rb"))
     x = fd["x"]
     q = h.compose({f: posture(h, f, tp_of(x, f), tm_of(x, f), float(x.get(f"ab_{f}", 0.0)))
@@ -32,7 +45,12 @@ def main():
     src = next(p for p in ("out/bone.npz", "out/smooth.npz", "out/printable.npz", "out/sized.npz",
                           "out/final.npz") if os.path.exists(p))
     z = np.load(src, allow_pickle=True)
-    nodes, bars = z["nodes"], [tuple(b) for b in z["bars"]]
+    # Scale the FRAME with the hand. MuJoCo scales body positions about the model origin, so a
+    # scaled hand translates ~s*|origin->hand| away; scaling the node coordinates by the same s
+    # about the same origin keeps frame, buttons, anchors and cups all tracking together (a
+    # uniformly-scaled median device -- Buchholz to first order). Rod RADII are NOT scaled: the
+    # 1.50 mm floor is a human tissue constant, not a hand dimension. No-op at s == 1.
+    nodes, bars = z["nodes"] * s, [tuple(b) for b in z["bars"]]
     live = [int(e) for e in z["live"]]
     # PER-STRUT RADII, not one radius for all of them. A gradient-sized structure has a thick trunk
     # tapering into thin braces; melting them to a single rod prints a DIFFERENT DEVICE from the one
@@ -150,9 +168,30 @@ def main():
         print(f"  the structure clears. `hug` is now a clearance of the PART "
               f"(centreline + rod + fillet), not of its centreline.")
 
-    m.export("out/gauntlet.stl")
-    print("\n  wrote out/gauntlet.stl")
+    m.export(out_path)
+    print(f"\n  wrote {out_path}")
 
 
 if __name__ == "__main__":
-    main()
+    ap = argparse.ArgumentParser(
+        description="Mesh the gauntlet to a printable STL. Defaults to the median (185 mm) hand.",
+        epilog="Per-user fit is PARTIAL: --hand-mm re-fits the finger cups and sensor seats to "
+               "your hand, but the frame topology stays the population-optimised median (a full "
+               "re-fit means re-running the optimiser at your scale). Component pockets (Hall, "
+               "magnet, XIAO) stay at true size and are NOT scaled.")
+    g = ap.add_mutually_exclusive_group()
+    g.add_argument("--hand-mm", type=float, metavar="MM",
+                   help="Your measured hand length (wrist crease to middle-fingertip), in mm. "
+                        f"Median is {REF_MM:.0f}; the model covers ~165 (5th) to 205 (95th).")
+    g.add_argument("--percentile", type=int, choices=sorted(ANSUR_HAND_LENGTH_MM),
+                   help="Convenience: pick a hand size by ANSUR II percentile instead of mm.")
+    ap.add_argument("--out", metavar="PATH", default=None,
+                    help="Output STL path (default out/gauntlet.stl, or out/gauntlet_<mm>mm.stl "
+                         "for a non-median hand).")
+    a = ap.parse_args()
+
+    hand_mm = a.hand_mm if a.hand_mm is not None else \
+        (ANSUR_HAND_LENGTH_MM[a.percentile] if a.percentile is not None else REF_MM)
+    out_path = a.out or ("out/gauntlet.stl" if abs(hand_mm - REF_MM) < 1e-9
+                         else f"out/gauntlet_{hand_mm:.0f}mm.stl")
+    main(hand_mm=hand_mm, out_path=out_path)

@@ -14,6 +14,11 @@ away with it on.
 — the hand posed into every keypress, the gauntlet drawn at the radius the physics chose for each
 member, the strap, and the optimiser converging.
 
+**Want to make one? → [BUILD.md](BUILD.md) (plain-language guide + glossary) · [BOM.md](BOM.md)
+(parts list).** To just print the structure, grab `gauntlet.stl` from
+[Releases](https://github.com/GlassOnTin/exokey/releases) — no Python needed. Read BUILD.md
+first: the structure prints today, but there is no firmware or proven electronics yet.
+
 ---
 
 ## Why it looks like this
@@ -73,24 +78,22 @@ regression test.
 ```bash
 git clone --recurse-submodules https://github.com/GlassOnTin/exokey
 cd exokey
-python3 -m venv .venv
-.venv/bin/pip install mujoco numpy scipy pymoo PyNiteFEA plotly pytest
-
-# the gates. 109 of them. each one caught a real bug.
-PYTHONPATH=. OMP_NUM_THREADS=1 .venv/bin/python -m pytest -q
-
-# the bone, in the order it is built:
-PYTHONPATH=. OMP_NUM_THREADS=1 .venv/bin/python scripts/printable.py   # nozzle floor  -> out/printable.npz
-PYTHONPATH=. OMP_NUM_THREADS=1 .venv/bin/python scripts/ergonomic.py   # 1.5 mm floor  -> out/friendly.npz
-PYTHONPATH=. OMP_NUM_THREADS=1 .venv/bin/python scripts/bone.py        # curved+hollow -> out/bone.npz
-PYTHONPATH=. .venv/bin/python scripts/typing_view.py                   # watch it type -> out/typing.html
-PYTHONPATH=. .venv/bin/python scripts/export_stl.py                    # printable solid -> out/gauntlet.stl
+make deps          # venv + pinned deps (requirements.txt) + the MyoHand submodule
+make test          # the gates -- each one caught a real bug (run for the live count)
+make stl           # the printable solid -> out/gauntlet.stl  (median hand)
+make fit MM=192    # or fit it to your hand: wrist crease -> middle-fingertip, in mm
 ```
 
-`OMP_NUM_THREADS=1` is **not optional** for the optimiser: N worker processes × N BLAS threads
-oversubscribes the machine, and the "parallel" run comes out slower than serial. Every stage writes a
-self-contained browser view on purpose — two of the worst bugs here were caught by *looking at the
-render*, and would have survived any table of numbers.
+`make` hides the `PYTHONPATH=. OMP_NUM_THREADS=1` prefixes every script needs (`make` with no
+target lists them). `OMP_NUM_THREADS=1` is **not optional** for the optimiser: N worker processes ×
+N BLAS threads oversubscribes the machine, and the "parallel" run comes out slower than serial.
+
+`make stl` regenerates the mesh from the shipped design (`out/final_design.pkl` + `out/bone.npz`,
+which come with the [Release](https://github.com/GlassOnTin/exokey/releases)). The full NSGA-II
+search that *produces* that design is `make optimise` (hours; or burst it with
+[`cloud/hetzner.sh`](cloud/hetzner.sh)). Every stage writes a self-contained browser view on purpose
+— two of the worst bugs here were caught by *looking at the render*, not at a table of numbers. See
+**[BUILD.md](BUILD.md)** for the full build path and print settings.
 
 To burst the optimisation onto a cloud box and tear it down when done, see
 [`cloud/hetzner.sh`](cloud/hetzner.sh) (`burn` deletes the box on exit, crash, and interrupt — because
