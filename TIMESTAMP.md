@@ -8,11 +8,33 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** twenty-six times. **All twenty-seven stamps stand**, and each
+The disclosure has been **extended and re-anchored** twenty-seven times. **All twenty-eight stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — THE IMPACT BONE HELD OFF THE FINGERS by a flesh-aware relaxation (§8.15k ggg)
+### Current — STAGE-1 READ-OUT COUPON PROTOCOL, and a clean TPU test article (`COUPON.md`)
+
+The read-out — that a keypress swings the Hall field ~200× above noise, that the five directions sit
+≥ 78° apart, that a neighbour leaks below the noise once baselined — is still a numpy **prediction**
+(`manufacture/readout.py`). `COUPON.md` is the first *physical* test: **T1–T7**, each with a
+**pre-registered** pass threshold that is the matching `tests/test_readout.py` gate restated as a bench
+measurement, so no goalpost can move after a result — and it settles the model's two outright guesses,
+`REST_GAP` (3.5 mm) and `CRADLE_LEVER` (0.7). `scripts/coupon.py` generates the TPU article: a rigid rim
+clamping a flat membrane of thickness `t`, radius `a` — the clamped diaphragm `flexure.dome` sizes, so
+its force/travel is a direct check on **k = 130 N/m** — watertight by construction (a solid of
+revolution) and exported in mm, replacing the old non-manifold coupon soup. **`VISION.md` is unchanged**
+— its 27th-anchor proof (Bitcoin block 958567) stands; only `MANIFEST.sha256` is re-stamped, now
+covering the two new files (**106 files**).
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) — *unchanged; stands from the 27th anchor, Bitcoin block 958567* | `9b10e86724f558c8783ec708235636fc4c2faba93974ecd31987884fa1bfa266` |
+| `MANIFEST.sha256` (hashes of all 106 source + doc files) | `4df2685182e3bc3e2d36b65d7e940d2ecced5946613266b8df2f37edf96bd359` |
+
+Stamped: **2026-07-18T17:41:57Z** (UTC, submission time). Proof: `MANIFEST.sha256.ots` (the
+`VISION.md.ots` proof stands unchanged from the 27th anchor).
+
+### Twenty-seventh — THE IMPACT BONE HELD OFF THE FINGERS by a flesh-aware relaxation (§8.15k ggg)
 
 The impact-aware structure looked like its struts passed *through* the fingers. Measured, they did
 not — every strut cleared the flesh — but the broad knock-bearing grow hugged it at **~1.1 mm**
