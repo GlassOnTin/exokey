@@ -47,20 +47,52 @@ def coupon(a: float, t: float, *, r_out: float = None, rim_h: float = 3.0,
     return m
 
 
+def dome(a: float, t: float, h: float, *, r_out: float = None, rim_h: float = 3.0,
+         arc_n: int = 72) -> trimesh.Trimesh:
+    """A shallow SPHERICAL-CAP flexure coupon (all mm). Base radius `a`, wall `t`, apex rise `h`.
+
+    Unlike the flat membrane -- which at >1x its thickness STRETCHES and stiffens ~cubically, so a
+    printed 0.32 mm/6 mm one measured 230 g at 1.5 mm vs a 20 g target -- a cap deflects by BENDING /
+    roll-through, so it stays soft to full travel and can snap (the tactile click flexure.dome could
+    not size). `h` sets that: shallower is softer but snaps less. Revolve a closed (r, z) shell."""
+    r_out = (a + 3.0) if r_out is None else r_out
+    R = (a * a + h * h) / (2.0 * h)                # sphere through base (r=a,z=rim_h) and apex (0,rim_h+h)
+    zc = rim_h + h - R                             # sphere centre height
+    ro = np.linspace(a, 0.0, arc_n)                # outer surface, base -> apex
+    zo = zc + np.sqrt(np.maximum(R * R - ro * ro, 0.0))
+    ri = np.linspace(0.0, a, arc_n)                # inner surface, apex -> base (vertical wall t)
+    zi = zc + np.sqrt(np.maximum(R * R - ri * ri, 0.0)) - t
+    prof = np.vstack([
+        [[a, 0.0], [r_out, 0.0], [r_out, rim_h]],  # rim: inner-bottom, outer-bottom, outer-top
+        np.column_stack([ro, zo]),                 # outer cap, springs from (a, rim_h) up to apex
+        np.column_stack([ri, zi]),                 # inner cap, apex down to (a, rim_h - t)
+        [[a, 0.0]],                                # close down the rim inner wall
+    ])
+    m = trimesh.creation.revolve(prof, sections=180)
+    if not m.is_watertight:
+        raise RuntimeError(f"dome a={a} t={t} h={h} not watertight")
+    return m
+
+
 def main():
     import os
     os.makedirs("out", exist_ok=True)
-    print(f"{'coupon':28s} {'membrane':>12s} {'mass(TPU)':>10s}  watertight")
     rho_tpu = 1.21e-3                              # g/mm^3, ~1210 kg/m^3
+    print(f"{'coupon':30s} {'geometry':>16s} {'mass(TPU)':>10s}  watertight")
     for t in (0.25, 0.32, 0.40):
         for a in (6.0, 7.0):
             m = coupon(a, t)
-            name = f"out/coupon_t{t:.2f}_a{a:.0f}.stl"
-            m.export(name)
-            print(f"{os.path.basename(name):28s} {f'Ø{2*a:.0f}x{t:.2f}mm':>12s} "
+            name = f"out/coupon_t{t:.2f}_a{a:.0f}.stl"; m.export(name)
+            print(f"{os.path.basename(name):30s} {f'flat Ø{2*a:.0f}x{t:.2f}':>16s} "
                   f"{m.volume*rho_tpu:>9.2f}g  {m.is_watertight}")
-    print("\nDESIGN POINT: coupon_t0.32_a6.stl (k=130 N/m predicted). Print the sweep to find which")
-    print("thickness lays down cleanly on your nozzle. Seat the Ø3x1 mm N42 magnet in the centre boss.")
+    for h in (1.0, 2.0, 3.0):                      # apex-rise sweep -- what makes it soft / snap
+        m = dome(6.0, 0.32, h)
+        name = f"out/coupon_dome_a6_t0.32_h{h:.0f}.stl"; m.export(name)
+        print(f"{os.path.basename(name):30s} {f'dome Ø12 h{h:.0f}':>16s} "
+              f"{m.volume*rho_tpu:>9.2f}g  {m.is_watertight}")
+    print("\nFLAT membrane measured 230 g @ 1.5 mm (target 20 g) -- stretching, too stiff. The DOMES")
+    print("(coupon_dome_a6_t0.32_h{1,2,3}.stl) roll instead of stretch. Print the h sweep and re-run T2;")
+    print("softest-that-still-returns wins. ⚠ Dial TPU flow to hit t=0.32 mm first (yours came ~0.47).")
 
 
 if __name__ == "__main__":

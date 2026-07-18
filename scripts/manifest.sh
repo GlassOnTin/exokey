@@ -11,7 +11,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-git ls-files -- '*.py' '*.sh' '*.cff' '*.md' \
+git ls-files -- '*.py' '*.sh' '*.cff' '*.md' '*.scad' \
   | grep -vx 'TIMESTAMP.md' \
   | grep -vx 'scripts/clean_history.py' \
   | sed 's|^|./|' | sort \

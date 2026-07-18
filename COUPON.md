@@ -50,6 +50,13 @@ perimeter floor):**
   without gaps on your nozzle (a 0.25 mm nozzle helps the thin ones).
 - A rigid **seat/spacer** (any PA/PETG part, or an improvised feeler-gauge stack) holds the Hall under
   the coupon at the design 3.5 mm rest gap for T1/T3.
+- **Softer flexures, because the flat membrane measured ~230 g at 1.5 mm — far too stiff (it stretches,
+  not bends).** Two routes: a shallow **dome** (`scripts/coupon.py` also emits
+  `out/coupon_dome_a6_t0.32_h{1,2,3}.stl` — it rolls instead of stretching, and can snap); or, softer
+  still, **cast silicone** — print the two-part mold `scripts/dome_mold.scad`
+  (→ `dome_mold_cavity.stl` + `dome_mold_core.stl`), pour a two-part silicone, press, cure. Silicone is
+  the native keypad-dome material (soft, isotropic, near-immortal in fatigue) and the wall is set by the
+  mold gap, not by print calibration — check platinum-cure inhibition against your filament first.
 
 **Buy:**
 - 5+ **Ø3 × 1 mm N42** discs (e.g. supermagnete S-03-01-N) — some spares; verify grade.
@@ -57,6 +64,11 @@ perimeter floor):**
 - A microcontroller to read the Hall over I²C and log **raw (Bx, By, Bz) in LSB** at ≥ 500 Hz.
 
 **Rig (the measurements need controlled displacement, not a finger):**
+- **A printed field-map fixture** (`scripts/field_fixture.scad` → `fixture_hall_base.stl` +
+  `fixture_magnet_sled.stl`): fixes the Hall, slides the magnet over it in X with a **caliper** setting
+  the position at a set gap. It decouples the SIGNAL (rigid magnet vs Hall) from the flexure, so T1/T3
+  need only your caliper + micrometer, not a load cell. Set the pocket to your breakout and verify the
+  gap with a feeler gauge.
 - A **micrometer / motorised linear stage**, ≤ 0.05 mm resolution, to set the plunge gap and lateral
   offset precisely (the model's x-axis is displacement — the bench must own it).
 - A **force gauge / load cell**, mN resolution, for the spring curve.
