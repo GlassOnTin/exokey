@@ -35,7 +35,8 @@ fit) — repo hygiene, not disclosure. (Manifest now **104 files**.)
 | `MANIFEST.sha256` (hashes of all 104 source + doc files) | `e5c4ab5b41b30f1b59744e32678e4429e22ad89aaba2a1fbaa67e0502e1bf0de` |
 
 Stamped: **2026-07-18T14:40:50Z** (UTC, submission time). Proofs: `VISION.md.ots`,
-`MANIFEST.sha256.ots`.
+`MANIFEST.sha256.ots`. Confirmed in **Bitcoin block 958567** (`VISION.md`) and **958568**
+(`MANIFEST.sha256`).
 
 ### Twenty-sixth — THE HARNESS BUS IS NOW EXACT (Dreyfus–Wagner), provably minimal (§8.15l qqq-2)
 
