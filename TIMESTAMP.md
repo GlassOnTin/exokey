@@ -8,11 +8,33 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** twenty-seven times. **All twenty-eight stamps stand**, and each
+The disclosure has been **extended and re-anchored** twenty-eight times. **All twenty-nine stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — STAGE-1 READ-OUT COUPON PROTOCOL, and a clean TPU test article (`COUPON.md`)
+### Current — A DOME FLEXURE + a printable bench rig to MEASURE the read-out (`COUPON.md`)
+
+The first bench numbers are in: the flat TPU membrane measured **~230 g at 1.5 mm** against a 20 g
+target — too stiff, because a flat clamped membrane *stretches* rather than bends at that deflection.
+So this anchor adds the softer flexures and the rig to measure the read-out for real: a shallow **dome**
+coupon (`scripts/coupon.py` `dome()` — it rolls/snaps instead of stretching), a printed **field-map
+fixture** (`scripts/field_fixture.scad`) that fixes the Hall and slides the magnet over it so T1/T3
+need only a caliper + micrometer, and a two-part **silicone dome mold** (`scripts/dome_mold.scad`) to
+cast the native keypad-rubber flexure — wall set by the mold gap, not print calibration. The manifest
+rule now anchors `*.scad` too (the CAD is the source of record; the coupon/rig STLs are generated).
+**`VISION.md` is unchanged** — its 27th-anchor proof (Bitcoin block 958567) stands; only
+`MANIFEST.sha256` is re-stamped (**108 files**).
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) — *unchanged; stands from the 27th anchor, Bitcoin block 958567* | `9b10e86724f558c8783ec708235636fc4c2faba93974ecd31987884fa1bfa266` |
+| `MANIFEST.sha256` (hashes of all 108 source + doc files) | `b5d687d66875d8b3482af6124a8bb35cb5e5519d1815e8c4b5eb6cbb21cd48d3` |
+
+Stamped: **2026-07-18T23:38:33Z** (UTC, submission time). Proof: `MANIFEST.sha256.ots` (the
+`VISION.md.ots` proof stands unchanged from the 27th anchor). The outgoing 28th manifest proof is
+archived at `timestamps/MANIFEST.sha256.2026-07-18c.ots` (Bitcoin block 958601).
+
+### Twenty-eighth — STAGE-1 READ-OUT COUPON PROTOCOL, and a clean TPU test article (`COUPON.md`)
 
 The read-out — that a keypress swings the Hall field ~200× above noise, that the five directions sit
 ≥ 78° apart, that a neighbour leaks below the noise once baselined — is still a numpy **prediction**
