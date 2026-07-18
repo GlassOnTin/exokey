@@ -55,8 +55,8 @@ release: | .venv
 	@[ -n "$(TAG)" ] || { echo "usage: make release TAG=v0.1"; exit 1; }
 	scripts/release.sh "$(TAG)"
 
-clean:
-	rm -f out/*.npz out/*.pkl out/gauntlet*.stl out/coupon_*.stl
+clean:   # regenerable scratch only -- leaves the printable coupons (scripts/coupon.py) in place
+	rm -f out/*.npz out/*.pkl out/gauntlet*.stl
 
 .venv:
 	@echo "no .venv -- run 'make deps' first"; exit 1
