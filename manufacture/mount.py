@@ -236,11 +236,17 @@ def _unit(v):
 
 
 def housing(anchor_nodes, outward, live_nodes, *, xiao=(0.021, 0.0178, 0.0035),
-            lipo=(0.020, 0.012, 0.006), clear=0.003, wall=0.0015):
-    """The wrist XIAO nRF52840 + LiPo box, sitting PROUD of the wrist (thin axis along the skin
-    normal, lifted off), necked to the nearest LIVE-strut nodes so it cannot detach. Far from the
-    fingertips -- it does not touch the finger-entry route -- but it must clear the wrist and attach.
-    Returns (boxes, caps, carve_boxes)."""
+            lipo=(0.020, 0.010, 0.004), mux=(0.0114, 0.0086, 0.0016),
+            clear=0.003, wall=0.0015, wire_slot=0.002):
+    # lipo default = a 401020 cell (4.0 x 10 x 20 mm). Thinner than the old 6 mm cell, so the box
+    # stands less proud of the wrist; rated 200 mAh (optimistic for 0.8 cc -- treat as ~100-150 mAh).
+    """The wrist box: XIAO nRF52840 + LiPo + the I2C mux breakout (TCA9548A-class), laid side by side,
+    sitting PROUD of the wrist (thin axis along the skin normal, lifted off) and necked to the nearest
+    LIVE-strut nodes so it cannot detach. A wire-entry slot at the mux end admits the sensor harness
+    braid (5 sensors x SDA/SCL + shared VDD/GND -- a ~34 AWG braid) so it drops into the mux bay and the
+    caller's groove carries it along the struts. Far from the fingertips -- it does not touch the
+    finger-entry route. The mux rides in the DEAD SPACE beside the parts (it is thinner than the LiPo),
+    so it costs only ~its own width in y. Returns (boxes, caps, carve_boxes)."""
     A = np.asarray(anchor_nodes, float)
     C = A.mean(axis=0)
     z = _unit(outward)
@@ -250,16 +256,24 @@ def housing(anchor_nodes, outward, live_nodes, *, xiao=(0.021, 0.0178, 0.0035),
     x = _unit(x)
     y = np.cross(z, x)
     R = np.vstack([x, y, z])
-    half = np.array([0.5 * xiao[0], 0.5 * (xiao[1] + lipo[1]), 0.5 * max(xiao[2], lipo[2])]) + wall
+    comps = [np.asarray(c, float) for c in (xiao, lipo, mux)]        # a row along y: XIAO | LiPo | mux
+    tot_y = float(sum(c[1] for c in comps))
+    half = np.array([0.5 * max(c[0] for c in comps), 0.5 * tot_y,
+                     0.5 * max(c[2] for c in comps)]) + wall
     center = C + (clear + half[2]) * z
     boxes = [(center, R, half)]
     L = np.asarray(live_nodes, float)
     near = L[np.argsort(np.linalg.norm(L - center, axis=1))[:3]]
     caps = [((n, center), STRUT_R) for n in near]
-    cav = []
-    for comp, sy in ((xiao, +1.0), (lipo, -1.0)):
-        ch = 0.5 * np.asarray(comp, float)
-        cav.append((center + sy * 0.25 * (xiao[1] + lipo[1]) * y + (half[2] - ch[2]) * z, R, ch))
+    cav, yo = [], -0.5 * tot_y                                       # carve each part to the outer face
+    for c in comps:
+        ch = 0.5 * c
+        cav.append((center + (yo + ch[1]) * y + (half[2] - ch[2]) * z, R, ch))
+        yo += c[1]
+    # WIRE ENTRY: a slot through the +y wall at the mux bay, open to the outer face, for the harness braid.
+    mch = 0.5 * comps[-1]
+    sh = np.array([wire_slot, wall + wire_slot, mch[2]])
+    cav.append((center + (half[1] - 0.5 * wall) * y + (half[2] - sh[2]) * z, R, sh))
     return boxes, caps, cav
 
 
