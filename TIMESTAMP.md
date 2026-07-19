@@ -8,11 +8,35 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** twenty-eight times. **All twenty-nine stamps stand**, and each
+The disclosure has been **extended and re-anchored** twenty-nine times. **All thirty stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — A DOME FLEXURE + a printable bench rig to MEASURE the read-out (`COUPON.md`)
+### Current — THE READ-OUT ELECTRONICS, and the wrist housing that carries them (`docs/electronics.md`)
+
+The electronics design the mechanical/magnetic model implies is now written down. `docs/electronics.md`
+captures the read-out chain — five bare **TLV493D** Hall sensors (chip + one cap each; pull-ups per
+bus) → a **TCA9548A** I²C mux at the wrist → the **XIAO nRF52840** → BLE HID — and the decisions that
+shape it: the **mux-vs-W2BW addressing fork** and its copper trade-off (a mux frees the A1B6's 2-address
+limit but breaks the minimal-copper shared bus), the **three-layer lock-up recovery**, and the **34 AWG
+enamelled braid** that fits the 1.36 mm groove (with an internal-through-the-hollow-tubes routing idea).
+`manufacture/mount.housing` now carries the **mux** beside the XIAO and LiPo (in its dead space) and
+carves a **wire-entry slot** for the harness; the LiPo default drops to a **401020** cell (4×10×20 mm),
+so the box stands less proud — now **24 × 39.4 × 7 mm**, and the full gauntlet re-exports watertight at
+42.0 g. It also states plainly what is still **not built**: firmware, custom PCBs, and the read-out
+numbers themselves (pending the stage-1 coupon). **`VISION.md` is unchanged** — its 27th-anchor proof
+(Bitcoin block 958567) stands; only `MANIFEST.sha256` is re-stamped (**109 files**).
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) — *unchanged; stands from the 27th anchor, Bitcoin block 958567* | `9b10e86724f558c8783ec708235636fc4c2faba93974ecd31987884fa1bfa266` |
+| `MANIFEST.sha256` (hashes of all 109 source + doc files) | `281d2b19d206d179ac09f67a8527b759861494bb7287022f5cf067f9b514841d` |
+
+Stamped: **2026-07-19T01:33:32Z** (UTC, submission time). Proof: `MANIFEST.sha256.ots` (the
+`VISION.md.ots` proof stands unchanged from the 27th anchor). The outgoing 29th manifest proof is
+archived at `timestamps/MANIFEST.sha256.2026-07-19a.ots` (Bitcoin block 958631).
+
+### Twenty-ninth — A DOME FLEXURE + a printable bench rig to MEASURE the read-out (`COUPON.md`)
 
 The first bench numbers are in: the flat TPU membrane measured **~230 g at 1.5 mm** against a 20 g
 target — too stiff, because a flat clamped membrane *stretches* rather than bends at that deflection.
