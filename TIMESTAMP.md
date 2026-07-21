@@ -8,11 +8,38 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** thirty-two times. **All thirty-three stamps stand**, and each
+The disclosure has been **extended and re-anchored** thirty-three times. **All thirty-four stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — THE CUP WALLS NOW MEET THEIR FLOOR, a FILLET-AWARE ENTRY GATE, and a PRINT-ORIENTATION TOOL
+### Current — THE HALL SENSOR SLIDES IN FROM THE PROXIMAL END, and the CUP WALLS ARE MADE COHERENT
+
+Three cup fixes surfaced by looking at the sliced cluster. (1) **The Hall PCB now slides in from the
+cup's open proximal end.** It had been a buried pocket reachable only from the magnet side — from
+outside the print it read as a solid boss. It is now a slide-in slot along the finger axis (PCB
+cross-section, wire trailing out), stopped distally so the sensor seats at the read-out gap, and
+spanning the magnet gap dorsally so it CONSUMES the fat palmar button strut's reach rather than
+severing an isolated sliver (which had split a lone well into two bodies). (2) **Uniform guide-wall
+height.** The walls had been built to each finger's measured pad→nail depth and stepped 10.3–14.1 mm
+(the index over-reading a noise-sensitive tendon-insertion difference); they are now a single 10 mm,
+floor-anchored. (3) **Dedicated per-cup walls.** The four-finger cluster shared guide flanks at the
+inter-finger midline; because the per-finger roll is real anatomy (up to ~27°, measured world-frame ==
+body-local so it is anatomy not posture, and dominated by the little finger), a shared wall took one
+finger's roll and could float palmar of a neighbour's base plate (the 'side plate under the base'
+report). Each cup now carries its own two walls, beside its own finger, each meeting its own floor.
+The per-finger roll is kept; only the structure is made self-contained. **`VISION.md` is unchanged** —
+its 27th-anchor proof (Bitcoin block 958567) stands; only `MANIFEST.sha256` is re-stamped (**111 files**).
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) — *unchanged; stands from the 27th anchor, Bitcoin block 958567* | `9b10e86724f558c8783ec708235636fc4c2faba93974ecd31987884fa1bfa266` |
+| `MANIFEST.sha256` (hashes of all 111 source + doc files) | `91de9e113857ca8a83fbb505ceccbbe1b355e973d1b5bb4eccec94204b95a285` |
+
+Stamped: **2026-07-21T16:09:37Z** (UTC, submission time). Proof: `MANIFEST.sha256.ots` (the
+`VISION.md.ots` proof stands unchanged from the 27th anchor). The outgoing 33rd manifest proof is
+archived at `timestamps/MANIFEST.sha256.2026-07-21d.ots` (Bitcoin block 959023).
+
+### Thirty-third — THE CUP WALLS NOW MEET THEIR FLOOR, a FILLET-AWARE ENTRY GATE, and a PRINT-ORIENTATION TOOL
 
 Three things on the road to the first good print, all provoked by looking at the sliced `gauntlet.stl`.
 (1) **The cluster's shared side walls were detached from the cup floors.** The four long fingers share
