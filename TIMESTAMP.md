@@ -8,11 +8,33 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** twenty-nine times. **All thirty stamps stand**, and each
+The disclosure has been **extended and re-anchored** thirty times. **All thirty-one stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — THE READ-OUT ELECTRONICS, and the wrist housing that carries them (`docs/electronics.md`)
+### Current — THE FIRST FIRMWARE: a bench field-map sketch for the XIAO nRF52840
+
+The read-out is no longer only a prediction on paper -- there is now firmware to *measure* it.
+`firmware/bench_fieldmap/bench_fieldmap.ino` (the repo's first firmware) streams the raw 3-axis field
+(Bx, By, Bz) from a TLV493D over USB serial as CSV, so a caliper-stepped magnet logs straight into the
+COUPON.md T1/T3 tables. It is built on the Infineon **XENSIV TLx493D** library (which also drives the
+device's TLI493D-W2BW), with 8-sample averaging and the I²C bus-lock recovery from
+`docs/electronics.md`. **Compile-clean** for `Seeeduino:nrf52:xiaonRF52840` (76.5 KB, 9 % of flash);
+not yet hardware-tested. `README.md` gains a "Build" section for the coupon/rig prints and the firmware
+toolchain (arduino-cli core/lib install, compile, upload), and the manifest rule now anchors `*.ino`.
+**`VISION.md` is unchanged** — its 27th-anchor proof (Bitcoin block 958567) stands; only
+`MANIFEST.sha256` is re-stamped (**110 files**).
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) — *unchanged; stands from the 27th anchor, Bitcoin block 958567* | `9b10e86724f558c8783ec708235636fc4c2faba93974ecd31987884fa1bfa266` |
+| `MANIFEST.sha256` (hashes of all 110 source + doc files) | `6f5fb4a144715dbd00163d43f98c122dc373546c77fa6bcee7ccb192d7ca40cb` |
+
+Stamped: **2026-07-21T10:16:45Z** (UTC, submission time). Proof: `MANIFEST.sha256.ots` (the
+`VISION.md.ots` proof stands unchanged from the 27th anchor). The outgoing 30th manifest proof is
+archived at `timestamps/MANIFEST.sha256.2026-07-21a.ots` (Bitcoin block 958690).
+
+### Thirtieth — THE READ-OUT ELECTRONICS, and the wrist housing that carries them (`docs/electronics.md`)
 
 The electronics design the mechanical/magnetic model implies is now written down. `docs/electronics.md`
 captures the read-out chain — five bare **TLV493D** Hall sensors (chip + one cap each; pull-ups per
