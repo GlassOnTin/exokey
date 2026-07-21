@@ -8,11 +8,42 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** thirty-one times. **All thirty-two stamps stand**, and each
+The disclosure has been **extended and re-anchored** thirty-two times. **All thirty-three stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — THE PRINTABLE STL NOW EXPORTS IN MILLIMETRES
+### Current — THE CUP WALLS NOW MEET THEIR FLOOR, a FILLET-AWARE ENTRY GATE, and a PRINT-ORIENTATION TOOL
+
+Three things on the road to the first good print, all provoked by looking at the sliced `gauntlet.stl`.
+(1) **The cluster's shared side walls were detached from the cup floors.** The four long fingers share
+guide flanks that sit at the inter-finger midline, but each cup floor reached only its own finger — so
+four of the five walls stood 0.7–1.3 mm off the floor (past the 0.6 mm print fillet), rejoined to the
+part only by the thin palmar base-spine tie: floating, floppy guide walls. `manufacture.mount` gains
+`FLOOR_REACH`, widening the cluster floors to meet the flanks (a continuous base the walls rise from);
+all five now merge, guarded by a regression test in `tests/test_mount.py`. (2) **A fillet-aware entry
+gate.** The entry check used the hard union of the mount primitives, but the STL is marched from a
+*smooth* min (`BLEND` = 0.6 mm) that inflates junctions outward. `manufacture.entry.smin_sdf` evaluates
+that same smooth-min field along each finger's slide-in route, so the fillet — not just the centreline —
+must clear; it confirms nothing filleted crosses (nearest strut +6.25 mm off the route, +3.56 mm off the
+whole finger; the closest thing is each cup's own +0.43 mm seat). (3) **An optimal print orientation.**
+`scripts/orient.py` sweeps build directions over the finished mesh (cups, housing, fillets and all) and
+minimises downward-facing overhang area; it agrees with the strut-axis `printability.py` that the part
+builds along its long axis, and picks a low-profile orientation (9.8 % overhang vs 15.9 % lying flat,
+119 mm tall) written to `out/gauntlet_oriented.stl` for PrusaSlicer's organic supports. **`VISION.md`
+is unchanged** — its 27th-anchor proof (Bitcoin block 958567) stands; only `MANIFEST.sha256` is
+re-stamped (**111 files**).
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) — *unchanged; stands from the 27th anchor, Bitcoin block 958567* | `9b10e86724f558c8783ec708235636fc4c2faba93974ecd31987884fa1bfa266` |
+| `MANIFEST.sha256` (hashes of all 111 source + doc files) | `6d6aad6f537f9256246e7343077711ba74f29389f5176175270d4a8240e8e3bb` |
+
+Stamped: **2026-07-21T15:03:09Z** (UTC, submission time). Proof: `MANIFEST.sha256.ots` (the
+`VISION.md.ots` proof stands unchanged from the 27th anchor). The outgoing 32nd manifest proof is
+archived at `timestamps/MANIFEST.sha256.2026-07-21c.ots` (pending Bitcoin confirmation at stamp time;
+run `ots upgrade` once the block mines).
+
+### Thirty-second — THE PRINTABLE STL NOW EXPORTS IN MILLIMETRES
 
 A usability fix on the road to the first physical print: `scripts/export_stl.py` builds the mesh in SI
 (metres), and slicers assume millimetres, so a raw `gauntlet.stl` imported as a sub-millimetre speck —
