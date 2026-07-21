@@ -33,6 +33,14 @@ DOME_T = float(dome(K, DOME_A, MATERIALS["tpu"]["E"], MATERIALS["tpu"]["nu"]))
 CUP_WALL = 0.0022                          # flank thickness
 FLOOR_T = 0.0022                           # cup-floor thickness
 SEAT_CLEAR = 0.0004                        # gap between flesh and cup (so the finger slides in, not bites)
+FLOOR_REACH = 0.0016                       # extra lateral floor width in the CLUSTER so the SHARED flanks
+#                                            (which sit at the inter-finger midline, not beside one finger)
+#                                            actually meet the floor. Without it the guide walls were tied
+#                                            only to the palmar base spine -- detached from the cup floor by
+#                                            0.7-1.3 mm (> the 0.6 mm fillet), so they read and behaved as
+#                                            floating walls. This makes the floors a continuous base the
+#                                            walls rise from. (The single-well _cup does not need it: its
+#                                            dedicated flanks already overlap the floor by ~1.8 mm.)
 PA_WALL = 0.0016
 BASE_T = 0.0018
 PCB = (0.0064, 0.0064, 0.0018)             # Hall carrier (x along axis, y lateral, z palmar)
@@ -161,7 +169,8 @@ def cluster_mount(h, q, fingers, mount_nodes, *, wire_len=0.010):
     for f in fingers:
         ax, fl, lat, R, pos, ccf, r, half, v_pad, v_nail, w_half = fr[f]
         boxes.append((ccf + (vf[f] + 0.5 * FLOOR_T) * fl, R,
-                      np.array([half, 0.5 * FLOOR_T, w_half + CUP_WALL])))                  # cup floor
+                      np.array([half, 0.5 * FLOOR_T, w_half + CUP_WALL + FLOOR_REACH])))    # cup floor
+        #                                    widened to REACH the shared flanks (see FLOOR_REACH)
         boxes.append((ccf + s[f]["base"] * fl, R, np.array([half, 0.5 * BASE_T, pcb_half])))  # Hall seat
         for side in (+1.0, -1.0):
             caps.append(((ccf + s[f]["magface"] * fl + side * pcb_half * lat,

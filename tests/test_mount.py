@@ -73,6 +73,36 @@ def test_the_cluster_lets_every_long_finger_in(posed):
         assert entry.enters_freely(h, q, f, boxes=p["boxes"], caps=p["caps"], cyls=p["cyls"]), f
 
 
+def test_the_cluster_flanks_attach_to_the_cup_floors(posed):
+    """THE 'floating side walls' REPORT (2026-07-21). The cluster's SHARED flanks sit at the
+    inter-finger midline (one wall guides two fingers), but the per-finger floors reached only
+    w_half+CUP_WALL from each finger centre -- short of the midline. So 4 of 5 flanks stood 0.7-1.3 mm
+    off the floor (> the 0.6 mm fillet): guide walls tied only to the palmar base spine, detached from
+    the cup floor they guide into. FLOOR_REACH widens the floors to meet them. Every flank must now
+    fillet-merge with some floor (gap < BLEND)."""
+    from manufacture.mesh import _box_sdf, BLEND
+    h, q, mounts, _ = posed
+    p = mount.cluster_mount(h, q, LONG, {f: mounts[f] for f in LONG})
+    floors, flanks = [], []
+    for c, R, hh in p["boxes"]:
+        if abs(hh[2] - 0.5 * mount.CUP_WALL) < 1e-6 and hh[1] > 0.003:
+            flanks.append((c, R, hh))
+        elif abs(hh[1] - 0.5 * mount.FLOOR_T) < 1e-6:
+            floors.append((c, R, hh))
+    assert flanks and floors, (len(flanks), len(floors))
+
+    def shell(c, R, hh, n=12):
+        G = np.stack(np.meshgrid(*[np.linspace(-1, 1, n)] * 3, indexing="ij"), -1).reshape(-1, 3)
+        G = G[np.abs(G).max(1) > 0.999]
+        return np.asarray(c) + (G * np.asarray(hh)) @ np.asarray(R)
+
+    for i, (c, R, hh) in enumerate(flanks):
+        P = shell(c, R, hh)
+        gap = min(_box_sdf(P, np.asarray(fc), np.asarray(fR), np.asarray(fh)).min()
+                  for fc, fR, fh in floors)
+        assert gap < BLEND, f"flank {i} is {gap*1e3:.2f} mm off the nearest floor (> {BLEND*1e3:.1f} mm fillet)"
+
+
 def test_the_cluster_is_one_watertight_piece(posed):
     h, q, mounts, _ = posed
     m = mount.cluster_mesh(h, q, LONG, {f: mounts[f] for f in LONG})
@@ -127,6 +157,28 @@ def test_the_finger_enters_past_the_gauntlet_struts_too(posed):
         assert entry.enters_freely(h, q, f, boxes=fr["boxes"] + ins["boxes"],
                                    caps=fr["caps"] + ins["caps"] + struts,
                                    cyls=fr["cyls"] + ins["cyls"]), f
+
+
+def test_the_finger_enters_past_the_FILLETED_geometry_too(posed):
+    """FILLET-AWARE entry gate. The tests above use the HARD union (plain min of primitive SDFs).
+    But the STL is marched from a SMOOTH min (manufacture.mesh.field, BLEND=0.6 mm), which pushes
+    the printed surface OUTWARD by up to k*log(N) wherever N primitives meet -- fillet material a
+    hard union never sees, and exactly what a 'gauntlet element breaking into the finger well' would
+    be. So evaluate the export's OWN smooth-min SDF (entry.smin_sdf) along every finger's slide-in
+    route, over frame + cradle + every live strut together: nothing filleted may cross it.
+
+    (It passes today with margin -- the nearest element to each route is that finger's own cup floor
+    at the +0.43..+0.76 mm seat gap, and the next primitive is >6 mm away, so N=1 and the smooth-min
+    equals the hard union. This guards the day a strut or a busy node creeps close enough that the
+    FILLET, not the centreline, is what reaches the finger.)"""
+    h, q, mounts, fingers = posed
+    struts = _gauntlet_struts()
+    for f in fingers:
+        fr, ins = mount.well_mount(h, q, f, mounts[f]), mount.well_insert(h, q, f)
+        P = entry.entry_sweep(h, q, f)
+        d = entry.smin_sdf(P, caps=fr["caps"] + ins["caps"] + struts,
+                           boxes=fr["boxes"] + ins["boxes"], cyls=fr["cyls"] + ins["cyls"])
+        assert d.min() >= -entry.TOUCH_TOL, (f, float(d.min()))
 
 
 def _impact_struts():

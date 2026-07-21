@@ -66,6 +66,42 @@ def mount_sdf(P, boxes=(), caps=(), cyls=()) -> np.ndarray:
     return d
 
 
+def smin_sdf(P, struts=(), radii=(), boxes=(), caps=(), cyls=(), *, blend=None) -> np.ndarray:
+    """The EXPORT's smooth-min SDF (`manufacture.mesh.field`), evaluated at points P directly.
+
+    `mount_sdf` above is the HARD union (plain min) of the mount's own primitives. But the STL is
+    marched from a SMOOTH min over struts AND mount together, and the smooth-min INFLATES the
+    surface outward by up to k*log(N) where N primitives meet -- exactly the fillet material a hard
+    union never sees. So a filleted junction that bulges into a finger reads clear under `mount_sdf`
+    and blocked here. This is the same field the mesh comes from; evaluating it at points needs no
+    grid and no meshing (so no `m.contains` OOM).
+
+    Numerically stable log-sum-exp; ignores carving (which only ADDS clearance, so this is a lower
+    bound on the printed clearance).  `struts`/`caps` are capsules (segment minus radius); `boxes`
+    (c,R,h); `cyls` (a,b,r) flat-capped.  radii = one per strut (or one scalar).
+    """
+    from manufacture.mesh import BLEND
+    k = BLEND if blend is None else blend
+    P = np.asarray(P, float)
+    rr = np.broadcast_to(np.asarray(radii, float), (len(struts),)) if len(struts) else np.zeros(0)
+    z = -k * 1e9 * np.ones(len(P))                       # running max of the exponents -k*d
+    # two passes: first the max exponent per point (for stable LSE), then the shifted sum.
+    exps = []
+    for (a, b), re in zip(struts, rr):
+        exps.append(-(_seg_dist(P, np.asarray(a, float), np.asarray(b, float)) - float(re)))
+    for c, R, hh in boxes:
+        exps.append(-_box_sdf(P, np.asarray(c, float), np.asarray(R, float), np.asarray(hh, float)))
+    for (a, b), rc in caps:
+        exps.append(-(_seg_dist(P, np.asarray(a, float), np.asarray(b, float)) - float(rc)))
+    for a, b, rc in cyls:
+        exps.append(-_cyl_sdf(P, np.asarray(a, float), np.asarray(b, float), rc))
+    if not exps:
+        return np.full(len(P), 1e9)
+    E = np.stack(exps) / k                               # (n_prim, n_pts) = -d_i / k
+    m = E.max(axis=0)
+    return -k * (m + np.log(np.exp(E - m).sum(axis=0)))
+
+
 def entry_clearance(h, q, finger, boxes=(), caps=(), cyls=(), *, length=0.020, n=16) -> float:
     """How deep the mount reaches INTO the entering finger, over the whole slide-in (metres).
 
