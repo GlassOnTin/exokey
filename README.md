@@ -101,6 +101,45 @@ a "stop" that keeps billing is a trap).
 
 ---
 
+## Build — beyond the structure
+
+The Quickstart builds the printed **structure**. Two other things get built for the bench, and they
+have their own toolchains.
+
+**The bench coupons and rig** (3D-printed test parts — see [COUPON.md](COUPON.md)):
+
+```bash
+PYTHONPATH=. .venv/bin/python scripts/coupon.py          # TPU flexure coupons + dome sweep -> out/coupon_*.stl
+openscad -o out/fixture_hall_base.stl   -D 'part="base"'   scripts/field_fixture.scad   # Hall-sensor field-map jig
+openscad -o out/dome_mold_cavity.stl    -D 'part="cavity"' scripts/dome_mold.scad        # silicone dome mold (cavity)
+openscad -o out/dome_mold_core.stl      -D 'part="core"'   scripts/dome_mold.scad        #                   (core)
+```
+
+**The read-out firmware** for a **Seeed XIAO nRF52840** (streams the Hall field over USB serial — see
+[docs/electronics.md](docs/electronics.md)). One-time toolchain, all **user-space (no sudo)**:
+
+```bash
+arduino-cli config add board_manager.additional_urls \
+  https://files.seeedstudio.com/arduino/package_seeeduino_boards_index.json
+arduino-cli core update-index
+arduino-cli core install Seeeduino:nrf52                       # the nRF52 core (+ the ARM toolchain)
+arduino-cli lib install "XENSIV 3D Magnetic Sensor TLx493D"    # the Infineon Hall driver
+pip install adafruit-nrfutil                                   # DFU packager/uploader (Linux)
+```
+
+Then build and flash (double-tap the XIAO's **RESET** to enter the bootloader before uploading):
+
+```bash
+arduino-cli compile --fqbn Seeeduino:nrf52:xiaonRF52840 firmware/bench_fieldmap
+arduino-cli upload  --fqbn Seeeduino:nrf52:xiaonRF52840 -p /dev/ttyACM0 firmware/bench_fieldmap
+```
+
+Log the serial CSV (`t_us,Bx_mT,By_mT,Bz_mT`) to a file while you step the magnet with a caliper.
+Uploading over serial needs your user in the **`dialout`** group (`sudo usermod -aG dialout $USER`,
+then log out/in); or skip that and drag the built `.uf2` onto the XIAO's bootloader drive.
+
+---
+
 ## Prior art, and the patent question
 
 **We are not designing around anyone's patent — we are on an older road.**
