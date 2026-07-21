@@ -8,11 +8,30 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** thirty times. **All thirty-one stamps stand**, and each
+The disclosure has been **extended and re-anchored** thirty-one times. **All thirty-two stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — THE FIRST FIRMWARE: a bench field-map sketch for the XIAO nRF52840
+### Current — THE PRINTABLE STL NOW EXPORTS IN MILLIMETRES
+
+A usability fix on the road to the first physical print: `scripts/export_stl.py` builds the mesh in SI
+(metres), and slicers assume millimetres, so a raw `gauntlet.stl` imported as a sub-millimetre speck —
+a footgun nobody had hit because nothing had been printed yet. The export now scales ×1000 at write
+time (after every metre-based clearance check), so `gauntlet.stl` and the `make fit` variants slice at
+the right size out of the box (94 × 97 × 158 mm), and the "download and slice" path is finally correct.
+**`VISION.md` is unchanged** — its 27th-anchor proof (Bitcoin block 958567) stands; only
+`MANIFEST.sha256` is re-stamped (**110 files**).
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) — *unchanged; stands from the 27th anchor, Bitcoin block 958567* | `9b10e86724f558c8783ec708235636fc4c2faba93974ecd31987884fa1bfa266` |
+| `MANIFEST.sha256` (hashes of all 110 source + doc files) | `5bbe4dcef50fbf15345b648208ad47e86dd21ed8b50780dfc1b51ab55a319ac3` |
+
+Stamped: **2026-07-21T13:43:18Z** (UTC, submission time). Proof: `MANIFEST.sha256.ots` (the
+`VISION.md.ots` proof stands unchanged from the 27th anchor). The outgoing 31st manifest proof is
+archived at `timestamps/MANIFEST.sha256.2026-07-21b.ots` (Bitcoin block 958996).
+
+### Thirty-first — THE FIRST FIRMWARE: a bench field-map sketch for the XIAO nRF52840
 
 The read-out is no longer only a prediction on paper -- there is now firmware to *measure* it.
 `firmware/bench_fieldmap/bench_fieldmap.ino` (the repo's first firmware) streams the raw 3-axis field
