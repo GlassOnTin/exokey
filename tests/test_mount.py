@@ -103,6 +103,33 @@ def test_the_cluster_flanks_attach_to_the_cup_floors(posed):
         assert gap < BLEND, f"flank {i} is {gap*1e3:.2f} mm off the nearest floor (> {BLEND*1e3:.1f} mm fillet)"
 
 
+def test_the_hall_pcb_slides_in_from_the_proximal_end(posed):
+    """THE 'sensor is in solid print, no insertion slot' REPORT (2026-07-21). The Hall PCB pocket was a
+    buried void reachable only from the magnet side. It is now a PROXIMAL SLIDE-IN slot: open at the
+    cup's own open proximal end (the finger's slide-in), stopped distally so the PCB butts a wall at the
+    read-out gap. Check, per long finger, that the slot is void at the read-out depth AND opens to the
+    exterior proximally (so the PCB can actually slide in)."""
+    from manufacture import mesh as mmesh
+    h, q, mounts, _ = posed
+    md = mount.cluster_mount(h, q, LONG, {f: mounts[f] for f in LONG})
+    ff, o, v = mmesh.field([c[0] for c in md["caps"]], md["boxes"],
+                           r=[c[1] for c in md["caps"]], cyls=md["cyls"])
+    mmesh.carve(ff, o, v, cyls=md["carve_cyls"], boxes=md["carve_boxes"])
+
+    def samp(P):
+        i = np.clip(np.round((np.asarray(P) - o) / v).astype(int), 0, np.array(ff.shape) - 1)
+        return ff[tuple(i.T)]
+
+    for f in LONG:
+        ax, fl, lat, R, pos, cc, r, half, vp, vn, wh = mount._frame(h, q, f)
+        s = mount._stack(vp + mount.SEAT_CLEAR)
+        base = cc + (s["hall"] + 0.5 * mount.PCB[2]) * fl
+        seat = float(samp((base + 0.2 * mount.PCB[0] * ax)[None])[0])     # inside the seat -> void
+        prox = float(samp((base - (half + 0.008) * ax)[None])[0])        # past the proximal opening -> air
+        assert seat > 0, (f, "Hall seat is solid, not a carved slot", seat)
+        assert prox > 0.002, (f, "slot does not open proximally for slide-in", prox)
+
+
 def test_the_cluster_is_one_watertight_piece(posed):
     h, q, mounts, _ = posed
     m = mount.cluster_mesh(h, q, LONG, {f: mounts[f] for f in LONG})

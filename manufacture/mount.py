@@ -33,6 +33,7 @@ DOME_T = float(dome(K, DOME_A, MATERIALS["tpu"]["E"], MATERIALS["tpu"]["nu"]))
 CUP_WALL = 0.0022                          # flank thickness
 FLOOR_T = 0.0022                           # cup-floor thickness
 SEAT_CLEAR = 0.0004                        # gap between flesh and cup (so the finger slides in, not bites)
+SLOT_CLEAR = 0.0001                        # per-side slide clearance for the Hall PCB slide-in slot
 FLOOR_REACH = 0.0016                       # extra lateral floor width in the CLUSTER so the SHARED flanks
 #                                            (which sit at the inter-finger midline, not beside one finger)
 #                                            actually meet the floor. Without it the guide walls were tied
@@ -41,6 +42,13 @@ FLOOR_REACH = 0.0016                       # extra lateral floor width in the CL
 #                                            floating walls. This makes the floors a continuous base the
 #                                            walls rise from. (The single-well _cup does not need it: its
 #                                            dedicated flanks already overlap the floor by ~1.8 mm.)
+WALL_H = 0.010                             # UNIFORM cluster guide-wall height (floor -> dorsal). The
+#                                            walls used to be built to each finger's measured pad->nail
+#                                            depth, so they stepped 10.3-14.1 mm between fingers (the
+#                                            index over-reading at 14 mm); a shared wall took only its
+#                                            LEFT finger's height. A single height reads clean and still
+#                                            guides every finger's slide-in. Anchored at each wall's
+#                                            reference-finger floor so it rises the same 10 mm from the base.
 PA_WALL = 0.0016
 BASE_T = 0.0018
 PCB = (0.0064, 0.0064, 0.0018)             # Hall carrier (x along axis, y lateral, z palmar)
@@ -120,10 +128,17 @@ def well_mount(h, q, finger, mount_node, *, wire_len=0.010):
     for side in (+1.0, -1.0):                    # two necks BESIDE the PCB pocket, or the carve severs it
         caps.append(((cc + s["magface"] * fl + side * pcb_half * lat,
                       cc + s["base"] * fl + side * pcb_half * lat), 0.5 * PA_WALL + 0.0006))
-    carve_boxes.append((cc + (s["hall"] + 0.5 * PCB[2]) * fl, R,
-                        np.array([0.5 * PCB[0], 0.5 * PCB[2], 0.5 * PCB[1]])))               # PCB pocket
-    slot = cc + s["hall"] * fl - (0.5 * half + 0.5 * wire_len) * ax
-    carve_boxes.append((slot, R, np.array([0.5 * wire_len + half, 0.0006, 0.0006])))         # wire slot
+    # HALL PCB SLOT -- a PROXIMAL SLIDE-IN channel (same as the cluster): PCB cross-section, open at
+    # the cup's proximal end so the sensor slides in along the finger axis with its wire trailing out,
+    # stopped distally so the PCB butts a wall at the read-out gap. Not a buried magnet-side pocket.
+    ax_d = 0.5 * PCB[0]                              # distal stop: the PCB's distal face seats here
+    ax_p = -(half + 0.003)                           # proximal: 3 mm past the open cup end (wire exit)
+    fl_d, fl_p = s["magface"], s["hall"] + PCB[2] + SLOT_CLEAR  # dorsal (magnet gap) .. PCB rest; spans
+    #                            the whole gap so it CONSUMES the button strut's dorsal reach (the fat
+    #                            palmar strut runs at this depth) instead of severing an isolated sliver.
+    c_slot = cc + 0.5 * (fl_d + fl_p) * fl + 0.5 * (ax_d + ax_p) * ax
+    carve_boxes.append((c_slot, R, np.array([0.5 * (ax_d - ax_p),
+                                             0.5 * (fl_p - fl_d), 0.5 * PCB[1] + SLOT_CLEAR])))
 
     # STRUT: the button node is PALMAR (it IS the sensor location -- the pad presses down onto it), so
     # tie it to the palmar Hall-seat base. A strut to a dorsal edge would cross straight THROUGH the
@@ -175,31 +190,37 @@ def cluster_mount(h, q, fingers, mount_nodes, *, wire_len=0.010):
         for side in (+1.0, -1.0):
             caps.append(((ccf + s[f]["magface"] * fl + side * pcb_half * lat,
                           ccf + s[f]["base"] * fl + side * pcb_half * lat), 0.5 * PA_WALL + 0.0006))
-        carve_boxes.append((ccf + (s[f]["hall"] + 0.5 * PCB[2]) * fl, R,
-                            np.array([0.5 * PCB[0], 0.5 * PCB[2], 0.5 * PCB[1]])))           # PCB pocket
-        slot = ccf + s[f]["hall"] * fl - (0.5 * half + 0.5 * wire_len) * ax
-        carve_boxes.append((slot, R, np.array([0.5 * wire_len + half, 0.0006, 0.0006])))    # wire slot
+        # HALL PCB SLOT -- a PROXIMAL SLIDE-IN channel using the cup's own open proximal end: PCB
+        # cross-section, open proximally so the sensor slides in along the finger axis with its wire
+        # trailing out, and STOPPED distally so the PCB butts a wall at the read-out gap. Replaces the
+        # buried pocket that could only be reached from the magnet side (VISION §8.15l, 34th anchor).
+        ax_d = 0.5 * PCB[0]                          # distal stop: the PCB's distal face seats here
+        ax_p = -(half + 0.003)                       # proximal: 3 mm past the open cup end (wire exit)
+        fl_d, fl_p = s[f]["magface"], s[f]["hall"] + PCB[2] + SLOT_CLEAR  # dorsal (magnet gap) .. PCB rest;
+        #                            spans the whole gap so it CONSUMES the button strut's dorsal reach
+        #                            (the fat palmar strut runs at this depth) instead of severing a sliver.
+        c_slot = ccf + 0.5 * (fl_d + fl_p) * fl + 0.5 * (ax_d + ax_p) * ax
+        carve_boxes.append((c_slot, R, np.array([0.5 * (ax_d - ax_p),
+                                                 0.5 * (fl_p - fl_d), 0.5 * PCB[1] + SLOT_CLEAR])))
         caps.append(((np.asarray(mount_nodes[f], float), ccf + s[f]["base"] * fl), STRUT_R))  # to palmar base
 
     # BASE SPINE (palmar) linking the Hall seats.
     for a, b in zip(fingers, fingers[1:]):
         caps.append(((cc[a] + s[a]["base"] * fr[a][1], cc[b] + s[b]["base"] * fr[b][1]), 0.5 * BASE_T))
 
-    # SHARED FLANKS -- guide walls BESIDE the fingers, spanning each finger's channel, centred between
-    # adjacent fingers (open proximally). One between each adjacent pair + one outboard of each end.
-    def mvp(f):                                      # channel-centre point (floor direction)
-        _ax, _fl, _lat, _R, _pos, _cc, _r, _half, _vp, _vn, _wh = fr[f]
-        return _cc + 0.5 * (vf[f] + FLOOR_T + vd[f]) * _fl
-    off = lambda f: fr[f][10] + SEAT_CLEAR + CUP_WALL + 0.0015                # outboard flank offset
-    f0, fN = fingers[0], fingers[-1]
-    flanks = [(f0, mvp(f0) - off(f0) * fr[f0][2])]                            # fr[f][2]=lat, [10]=w_half
-    flanks += [(a, 0.5 * (mvp(a) + mvp(b))) for a, b in zip(fingers, fingers[1:])]
-    flanks.append((fN, mvp(fN) + off(fN) * fr[fN][2]))
-    for fref, m in flanks:
-        ax, fl, lat, R, pos, ccf, r, half, v_pad, v_nail, w_half = fr[fref]
-        hv = 0.5 * (vf[fref] + FLOOR_T - vd[fref])
-        boxes.append((m, R, np.array([half, hv, 0.5 * CUP_WALL])))
-        caps.append(((m, ccf + s[fref]["base"] * fl), 0.5 * PA_WALL + 0.0006))   # tie flank to base spine
+    # DEDICATED FLANKS -- each cup gets its OWN two guide walls, beside its own finger in ITS frame.
+    # A SHARED wall at the inter-finger midline took one finger's roll, and since the per-finger roll
+    # is real anatomy (up to ~27 deg, kept), that wall swung to a different height than its neighbours
+    # and could float palmar of an adjacent cup's base plate (the 'side plate under the base' report,
+    # 2026-07-21). Dedicated walls each meet THEIR OWN floor -- floor-anchored, uniform WALL_H tall.
+    for f in fingers:
+        ax, fl, lat, R, pos, ccf, r, half, v_pad, v_nail, w_half = fr[f]
+        lw = w_half + SEAT_CLEAR + 0.5 * CUP_WALL                 # inner face beside the finger
+        m_fl = vf[f] + FLOOR_T - 0.5 * WALL_H                     # wall centre: floor-anchored
+        for side in (+1.0, -1.0):
+            m = ccf + m_fl * fl + side * lw * lat
+            boxes.append((m, R, np.array([half, 0.5 * WALL_H, 0.5 * CUP_WALL])))
+            caps.append(((m, ccf + s[f]["base"] * fl), 0.5 * PA_WALL + 0.0006))   # tie wall to its base
 
     return dict(boxes=boxes, caps=caps, cyls=cyls, carve_cyls=carve_cyls, carve_boxes=carve_boxes)
 
