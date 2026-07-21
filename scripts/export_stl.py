@@ -168,8 +168,11 @@ def main(hand_mm=REF_MM, out_path="out/gauntlet.stl"):
         print(f"  the structure clears. `hug` is now a clearance of the PART "
               f"(centreline + rod + fillet), not of its centreline.")
 
+    # EXPORT IN MILLIMETRES. The mesh is built in SI (metres); slicers assume mm, so a raw export
+    # imports as a sub-mm speck. Scale here -- AFTER every metre-based clearance check above.
+    m.apply_scale(1000.0)
     m.export(out_path)
-    print(f"\n  wrote {out_path}")
+    print(f"\n  wrote {out_path}  ({' x '.join(f'{d:.0f}' for d in m.extents)} mm)")
 
 
 if __name__ == "__main__":
