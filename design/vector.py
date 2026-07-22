@@ -763,6 +763,9 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
 
     f1 = float(np.mean(per_hand_char_effort))  # effort/char typing English QWERTY
     f2 = float(gc["mass_g"]) + adj_mass        # g of grown bone + the adjusters
+    # NB: gc["support_mm"] (the coarse hot-bead print-support estimate) is carried in the returned
+    # `gauntlet` dict for post-hoc use, but is NOT an objective: validated against PrusaSlicer it did
+    # not predict real support (n=8, pearson -0.06). Print support is handled by ORIENTATION instead.
 
     # Structurally <= COMMON_DRIVE now (see REAL_BOUNDS). Kept in G as a live
     # self-check: if anyone reintroduces independent curls, this fires.

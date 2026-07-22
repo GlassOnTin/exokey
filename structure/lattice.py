@@ -132,6 +132,32 @@ BRIDGE_MAX = P("BRIDGE_MAX", 0.010, "m", Source.SPEC,
                "shear stiffness at all -- the gate went unmet by any structure in the domain. FDM "
                "does not forbid horizontal material. It forbids UNSUPPORTED material.")
 
+# ---- THE PRINT-SAG PHYSICS -----------------------------------------------------------------------
+# What fails on an FDM overhang is the freshly-laid BEAD, still above T_g and soft, cantilevered off
+# the STIFF cooled layers below -- NOT the finished part's self-weight (measured, ~mN, dropped). Two
+# closed-form regimes, from the bead geometry and the hot modulus. These feed the f3 SUPPORT ESTIMATE
+# only; the hard printability constraint stays on the conservative OVERHANG/BRIDGE_MAX above, because
+# E_HOT/SAG_TOL are guesses and a guess must not decide what actually ships.
+LAYER_H = P("LAYER_H", 0.2e-3, "m", Source.SPEC,
+            "FDM layer height (slicer config). Sets the per-layer overhang step and the hot bead's "
+            "bending depth.")
+BEAD_W = P("BEAD_W", 0.4e-3, "m", Source.SPEC,
+           "Extruded bead width ~ nozzle. With LAYER_H it sets the self-support angle: a strut "
+           "climbing steeper than arctan(LAYER_H/BEAD_W) lays each new bead onto the one below.")
+E_HOT = P("E_HOT", 20e6, "Pa", Source.GUESS,
+          "Effective modulus of the bead while above T_g and still able to sag -- ~3 orders below "
+          "the 6 GPa solid. THE load-bearing guess of the sag model: the bridge span goes as "
+          "E_HOT^(1/4). To be calibrated against PrusaSlicer's actual support decisions.")
+SAG_TOL = P("SAG_TOL", 0.1e-3, "m", Source.GUESS,
+            "How far a hot bridge may droop before the print degrades -- half a layer. GUESS, paired "
+            "with E_HOT.")
+# Self-support angle as a minimum tilt (|u.d| = sin of the angle above the build plane), and the
+# sag-limited hot-bridge span. The bead WIDTH cancels out of the span: L^4 = 6.4 E_hot h^2 tol/(rho g).
+_HOT_MIN_SIN = float(LAYER_H) / float(np.hypot(float(LAYER_H), float(BEAD_W)))   # ~0.45  (~27 deg)
+_RHO_PRINT = 1060.0                                                             # cf_pa12, the filament
+HOT_BRIDGE = float((6.4 * float(E_HOT) * float(LAYER_H) ** 2 * float(SAG_TOL)
+                    / (_RHO_PRINT * 9.81)) ** 0.25)                             # ~15 mm at defaults
+
 BASE_T = P("BASE_T", 0.003, "m", Source.GUESS,
            "How deep the 'first layer' is: nodes within this of the lowest point are taken to sit "
            "on the bed (a brim/raft holds them). Print the gauntlet STANDING ON ITS WRIST, fingers "
@@ -149,24 +175,36 @@ def _tilt(nodes, bars, build_dir):
     return np.abs(v @ d) / np.maximum(L, 1e-12), L, nodes @ d
 
 
-def _steep(nodes, bars, build_dir):
-    """Which bars are steep enough to HOLD SOMETHING UP (>= 45 deg from the build plane)."""
+def _min_sin_default():
+    """Conservative self-support threshold: tilt >= sin(45 deg) (the fixed OVERHANG heuristic)."""
+    return float(np.sin(np.pi / 2 - np.radians(float(OVERHANG))))
+
+
+def _steep(nodes, bars, build_dir, min_sin=None):
+    """Which bars are steep enough to HOLD SOMETHING UP. Default: >= 45 deg from the build plane.
+    Pass min_sin = _HOT_MIN_SIN to use the bead self-support angle arctan(LAYER_H/BEAD_W) instead."""
     tilt, _L, _h = _tilt(nodes, bars, build_dir)
-    return tilt >= np.sin(np.pi / 2 - np.radians(float(OVERHANG)))
+    thr = _min_sin_default() if min_sin is None else float(min_sin)
+    return tilt >= thr
 
 
-def buildable(nodes, bars, build_dir):
+def buildable(nodes, bars, build_dir, min_sin=None, bridge_max=None):
     """The bars FDM can lay down without support: steep enough to self-support, OR short enough to
     bridge between two anchors that the layers below have already built.
 
     ⚠ THIS IS A WEAKER RULE THAN "EVERY STRUT MUST BE STEEP", AND THE WEAKER RULE IS THE TRUE ONE.
+
+    Defaults are the conservative OVERHANG/BRIDGE_MAX heuristic. Pass min_sin=_HOT_MIN_SIN and
+    bridge_max=HOT_BRIDGE to use the bead-sag physics (self-support angle from layer/bead, span from
+    the hot modulus) -- the realistic measure the f3 support estimate uses.
     """
     tilt, L, _h = _tilt(nodes, bars, build_dir)
-    steep = tilt >= np.sin(np.pi / 2 - np.radians(float(OVERHANG)))
-    return steep | (L <= float(BRIDGE_MAX))
+    thr = _min_sin_default() if min_sin is None else float(min_sin)
+    bmax = float(BRIDGE_MAX) if bridge_max is None else float(bridge_max)
+    return (tilt >= thr) | (L <= bmax)
 
 
-def unsupported(nodes, bars, live, build_dir):
+def unsupported(nodes, bars, live, build_dir, min_sin=None):
     """The nodes of `live` the nozzle could never reach: nothing already-printed beneath them.
 
     THE PRINTABILITY CONSTRAINT, STATED AS A TOPOLOGICAL ONE. A node can be printed iff it is on
@@ -178,7 +216,7 @@ def unsupported(nodes, bars, live, build_dir):
     That is why it can be enforced as a HARD CONSTRAINT and not a penalty -- it is a property of the
     graph, checkable in O(bars), and repairable (put a down-strut back) rather than merely priced.
     """
-    steep = _steep(nodes, bars, build_dir)
+    steep = _steep(nodes, bars, build_dir, min_sin=min_sin)
     _t, _L, hh = _tilt(nodes, bars, build_dir)
     used = {i for e in live for i in bars[e]}
     if not used:
@@ -190,6 +228,65 @@ def unsupported(nodes, bars, live, build_dir):
             a, b = bars[e]
             held.add(a if hh[a] > hh[b] else b)      # a steep bar holds up its UPPER end
     return sorted(used - held)
+
+
+def support_mm(nodes, bars, live, build_dir, hot=False):
+    """Total sacrificial support-column length to print `live` along `build_dir`, in METRES.
+
+    THE HONEST COST OF SUPPORT IS THE COLUMN OF PLASTIC YOU PRINT AND SNAP OFF -- not the count.
+    A column runs from the bed up to every node the nozzle cannot reach (`unsupported`) and to the
+    midpoint of every strut too shallow to bridge (`not buildable`); sum those heights. Lifted here
+    from scripts/printable.py so cost() and printable.py share ONE copy of the measure.
+
+    hot=True uses the bead-sag physics (self-support angle arctan(LAYER_H/BEAD_W), sag-limited hot
+    bridge span HOT_BRIDGE) -- the realistic estimate the f3 objective steers on. hot=False keeps the
+    conservative OVERHANG/BRIDGE_MAX heuristic (build-direction choice, and the hard constraint).
+    """
+    ms = _HOT_MIN_SIN if hot else None
+    bm = HOT_BRIDGE if hot else None
+    d = np.asarray(build_dir, float)
+    d = d / np.linalg.norm(d)
+    nodes = np.asarray(nodes, float)
+    hh = nodes @ d
+    used = sorted({i for e in live for i in bars[e]})
+    if not used:
+        return 0.0
+    bed = min(hh[i] for i in used)
+    total = sum(float(hh[i] - bed) for i in unsupported(nodes, bars, live, d, min_sin=ms))
+    ok = buildable(nodes, bars, d, min_sin=ms, bridge_max=bm)
+    for e in live:
+        if not ok[e]:
+            a, b = bars[e]
+            total += float(0.5 * (hh[a] + hh[b]) - bed)     # a prop under the strut's midpoint
+    return total
+
+
+def gravity_cases(nodes, bars, live, build_dir, mat="cf_pa12", r=None, g=9.81):
+    """Print self-weight as ONE load case: each live bar's weight rho*A*L*g, lumped half to each
+    end node, pulling DOWN the build axis (-build_dir). Same (label, name, load) shape as
+    load_cases, so grow() can fold it into the ESO ranking exactly like impact_cases.
+
+    ⚠ RANKING, NOT GATE. The finished lattice's self-weight is ~0.2 mN per strut against the
+    0.196 N keypress, so this never moves the deflection gate -- it only nudges growth toward load
+    paths that also carry the part's own weight while it is being built.
+    """
+    d = np.asarray(build_dir, float)
+    d = d / np.linalg.norm(d)
+    nodes = np.asarray(nodes, float)
+    rr = float(BAR_R) if r is None else float(r)
+    A = np.pi * rr ** 2
+    rho = MATERIALS[mat]["rho"]
+    load: dict[int, np.ndarray] = {}
+    for e in live:
+        a, b = bars[e]
+        L = float(np.linalg.norm(nodes[b] - nodes[a]))
+        half = 0.5 * rho * A * L * float(g)
+        for i in (int(a), int(b)):
+            load[i] = load.get(i, np.zeros(3)) - half * d
+    # The case is labelled with a real finger so solve()'s buttons[f] lookup resolves; the button
+    # deflection it computes for this case is meaningless (gravity is global) and is discarded --
+    # grow() keeps only the per-strut strain energy for the ranking, exactly as for impact_cases.
+    return [(FINGERS[0], "print_gravity", load)]
 
 
 def prune_dead_ends(bars, live, keep):
@@ -929,10 +1026,10 @@ def cost(h, q, wired=None, press_N=0.196, pitch=0.008, gate=0.5e-3, mat="cf_pa12
             relax=False)
     except (RuntimeError, ValueError):
         return dict(mass_g=float("inf"), solid_g=float("inf"), worst=float("inf"),
-                    util=float("inf"), struts=0, grip=0, feasible=False)
+                    util=float("inf"), struts=0, grip=0, support_mm=float("inf"), feasible=False)
     if not live or not np.isfinite(hist[-1][1]):
         return dict(mass_g=float("inf"), solid_g=float("inf"), worst=float("inf"),
-                    util=float("inf"), struts=0, grip=0, feasible=False)
+                    util=float("inf"), struts=0, grip=0, support_mm=float("inf"), feasible=False)
 
     n_solid, w_solid, m_solid = hist[0][:3]
     _n, w, m, _t = hist[-1][:4]
@@ -949,8 +1046,15 @@ def cost(h, q, wired=None, press_N=0.196, pitch=0.008, gate=0.5e-3, mat="cf_pa12
     U = fr.solve([c[2] for c in cases])
     util = float(fr.stress(U, r).max() / (p["yield_"] / 2.0))        # SF = 2
 
+    # PRINT-SUPPORT COST, along the wrist-standing build axis (fingers up -- lattice.py:135, the
+    # design's intended pose). DIAGNOSTIC for now; becomes objective f3 once Phase 0 confirms it is
+    # a genuinely independent axis and not a restatement of mass.
+    _o, e_d, _r2, _o2 = hand_axes(h, q)
+    sup_m = support_mm(nodes, bars, live, e_d, hot=True)
+
     return dict(mass_g=float(m) * 1000.0, solid_g=float(m_solid) * 1000.0,
                 worst=float(w_solid), util=util, struts=len(live), grip=int(grip),
+                support_mm=float(sup_m),
                 feasible=bool(w_solid <= gate and grip >= int(float(STRAP_NODES_MIN))))
 
 

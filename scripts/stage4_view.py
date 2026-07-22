@@ -28,8 +28,6 @@ def pick(F: np.ndarray, how: str) -> int:
         return int(np.argmin(F[:, 0]))
     if how == "mass":
         return int(np.argmin(F[:, 1]))
-    if how == "crisp":
-        return int(np.argmin(F[:, 2]))
     # knee: closest to the ideal point after normalising each objective to [0,1]
     lo, hi = F.min(0), F.max(0)
     Z = (F - lo) / np.where(hi - lo > 0, hi - lo, 1.0)
@@ -38,7 +36,7 @@ def pick(F: np.ndarray, how: str) -> int:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--pick", default="knee", choices=["knee", "effort", "mass", "crisp"])
+    ap.add_argument("--pick", default="knee", choices=["knee", "effort", "mass"])
     args = ap.parse_args()
 
     with open("out/pareto.pkl", "rb") as fh:
@@ -138,8 +136,8 @@ def main():
     fig = go.Figure(traces)
     fig.update_layout(
         title=(f"ExoKey Stage 4 — {args.pick} design. {r['total_keys']} keys, "
-               f"{r['F'][1]:.0f} g, effort/char {r['F'][0]:.2e}, "
-               f"max deflection {r['F'][2]:.2f} mm. Feasible for the 5th–95th percentile hand."),
+               f"{r['F'][1]:.0f} g, effort/char {r['F'][0]:.2e}. "
+               f"Feasible for the 5th–95th percentile hand."),
         scene=dict(aspectmode="data", xaxis_title="x (m)", yaxis_title="y (m)",
                    zaxis_title="z (m)"),
         template="plotly_white", margin=dict(l=0, r=0, t=60, b=0))

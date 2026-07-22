@@ -9,7 +9,17 @@ Objectives (all minimised, genuinely conflicting):
     f1  effort per character   -- muscle activation, population-mean. More keys makes
                                  chords shorter and cheaper; cheaper keys make them cheaper.
     f2  device mass (g)        -- worn all day. More keys means more rows, bars, and mass.
-    f3  worst key deflection   -- crispness. A stiffer frame is a heavier one.
+
+    Two candidate third objectives were both TRIED and RETIRED:
+      * worst-key DEFLECTION -- the structure is grown exactly to that gate, so crispness is pinned
+        by construction; it lives in the constraints, not as a trade.
+      * print SUPPORT (mm) -- the cheap in-loop surrogate (structure.lattice.support_mm on the
+        coarse lattice) did NOT predict real PrusaSlicer organic-support volume: n=8 designs across
+        a 5x surrogate range gave pearson -0.06, because real support is driven by the MESH surface
+        (hollow-tube undersides, node fillets) and by build ORIENTATION, neither of which the
+        skeletal line model sees. So support is handled POST-HOC by orientation (scripts/orient.py),
+        not searched. The support tooling (support_mm, the hot-bead model, gravity_cases) remains as
+        a utility.
 
 Constraints (g <= 0), all HARD:
     every key pressable (>= 3 mm travel) by EVERY hand in the 5th-95th percentile
@@ -77,7 +87,8 @@ class ExoKeyProblem(ElementwiseProblem):
         for name, (lo, hi) in INT_BOUNDS.items():
             vars[name] = Integer(bounds=(lo, hi))
         vars["material"] = Choice(options=MATERIAL_CHOICES)
-        super().__init__(vars=vars, n_obj=2, n_ieq_constr=len(CONSTRAINT_NAMES), **kw)
+        super().__init__(vars=vars, n_obj=len(OBJECTIVE_NAMES),
+                         n_ieq_constr=len(CONSTRAINT_NAMES), **kw)
 
     def _evaluate(self, x, out, *args, **kwargs):
         try:
@@ -87,5 +98,5 @@ class ExoKeyProblem(ElementwiseProblem):
         except Exception:
             # A frame can be geometrically degenerate (e.g. a singular FEA). Report it as
             # badly infeasible rather than crashing the run -- but NEVER as feasible.
-            out["F"] = [1e6, 1e6]
+            out["F"] = [1e6] * len(OBJECTIVE_NAMES)
             out["G"] = [1e3] * len(CONSTRAINT_NAMES)

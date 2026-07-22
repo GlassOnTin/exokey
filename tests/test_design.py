@@ -110,10 +110,10 @@ def test_constraints_are_hard_not_penalties(hands):
     assert r["feasible"] == all(v <= 0 for v in r["G"])
     # and the objectives contain no penalty terms: they are physical units
     assert r["F"][1] > 0  # grams of grown gauntlet + adjusters
-    # ⚠ THERE IS NO THIRD OBJECTIVE ANY MORE. Deflection traded against mass while the structure
-    # was a fixed palmar box. The gauntlet is GROWN TO THE GATE -- ESO deletes struts until the
-    # buttons are exactly as crisp as they are allowed to be -- so deflection is pinned by
-    # construction, and what is left to minimise is the GRAMS.
+    # ⚠ TWO OBJECTIVES. Deflection was retired (grown to the gate, so it is a constraint). A print-
+    # SUPPORT third objective was tried and removed too: its cheap in-loop surrogate did not predict
+    # real PrusaSlicer support (n=8, pearson -0.06), so support is handled by build orientation, not
+    # searched. support_mm stays as a utility on the gauntlet dict, but never enters F.
     assert len(r["F"]) == 2
 
 

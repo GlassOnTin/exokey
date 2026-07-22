@@ -5,6 +5,9 @@
 #   ./cloud/hetzner.sh up [type]      # create the server + install deps + push the repo
 #   ./cloud/hetzner.sh run  ...       # run the optimiser on it (args passed to opt.run)
 #   ./cloud/hetzner.sh burn ...       # run, fetch the results, then DELETE the box. use this.
+#   ./cloud/hetzner.sh run-bg ...     # run DETACHED (survives ssh drop / local reboot)
+#   ./cloud/hetzner.sh watch          # poll the detached run; fetch + DELETE when it finishes
+#   ./cloud/hetzner.sh tail           # tail the detached run's log
 #   ./cloud/hetzner.sh fetch          # pull out/ back
 #   ./cloud/hetzner.sh down           # DELETE the server (this is what stops the billing)
 #   ./cloud/hetzner.sh status         # what exists and roughly what it has cost
@@ -176,11 +179,57 @@ cmd_down() {
   echo "deleted. billing stopped."
 }
 
+cmd_run_bg() {
+  # DETACHED run. `burn` tethers the optimiser to an SSH session on THIS machine, so a local
+  # reboot SIGHUPs the remote run AND may leave the box billing (the teardown is driven from
+  # here). Here the run is `setsid`-detached on the box with its stdio redirected, so it outlives
+  # the ssh channel, this shell, and a reboot of this laptop. A DONE marker signals completion;
+  # `watch` fetches + deletes only then. Teardown is deliberately NOT wired to this command --
+  # the box must survive this machine.
+  local n; n=$(ssh_run nproc)
+  local procs=$(( n > 2 ? n - 1 : 1 ))
+  local sd=${EXOKEY_SEEDS:-1}
+  echo "detaching run on $(server_ip): $n vCPU (--procs $procs), seed $sd, args: $*"
+  ssh_run "cd /opt/exokey && mkdir -p out && rm -f out/DONE && \
+    setsid sh -c 'PYTHONPATH=. OMP_NUM_THREADS=1 EXOKEY_OUT=out/pareto_seed${sd}.pkl \
+      .venv/bin/python -u -m opt.run --procs $procs --seed $sd $* > out/nsga_seed${sd}.log 2>&1; \
+      touch out/DONE' >/dev/null 2>&1 < /dev/null &"
+  sleep 2
+  echo "started -- it now runs independently of this machine."
+  echo "  progress:  ./cloud/hetzner.sh tail"
+  echo "  finish:    ./cloud/hetzner.sh watch    (fetches out/ and DELETES the box when done)"
+}
+
+cmd_tail() {
+  local sd=${EXOKEY_SEEDS:-1}
+  ssh_run "test -f /opt/exokey/out/DONE && echo '[DONE]'; \
+           tail -n 25 /opt/exokey/out/nsga_seed${sd}.log 2>/dev/null || echo 'no log yet'"
+}
+
+cmd_watch() {
+  # Poll the DETACHED run, then fetch + DELETE. Safe to Ctrl-C and safe to lose (reboot): it does
+  # NOT tear down on interrupt, only on genuine completion. So a reboot of this machine leaves the
+  # remote run and box untouched -- just run `watch` again when you are back.
+  [[ -z "$(server_json)" ]] && { echo "no box named '$NAME' -- nothing to watch"; return; }
+  echo "polling $(server_ip) for out/DONE (Ctrl-C is safe; the box keeps running)..."
+  while true; do
+    [[ -z "$(server_json)" ]] && { echo "the box is gone -- stopping"; return; }
+    ssh_run "test -f /opt/exokey/out/DONE" 2>/dev/null && break
+    sleep 60
+  done
+  echo "run finished. fetching + tearing down."
+  cmd_fetch
+  cmd_force_down
+}
+
 case "${1:-}" in
   price) shift; cmd_price "$@" ;;
   burn) shift; cmd_burn "$@" ;;
   up) shift; cmd_up "$@" ;;
   run) shift; cmd_run "$@" ;;
+  run-bg) shift; cmd_run_bg "$@" ;;
+  watch) shift; cmd_watch "$@" ;;
+  tail) shift; cmd_tail "$@" ;;
   fetch) shift; cmd_fetch "$@" ;;
   status) shift; cmd_status "$@" ;;
   down) shift; cmd_down "$@" ;;

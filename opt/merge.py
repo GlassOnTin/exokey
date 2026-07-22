@@ -59,7 +59,6 @@ def main(paths: list[str]) -> None:
     print(f"  keys        {keys.min()} .. {keys.max()}   (2/finger = 10 is the Typeware target)")
     print(f"  effort/char {Fm[:,0].min():.3e} .. {Fm[:,0].max():.3e}")
     print(f"  mass        {Fm[:,1].min():.1f} .. {Fm[:,1].max():.1f} g")
-    print(f"  deflection  {Fm[:,2].min():.3f} .. {Fm[:,2].max():.3f} mm")
 
     # How much did each seed actually contribute? If one seed supplies almost the whole
     # merged front, the other was wasted -- and if they split it evenly, neither had

@@ -1096,3 +1096,87 @@ def test_the_answer_is_ONE_PIECE_with_no_loose_ends():
 
     # a chain of loose ends unravels completely: 0--1--2--3, only 0 is an anchor, 3 nothing
     assert cleanup([(0, 1), (1, 2), (2, 3)], [0, 1, 2], keep={0}, buttons=[]) == []
+
+
+# ---- PRINT SUPPORT AS A THIRD OBJECTIVE (f3) -----------------------------------------------------
+# The gauntlet now co-optimises for how much sacrificial support it needs to FDM-print. What fails
+# on an overhang is the freshly-laid bead, still above T_g and soft, cantilevered off the stiff
+# cooled layers below -- not the finished part's self-weight (measured, ~mN, dropped). support_mm
+# judges that with a closed-form bead model; f3 is that cost, and it is a genuinely independent axis.
+
+
+def test_print_gravity_lumps_to_the_total_self_weight():
+    """gravity_cases must conserve weight: the node loads it lumps sum to the whole part's
+    self-weight, pulling straight down the build axis. (Kept as a tested-but-unwired option: folding
+    finished-part gravity into the growth ranking was measured and did NOT lower support, so it is
+    off by default -- but the load set itself must be correct if anyone switches it on.)"""
+    import numpy as np
+
+    from structure.lattice import BAR_R, MATERIALS, gravity_cases
+
+    nodes = np.array([[0, 0, 0], [0, 0, 0.01], [0, 0.01, 0.02], [0.01, 0, 0]], float)
+    bars = [(0, 1), (1, 2), (0, 3)]
+    live = [0, 1, 2]
+    d = np.array([0, 0, 1.0])
+    (label, name, load), = gravity_cases(nodes, bars, live, d, mat="cf_pa12")
+
+    rho = MATERIALS["cf_pa12"]["rho"]
+    A = np.pi * float(BAR_R) ** 2
+    length = sum(np.linalg.norm(nodes[b[1]] - nodes[b[0]]) for b in (bars[e] for e in live))
+    W = rho * A * length * 9.81
+    assert np.allclose(sum(load.values()), [0, 0, -W]), "lumped weight != total self-weight along -d"
+    assert all(v[2] <= 0 for v in load.values()), "gravity must pull every node DOWN the build axis"
+
+
+def test_the_hot_bead_model_needs_no_more_support_than_the_45deg_rule():
+    """The bead-sag physics: a strut steeper than arctan(layer/bead) ~ 27 deg self-supports (each
+    new bead lands on the one below), and a hot bridge holds to ~15 mm -- both WEAKER than the
+    conservative 45 deg / 10 mm heuristic. So the hot measure never counts MORE support, and on a
+    shallow strut it counts strictly less."""
+    import numpy as np
+
+    from structure.lattice import HOT_BRIDGE, _HOT_MIN_SIN, support_mm
+
+    assert 0.40 < _HOT_MIN_SIN < 0.50, "self-support ~ arctan(0.2/0.4) = 26.6 deg -> sin ~ 0.447"
+    assert 0.010 < HOT_BRIDGE < 0.020, "hot bridge ~ 15 mm at E_hot 20 MPa, tol 0.1 mm"
+
+    # 0->1 is vertical (self-supports 1); 0->2 climbs at ~30 deg over ~14 mm -- shallow and too long
+    # to bridge under the 45/10 rule, but steep-enough AND short-enough under the bead model.
+    nodes = np.array([[0, 0, 0], [0, 0, 0.01], [0.012, 0, 0.007]], float)
+    bars = [(0, 1), (0, 2)]
+    live = [0, 1]
+    d = np.array([0, 0, 1.0])
+    cons = support_mm(nodes, bars, live, d, hot=False)
+    hot = support_mm(nodes, bars, live, d, hot=True)
+    assert hot <= cons + 1e-12, "the hot model must never require MORE support than the 45 deg rule"
+    assert hot < cons, "the 30 deg strut self-supports under the bead model but not the 45 deg rule"
+
+
+def test_support_is_a_utility_not_an_objective():
+    """Print support was validated against PrusaSlicer and did NOT predict real support (n=8,
+    pearson -0.06), so it is NOT an NSGA-II objective -- two objectives only (effort, mass) -- but
+    support_mm stays importable as a utility. Cheap: no grow, no MuJoCo."""
+    from opt.problem import CONSTRAINT_NAMES, OBJECTIVE_NAMES, ExoKeyProblem
+    from structure.lattice import support_mm  # noqa: F401  -- the utility must still exist
+
+    assert len(OBJECTIVE_NAMES) == 2 and not any("support" in n.lower() for n in OBJECTIVE_NAMES)
+    p = ExoKeyProblem()
+    assert p.n_obj == 2, "NSGA-II must see exactly two objectives (effort, mass)"
+    assert p.n_ieq_constr == len(CONSTRAINT_NAMES)
+
+
+def test_evaluate_returns_two_objectives_and_a_support_diagnostic():
+    """End to end: a real layout scores a 2-vector F (effort, mass), and the gauntlet dict carries a
+    finite, positive support_mm diagnostic -- a utility, never an objective. (One coarse grow --
+    slow, like the other structural tests here.)"""
+    import numpy as np
+
+    from design.vector import evaluate
+    from opt.problem import hands
+    from opt.run import baseline
+
+    r = evaluate(baseline(), hands())
+    assert len(r["F"]) == 2, "evaluate returns two objectives (effort, mass)"
+    assert "support_mm" in r["gauntlet"], "the gauntlet cost must carry the support diagnostic"
+    sup = r["gauntlet"]["support_mm"]
+    assert np.isfinite(sup) and sup > 0, "a real gauntlet needs some support and it must be finite"

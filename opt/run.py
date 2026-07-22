@@ -204,7 +204,6 @@ def main():
     print("-" * 52)
     order = np.argsort(F[:, 0])
     for i in order[:12]:
-        x = X[i]
         k = 5
         mark = " <-- dominates baseline" if i in dominates else ""
         print(f"{'':4s} {k:5d} {F[i,0]:12.3e} {F[i,1]:18.1f}{mark}")
