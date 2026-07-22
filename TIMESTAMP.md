@@ -8,11 +8,43 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** thirty-three times. **All thirty-four stamps stand**, and each
+The disclosure has been **extended and re-anchored** thirty-four times. **All thirty-five stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — THE HALL SENSOR SLIDES IN FROM THE PROXIMAL END, and the CUP WALLS ARE MADE COHERENT
+### Current — THE PRINT-SUPPORT OBJECTIVE WAS BUILT, MEASURED AGAINST A SLICER, AND RETIRED
+
+A negative result, kept because it *is* the finding. A **third NSGA-II objective — sacrificial print
+support** — was added to the effort × mass search, scored by a cheap in-loop surrogate: the length of
+support column a coarse strut lattice would need, judged by a **hot-bead sag model** (the freshly-laid
+FDM bead, still above T_g and soft, cantilevered off the stiff cooled layers below — self-support angle
+`arctan(LAYER_H/BEAD_W) ≈ 27°`, sag-limited hot-bridge span `L_max ∝ E_HOT^(1/4) ≈ 15 mm`). In the
+*search* it behaved like a real, independent axis (uncorrelated with mass). But **validated against
+PrusaSlicer it did not predict real support**: eight designs spanning a 5× surrogate range were grown at
+full resolution, oriented wrist-standing, and sliced with organic supports — **pearson −0.06**, real
+support flat at ~28 cm³ ± 13%. Real organic support is driven by the **mesh surface** (hollow-tube
+undersides, node fillets) and by build **orientation**, neither of which the skeletal line model sees,
+so the objective was **removed**: the search stays effort × mass, and print support is handled post-hoc
+by orientation (`scripts/orient.py`). The tooling is kept as tested utilities — `support_mm(hot=)`, the
+hot-bead constants, `gravity_cases` (finished-part self-weight, measured *not* to lower support so left
+unwired), and a **detached cloud-run mode** in `cloud/hetzner.sh` (`run-bg`/`watch`, so a burst survives
+an ssh drop or a local reboot). **`VISION.md` DID change this time** — its limitations table now
+discloses the two print-sag guesses `E_HOT` (20 MPa) and `SAG_TOL` (0.1 mm) — so **both `VISION.md` and
+`MANIFEST.sha256` are re-stamped** (111 files).
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) — *re-stamped this anchor: adds the `E_HOT`/`SAG_TOL` print-sag guesses* | `c890f3f252c252f47dbfe8dd8e696dc4144e56761f6d9d5747717147127ee7a6` |
+| `MANIFEST.sha256` (hashes of all 111 source + doc files) | `636f899e1a8655821fa9480bfc5ee22975f44391dbf1b064525dfafdb9f7e57f` |
+
+Stamped: **2026-07-22T15:26:00Z** (UTC, submission time). Proofs: `MANIFEST.sha256.ots` and
+`VISION.md.ots`, both freshly stamped — VISION.md's own proof no longer stands from the 27th anchor,
+because its content changed. The outgoing 34th manifest proof is archived at
+`timestamps/MANIFEST.sha256.2026-07-22a.ots`, and the outgoing VISION.md proof (which stood from the
+27th anchor, Bitcoin block 958567) at `timestamps/VISION.md.2026-07-22a.ots` (both pending Bitcoin
+confirmation at stamp time; run `ots upgrade` once the block mines).
+
+### Thirty-fourth — THE HALL SENSOR SLIDES IN FROM THE PROXIMAL END, and the CUP WALLS ARE MADE COHERENT
 
 Three cup fixes surfaced by looking at the sliced cluster. (1) **The Hall PCB now slides in from the
 cup's open proximal end.** It had been a buried pocket reachable only from the magnet side — from
