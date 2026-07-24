@@ -108,13 +108,29 @@ MATERIAL_CHOICES = ["al6061", "al7075", "cf_pa12"]
 
 # Continuous variables: name -> (lo, hi). Per-finger curl, splay, switch force, structure.
 REAL_BOUNDS: dict[str, tuple[float, float]] = {}
-# ⚠ tp_thumb IS NO LONGER A VARIABLE. It pinned to its lower bound in every design on the front,
-# and `report_cornered` says that means one of two things needing OPPOSITE fixes: the bound is too
-# tight (the optimum is outside it and every answer is an artefact), or the variable is DEAD (the
-# objective is flat in it, so it is not a decision). Swept from 0.02 to 0.80: effort/character
-# moves 0.3% and mass is flat below 0.45 -- so the bound was fine and the variable is dead. It is
-# now the CLINICAL POSITION OF FUNCTION (design/params.py THUMB_CMC), which is where MyoHand's own
-# q_neutral already sits, rather than a number picked out of ESO's trajectory noise.
+# ⚠ tp_thumb IS A VARIABLE AGAIN, AND THE REASON IT WAS RETIRED IS A LESSON WORTH KEEPING.
+#
+# It was retired as a DEAD VARIABLE: swept 0.02 to 0.80, effort/character moved 0.3% and mass was
+# flat below 0.45, so it was replaced by the clinical position of function (params.THUMB_CMC).
+# That measurement was correct and the conclusion did not survive, because the sweep was run
+# against the two OBJECTIVES and a variable is not dead when it is flat in the objectives -- it is
+# dead when it is flat in the objectives AND in every binding CONSTRAINT. tp_thumb was never
+# checked against the constraints, because with a 13 mm thumb well nothing about the thumb bound.
+#
+# ⚠ AND THE OBVIOUS REASON TO BRING IT BACK IS NOT THE REAL ONE -- measured, both ways.
+#
+# The tempting argument is geometric: measured fingertips make the thumb well 25 mm wide,
+# `well-finger` starts binding on ('thumb','index'), and tp_thumb moves that gap monotonically by
+# 9.5 mm (-16.4 -> -6.9 mm) as the only variable that touches it (the thumb gets no `ab_` -- see
+# posture() -- and cmc_abduction stays at q_neutral). All true, and it buys NOTHING: that pair
+# binds at mid-curl, which four-finger packing already excludes. Freeing tp_thumb leaves the
+# pack-and-press window at the SAME 5 of 81 curl cells, the same cells.
+#
+# What it actually buys is MASS: inside the window, sweeping it moves the gauntlet 33.6 -> 38.7 g,
+# ~15% of objective 2, and at (tp .3, tm .2) the cheap end breaks `thumb-opposed`. That is a live
+# objective-vs-constraint trade. So the "mass is flat at 26-27 g" half of the retirement is simply
+# no longer true at 25 mm thumb wells -- and it, not the geometry, is why this is a variable again.
+REAL_BOUNDS["tp_thumb"] = (0.02, 0.80)      # the thumb's CMC: worth 5.1 g inside the window
 REAL_BOUNDS["tm_thumb"] = (0.10, 0.80)      # the thumb's MP still drives independently
 
 # COMMON DRIVE, BUILT IN RATHER THAN CHECKED.
@@ -225,28 +241,15 @@ def posture(h: MyoHand, finger: str, t_p: float, t_m: float, ab: float = 0.0) ->
     return q
 
 
-_WELL_R: dict = {}
-
-
 def well_radius(h: MyoHand, finger: str) -> float:
     """Half-width of the WELL for this finger: its fingertip has to fit inside.
 
-    Measured from the model's distal-phalanx flesh capsule, not assumed. 6.0 mm (little) to
-    7.0 mm (index/middle).
+    The fingertip's MEASURED skin half-width (MyoHand._fit_fingertips), which is also what the
+    printed cup is built to. This used to rescan the flesh capsule here -- a second, cached copy
+    of the same idea, and it silently became the WRONG one once the capsule started being grown
+    to hit a measured breadth (it overshoots the skin by up to 2.8 mm on the ring).
     """
-    import mujoco
-
-    key = (id(h.model), finger)
-    if key in _WELL_R:
-        return _WELL_R[key]
-    m = h.model
-    bid = h.pad[finger][0]
-    r = 0.0
-    for g in range(m.body_geomadr[bid], m.body_geomadr[bid] + m.body_geomnum[bid]):
-        if m.geom_type[g] == mujoco.mjtGeom.mjGEOM_CAPSULE:
-            r = max(r, float(m.geom_size[g][0]))
-    _WELL_R[key] = r
-    return r
+    return float(h.tip_half[finger])
 
 
 def _seg_seg_dist(p0, p1, q0, q1) -> float:
@@ -453,8 +456,8 @@ _DIGIT_BODIES = {
 
 def _curl(x: dict, finger: str, which: str) -> float:
     if finger == "thumb":
-        if which == "tp":                       # FIXED: see REAL_BOUNDS and params.THUMB_CMC
-            return float(THUMB_CMC)
+        if which == "tp":                       # THUMB_CMC is now the DEFAULT, not a fix
+            return float(x.get("tp_thumb", THUMB_CMC))
         return float(x[f"{which}_thumb"])
     lo, hi = REAL_BOUNDS[f"{which}_hand"]
     return float(np.clip(x[f"{which}_hand"] + x[f"d{which[1]}_{finger}"], lo, hi))
@@ -511,6 +514,21 @@ def keys_on_reference(ref: MyoHand, x: dict) -> tuple[dict, dict]:
             _, n_pad = ref.pad_pose(q, f)
             keys[(f, k)] = (pos, n_pad)  # well axis = pad normal, pointing back at the pulp
     return keys, curls
+
+
+OPPOSED_MIN = 0.8   # the threshold tests/test_physics.py::test_thumb_rest_is_opposed already uses
+
+
+def opposition(keys: dict) -> float:
+    """cos of the angle between the thumb pulp's outward normal and the line to the index/middle
+    pulps: +1 the thumb faces them squarely, 0 it points 90 deg away.
+
+    Same metric as test_thumb_rest_is_opposed, evaluated on the wells' OWN postures instead of on
+    the rest pose -- which is the gap that let a non-opposed thumb reach a printed part.
+    """
+    pt, nt = keys[("thumb", 0)]
+    v = 0.5 * (keys[("index", 0)][0] + keys[("middle", 0)][0]) - pt
+    return float(nt @ v / (np.linalg.norm(v) + 1e-12))
 
 
 def action_dirs(h: MyoHand, q: np.ndarray, finger: str) -> dict[str, np.ndarray]:
@@ -775,6 +793,7 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
     spread = max(float(tm4.max() - tm4.min()), float(tp4.max() - tp4.min()))
     sep_violation, sep_pair = key_separation(keys_ref, ref, curls)
     well_finger_gap, wf_pair = well_finger_clearance(ref, x)
+    thumb_facing = opposition(keys_ref)
 
     g = [
         worst_travel_deficit,       # every WIRED direction usable, on every hand
@@ -796,6 +815,14 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
         -worst_swept,
         -well_finger_gap,           # a well is SOLID: no other digit's bones inside it
         float(margin),              # THE DIGIT MUST ACTUALLY BE ABLE TO PERFORM THE ACTION
+        OPPOSED_MIN - thumb_facing,  # THE THUMB MUST STILL BE OPPOSED IN THE POSTURE WE BUILD AT.
+        #   test_thumb_rest_is_opposed pinned opposition at the REST posture -- but the mesh, and
+        #   the whole device, are built at the DESIGN posture, and NOTHING carried the invariant
+        #   across. Measured on the shipped design: facing +0.87 at rest, -0.02 at the design
+        #   posture -- the thumb pad turned ~90 deg out of opposition, and the printed thumb well
+        #   came out 32 mm away and 43 deg rotated from where a thumb can actually use it. The GA
+        #   did not do anything wrong: opposition was not priced in either objective or any of the
+        #   eleven constraints, so curling tm_thumb to 0.735 was free. Now it costs.
     ]
 
     return dict(

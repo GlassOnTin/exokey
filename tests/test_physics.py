@@ -138,6 +138,40 @@ def test_thumb_rest_is_opposed(h):
     assert 0.030 < gap < 0.060, f"thumb sits {gap*1000:.0f} mm from the fingers, not opposed"
 
 
+def test_opposition_is_priced_in_the_design_posture_not_just_at_rest():
+    """THE TEST ABOVE GUARDED THE WRONG POSTURE, AND A PART GOT PRINTED THROUGH THE GAP.
+
+    `test_thumb_rest_is_opposed` pins the REST pose. The mesh, the wells and the whole device are
+    built at the DESIGN posture, and nothing carried the invariant across. Measured on the shipped
+    design: facing +0.87 at rest, -0.02 at the design posture -- the thumb pad turned ~90 deg out
+    of opposition, and the printed thumb well landed 32 mm away and 43 deg rotated from anywhere a
+    thumb can use it. The GA was not at fault: opposition was priced by neither objective nor any
+    of the eleven constraints, so curling tm_thumb to 0.735 was free.
+
+    So the claim is not "opposition holds" -- it is that LOSING IT IS NOW EXPENSIVE. A thumb curled
+    out of opposition must show up as a positive (violated) `thumb-opposed` entry in G.
+    """
+    from design.vector import OPPOSED_MIN, evaluate, keys_on_reference, opposition
+    from opt.problem import CONSTRAINT_NAMES, hands
+
+    H = hands()
+    ref = H[50]
+    base = {"tp_hand": 0.3, "tm_hand": 0.3, "adjust": 0.015, "material": "cf_pa12",
+            "ab_index": 0.9, "ab_middle": 0.3, "ab_ring": -0.3, "ab_little": -0.9}
+    base.update({f"d{a}_{f}": 0.0 for a in "pm"
+                 for f in ("index", "middle", "ring", "little")})
+
+    i = CONSTRAINT_NAMES.index("thumb-opposed")
+    curled = evaluate(dict(base, tm_thumb=0.80), H)
+    assert curled["G"][i] > 0, "a thumb curled out of opposition is not being penalised"
+
+    # and the metric itself is monotonic in the one knob that destroys it, so the GA has a gradient
+    facing = [opposition(keys_on_reference(ref, dict(base, tm_thumb=t))[0])
+              for t in (0.10, 0.30, 0.50, 0.80)]
+    assert facing == sorted(facing, reverse=True), f"not monotonic in tm_thumb: {facing}"
+    assert facing[0] > OPPOSED_MIN > facing[-1], f"threshold not inside the range: {facing}"
+
+
 @pytest.mark.parametrize("finger", FINGERS)
 def test_key_at_the_flexion_limit_has_no_travel(h, finger):
     """A finger at its flexion limit cannot press anything -- and that is exactly where

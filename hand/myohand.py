@@ -30,6 +30,22 @@ PAD_BODIES = {
 }
 FINGERS = tuple(PAD_BODIES)
 
+# FINGERTIP BREADTH, ACROSS THE NAIL. Calipers, one adult male hand -- n=1, logged as a GUESS
+# for the population in VISION.md.
+#
+# MyoHand's own distal-phalanx capsules are a SLIM model. Left alone they produce finger cups
+# 12.0-15.4 mm across (thumb 12.3, index 15.4, middle 14.7, ring 12.1, little 12.0), which is
+# below any adult finger -- the first printed gauntlet could not be worn. It is not a hand-LENGTH
+# error either: matching breadth by scaling hand length implies a 278 mm hand.
+#
+# The capsule radius is the one lever that fixes both width models at once: design.vector.
+# well_radius reads it directly (so the GA's well-fit constraints see the real finger) and the
+# printed cup reads it through hand.flesh.skin -> manufacture.mount._seat. Correct it here and
+# the two cannot drift apart. Applied BEFORE hand-length scaling, so `scale` still multiplies on
+# top. Pinned by tests/test_mount.py::test_cups_fit_the_measured_fingertips.
+FINGERTIP_BREADTH = {"thumb": 0.025, "index": 0.020, "middle": 0.020,
+                     "ring": 0.020, "little": 0.015}
+
 # The model's own fingertip markers.
 TIP_SITES = {
     "thumb": "THtip", "index": "IFtip", "middle": "MFtip",
@@ -192,9 +208,21 @@ class MyoHand:
         self.hi = m.jnt_range[:, 1].copy()
         # Neutral posture: mid-range. A stand-in for the hand's functional rest pose;
         # replaced by a measured rest pose in Stage 1 if it matters.
+        # ⚠ CAPTURE THE PALMAR TISSUE DEPTH BEFORE _fit_fingertips INFLATES THE CAPSULE. The pulp
+        # point is the bone tip pushed out along `palmar` by the flesh, and it used to read that
+        # depth off the same capsule that sets the fingertip's WIDTH. Those are different
+        # measurements of a finger that is not round, and widening the capsule to a measured
+        # BREADTH silently doubled the DEPTH too (thumb 6.5 -> 13.3 mm), moving every well outward
+        # and letting ESO reach the deflection gate with 33% less material -- a lighter gauntlet
+        # bought with a pulp 7 mm off the bone. flesh.py's MRI is explicit that the phalanges' own
+        # capsules are the figure it AGREES with on depth; only the width was wrong. So depth is
+        # frozen here, at the value taken before any inflation.
+        self.pad_depth: dict[str, float] = {}      # empty => _pad_frame falls back to the capsule
         self.pad = {f: self._pad_frame(f) for f in FINGERS}
+        self.pad_depth = {f: float(self.pad[f][5]) for f in FINGERS}
         self.flexion_axes = self._flexion_axes()  # must precede q_neutral: it uses them
         self.q_neutral = self._functional_rest()
+        self._fit_fingertips()        # needs pad + q_neutral; rebuilds pad
 
         # Equilibrium is imposed on the PRESSING DIGIT's dofs. Nothing else.
         #
@@ -478,6 +506,50 @@ class MyoHand:
 
         return np.clip(q, self.lo, self.hi)  # respect the model's own limits
 
+    def _fit_fingertips(self) -> None:
+        """Grow each distal-phalanx flesh capsule until the SKIN is the MEASURED breadth wide.
+
+        Solved against the skin rather than set to `breadth/2`, because the skin is the bone mesh
+        pushed out by (capsule radius - bone radius) and the bone meshes are not round: setting the
+        radius directly lands 10% narrow on the ring and 7% wide on the index. The skin's lateral
+        extent moves 1:1 with the capsule radius, so one Newton step is exact and the second pass
+        is only there to verify. ~40 ms, once per process.
+
+        Only ever widens -- every measured breadth exceeds MyoHand's own. Targets are scaled by
+        `self.scale`, so a per-user --hand-mm fit still gets proportionally bigger cups.
+        """
+        from hand.flesh import skin
+
+        m, q = self.model, self.q_neutral
+        self.tip_half: dict[str, float] = {}
+        caps = {}
+        for f in FINGERTIP_BREADTH:
+            bid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, PAD_BODIES[f])
+            caps[f] = next(g for g in range(m.body_geomadr[bid],
+                                            m.body_geomadr[bid] + m.body_geomnum[bid])
+                           if m.geom_type[g] == mujoco.mjtGeom.mjGEOM_CAPSULE)
+        # ITERATE TO CONVERGENCE, DO NOT COUNT PASSES. `tip_half` is recorded from the measurement
+        # taken BEFORE that pass's growth, so a fixed pass count leaves it stale for any digit still
+        # growing on the last one -- the ring came out 19.54 mm against a built 20.00 mm, and
+        # `tip_half` is what the GA's collision model reads. Looping until nothing grows means the
+        # value returned was measured with no subsequent change to the geometry. Converges in 2-3.
+        for _ in range(8):
+            V, _F, L = skin(self, q, labels=True)
+            V, L = np.asarray(V), np.asarray(L)
+            grew = False
+            for f, target in FINGERTIP_BREADTH.items():
+                wf = self.well_frame(q, f)
+                cc = wf["pos"] - 0.5 * wf["half"] * wf["axis"]   # as manufacture.mount._seat
+                w = 2.0 * float(np.abs((V[L == self.pad[f][0]] - cc) @ wf["lateral"]).max())
+                self.tip_half[f] = 0.5 * w      # THE one definition of "how wide is this fingertip"
+                d = 0.5 * (target * self.scale - w)
+                if d > 1e-5:                       # 0.01 mm: below the print's own resolution
+                    m.geom_size[caps[f]][0] += d
+                    grew = True
+            self.pad = {f: self._pad_frame(f) for f in FINGERS}   # radius moved: repose the pads
+            if not grew:
+                return
+
     def _pad_frame(self, finger: str) -> tuple:
         """Locate the finger PULP, and the BONE it sits on, from the model's own anatomy.
 
@@ -525,7 +597,9 @@ class MyoHand:
         v = v - (v @ bone) * bone  # kill the along-bone part: insertions sit at different depths
         palmar = v / np.linalg.norm(v)
 
-        pad = site(TIP_SITES[finger]) + r_flesh * palmar
+        # DEPTH, not width: see `pad_depth` in __init__. Falls back to the capsule on the first
+        # build, which is exactly when the capsule still IS the honest depth.
+        pad = site(TIP_SITES[finger]) + self.pad_depth.get(finger, r_flesh) * palmar
         half = float(m.geom_size[g][1])  # capsule half-length: how long the channel must be
 
         # ORIENT THE BONE AXIS BY ANATOMY, NOT BY THE CAPSULE'S SIGN.
@@ -575,7 +649,14 @@ class MyoHand:
             lateral -- floor x axis. The side walls; `left`/`right` push against these.
 
         `half` is the phalanx half-length (how long the channel must be to hold the bone) and
-        `radius` the flesh radius (how wide).
+        `radius` the fingertip's MEASURED lateral half-width (how wide).
+
+        ⚠ `radius` is NOT the flesh capsule's own size. It used to be, and once _fit_fingertips
+        started growing that capsule to hit a measured breadth the two parted company: the bone
+        meshes are not round, so the capsule overshoots the real skin by up to 2.8 mm (ring) to
+        inflate it. Everything that asks "how wide is this fingertip" -- the cup, the well-vs-
+        finger collision model, key separation -- must get the SKIN, or the GA optimises against
+        a finger 5.6 mm fatter than the one that gets printed.
         """
         self.fk(q)
         bid, pad_l, palmar_l, bone_l, half, r = self.pad[finger]
@@ -590,7 +671,7 @@ class MyoHand:
         lateral = np.cross(floor, axis)
         return dict(pos=pos, axis=axis, floor=floor,
                     lateral=lateral / (np.linalg.norm(lateral) + 1e-12),
-                    half=float(half), radius=float(r))
+                    half=float(half), radius=float(self.tip_half.get(finger, r)))
 
     def pad_jacobian(self, finger: str) -> np.ndarray:
         """(3, nv) translational Jacobian of the pulp point. Call after fk()."""

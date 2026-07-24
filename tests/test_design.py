@@ -119,7 +119,7 @@ def test_constraints_are_hard_not_penalties(hands):
 
 def test_the_five_wells_must_physically_fit(hands):
     """A well is a CAVITY THE FINGERTIP SITS IN, so its size is the fingertip's size --
-    DERIVED from the model (12-14 mm wide), not a constant.
+    DERIVED from the model (15-25 mm wide), not a constant.
 
     It was a constant: 12 mm, inherited from when these were KEYCAPS on stems. A keycap sits
     ON a stem; a fingertip sits IN a well. That single stale number invalidated a whole
@@ -131,9 +131,13 @@ def test_the_five_wells_must_physically_fit(hands):
     from design.vector import key_separation, keys_on_reference, well_radius
 
     ref = hands[50]
-    # the well must be at least as wide as the fingertip that lives in it
+    # The well must be at least as wide as the fingertip that lives in it. The band was
+    # 5-10 mm, which was the DERIVED-from-MyoHand answer and was wrong on the hand: those
+    # capsules are a slim model and the cups printed 12.0-15.4 mm across, too narrow to wear.
+    # It is now the measured fingertip (hand.myohand.FINGERTIP_BREADTH), 15 mm little to 25 mm
+    # thumb, so the band has to admit a real thumb.
     for f in FINGERS:
-        assert 0.005 < well_radius(ref, f) < 0.010, f"{f}: implausible well radius"
+        assert 0.007 < well_radius(ref, f) < 0.014, f"{f}: implausible well radius"
 
     curled = mid_design()          # gripping: fingertips converge
     curled["tm_hand"] = 0.60
@@ -380,6 +384,19 @@ def test_the_fingertip_bone_sits_INSIDE_its_well(hands):
             assert depth < 0.002, f"{f}: bone is {depth*1000:+.1f}mm BELOW the well floor"
 
 
+def _worst_gap_excluding_thumb(h, x):
+    """`well_finger_clearance` reduced to the FOUR FINGERS: worst gap over pairs with no thumb in
+    them. The thumb cannot be splayed by any design variable, so it must not be allowed to mask
+    what splaying does to the fingers that can."""
+    import design.vector as V
+    saved = V.FINGERS
+    try:
+        V.FINGERS = tuple(f for f in saved if f != "thumb")
+        return V.well_finger_clearance(h, x)[0]
+    finally:
+        V.FINGERS = saved
+
+
 def test_a_well_is_solid_and_no_other_finger_may_be_inside_it(hands):
     """A WELL IS A SOLID OBJECT, and nothing checked it against the neighbouring FINGERS.
 
@@ -411,8 +428,28 @@ def test_a_well_is_solid_and_no_other_finger_may_be_inside_it(hands):
     fanned = dict(closed)                 # fan them and it must improve
     for f, sgn in zip(("index", "middle", "ring", "little"), (0.9, 0.3, -0.3, -0.9)):
         fanned[f"ab_{f}"] = sgn
-    gap_fanned, _ = well_finger_clearance(h, fanned)
-    assert gap_fanned > gap_closed, "splaying the fingers must pull the wells off the neighbours"
+    gap_fanned, pair_fanned = well_finger_clearance(h, fanned)
+
+    # ⚠ SPLAYING FIXES THE FOUR FINGERS AND CANNOT TOUCH THE THUMB, so the global worst gap is the
+    # wrong thing to assert on. It used to be right by accident: with MyoHand's slim 13 mm wells
+    # the worst pair was always ('middle','ring'), which fanning does fix. At the MEASURED 25 mm
+    # thumb well the binding pair CHANGES under the fan -- ('middle','ring') -14.92 mm closed,
+    # ('thumb','index') -14.97 mm fanned -- so the global figure barely moves and this assertion
+    # failed while reporting nothing about the fan. The claim is about the FOUR FINGERS; test that.
+    assert pair == ("middle", "ring"), f"expected the closed hand to bind middle-vs-ring, got {pair}"
+    assert pair_fanned[0] == "thumb" or pair_fanned[1] == "thumb", (
+        f"fanning should leave only the thumb binding, got {pair_fanned}")
+
+    four_closed = _worst_gap_excluding_thumb(h, closed)
+    four_fanned = _worst_gap_excluding_thumb(h, fanned)
+    assert four_fanned > four_closed, (
+        f"splaying must pull the four fingers' wells off their neighbours "
+        f"({four_closed*1000:+.1f} -> {four_fanned*1000:+.1f} mm)")
+
+    # AND THE THUMB IS A SEPARATE, UNSOLVED PROBLEM, stated rather than hidden: its well is 25 mm
+    # wide and it has NO abduction variable (posture() skips it) and a fixed cmc_abduction, so
+    # nothing in the design vector can splay it off the index the way the fingers splay off theirs.
+    assert gap_fanned < 0, "the thumb well is expected to still overrun the index at this curl"
 
 
 def test_the_cradle_resolves_the_pressing_vs_packing_tension(hands):
@@ -449,7 +486,14 @@ def test_the_cradle_resolves_the_pressing_vs_packing_tension(hands):
 
     h = hands[50]
     four = [f for f in FINGERS if f != "thumb"]
-    OPEN_TP, OPEN_TM = 0.35, 0.40
+    # THE POSTURE MOVED; THE FINDING DID NOT. This was 0.35/0.40, measured when the fingertips came
+    # from MyoHand's slim capsules. At the MEASURED breadths (hand.myohand.FINGERTIP_BREADTH) the
+    # wells are 15-25 mm rather than 12-15 mm, and five of them no longer pack at 0.35/0.40 --
+    # they overlap by 5.17 mm. So the tension did NOT come back: the hand that resolves it is just
+    # a straighter one. Mapped over the whole curl grid, 5 of 81 cells both pack and press, all at
+    # MCP 0.10-0.30 / PIP 0.20-0.30; this is the roomiest (2.89 mm of separation margin), and all
+    # five digits still get 5/5 directions there, not the 3 the rows need.
+    OPEN_TP, OPEN_TM = 0.20, 0.20
 
     def n_performable(f):
         q = posture(h, f, OPEN_TP, OPEN_TM, 0.0)

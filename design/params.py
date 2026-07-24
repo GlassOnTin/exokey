@@ -241,15 +241,21 @@ DEFLECTION_MAX = P(
 
 THUMB_CMC = P(
     "THUMB_CMC", 0.299, "-", Source.DERIVED,
-    "The thumb's CMC flexion, as a fraction of its range. FIXED, not optimised -- and it is fixed "
-    "at the value MyoHand's own q_neutral already sits at, which is the CLINICAL POSITION OF "
-    "FUNCTION (derived at Stage 0): the posture a resting, opposed thumb actually holds. "
-    "Swept from 0.02 to 0.80, effort/character moves by 0.3% -- NOTHING -- and gauntlet mass is "
-    "flat below 0.45 (26-27 g, well inside ESO's own +-15-30% trajectory noise) and only "
-    "penalises at 0.8 (37.6 g). So it is a DEAD VARIABLE, not a tight bound: going BELOW the old "
-    "0.10 floor buys nothing either. The GA was pinning it to that floor and `report_cornered` "
-    "flagged it, which is what that check is for. One less dimension, and the value is derived "
-    "rather than picked out of noise.")
+    "The thumb's CMC flexion, as a fraction of its range: the value MyoHand's own q_neutral sits "
+    "at, which is the CLINICAL POSITION OF FUNCTION (derived at Stage 0) -- the posture a resting, "
+    "opposed thumb actually holds. Now the DEFAULT when `tp_thumb` is absent from a design dict, "
+    "not a fix. "
+    "⚠ IT WAS A FIX, AND THE RETIREMENT NO LONGER HOLDS. The evidence was: swept 0.02 to 0.80, "
+    "effort/character moves 0.3% and mass is flat below 0.45 (26-27 g, inside ESO's own +-15-30% "
+    "trajectory noise), so it is a DEAD VARIABLE. Both halves were measured on a hand with "
+    "MyoHand's slim 13 mm thumb well. At the MEASURED 25 mm well the mass half is simply false: "
+    "inside the feasible window the same sweep moves the gauntlet 33.6 -> 38.7 g, ~15% of "
+    "objective 2, and at (tp .3, tm .2) the cheap end breaks `thumb-opposed`. A live trade, so it "
+    "is a variable again (design/vector.REAL_BOUNDS). "
+    "The geometric argument for restoring it is the seductive one and it is WRONG -- tp_thumb does "
+    "move the newly-binding ('thumb','index') gap by 9.5 mm, but only at mid-curl, which "
+    "four-finger packing already excludes; freeing it leaves the pack-and-press window at the same "
+    "5 of 81 curl cells. Measured, not assumed, in both directions.")
 
 
 def guesses() -> list[Param]:

@@ -10,6 +10,7 @@ import pickle
 import numpy as np
 import pytest
 
+from hand.myohand import FINGERTIP_BREADTH
 from manufacture import entry, mount
 
 LONG = ["index", "middle", "ring", "little"]
@@ -293,3 +294,37 @@ def test_the_harness_bus_is_a_shorter_shared_tree(posed):
         for n in adj[k] - seen:
             seen.add(n); stack.append(n)
     assert all(btn[f] in seen for f in btn), [f for f in btn if btn[f] not in seen]
+
+
+def test_cups_fit_the_measured_fingertips(posed):
+    """THE FIRST PRINTED GAUNTLET COULD NOT BE WORN: every cup was too narrow for a real finger.
+
+    MyoHand's own distal-phalanx capsules are a slim model, and the cup is built from the skin
+    those capsules generate, so the printed slots came out 12.0-15.4 mm across (thumb 12.3, index
+    15.4, middle 14.7, ring 12.1, little 12.0) against measured fingers of 25/20/20/20/15 mm. Not
+    a hand-LENGTH error either -- matching breadth by scaling length implies a 278 mm hand.
+
+    So this asserts the OUTPUT, not the input: the slot the finger actually slides into is the
+    measured breadth plus the two SEAT_CLEAR gaps that make it slide rather than bite.
+    """
+    h, q, _mounts, _fingers = posed
+    for f, w in FINGERTIP_BREADTH.items():
+        *_, w_half = mount._frame(h, q, f)
+        gap = 2.0 * (w_half + mount.SEAT_CLEAR)
+        assert abs(gap - (w + 2.0 * mount.SEAT_CLEAR)) < 2e-4, \
+            f"{f}: cup gap {gap*1000:.2f} mm, finger is {w*1000:.1f} mm"
+
+
+def test_one_definition_of_how_wide_a_fingertip_is(posed):
+    """`well_frame()["radius"]` and `design.vector.well_radius` are what the GA's collision model
+    and the cup are built from. They were two separate rescans of the flesh CAPSULE -- fine while
+    the capsule was the skin, wrong the moment _fit_fingertips started growing it to hit a measured
+    breadth (the bone meshes are not round, so it overshoots by up to 2.8 mm on the ring). Both
+    must now report the same MEASURED skin half-width, or the GA optimises a fatter finger than
+    the one that gets printed.
+    """
+    from design.vector import well_radius
+    h, q, _mounts, _fingers = posed
+    for f, w in FINGERTIP_BREADTH.items():
+        assert well_radius(h, f) == pytest.approx(h.well_frame(q, f)["radius"])
+        assert well_radius(h, f) == pytest.approx(0.5 * w, abs=1e-4), f

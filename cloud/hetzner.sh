@@ -6,6 +6,7 @@
 #   ./cloud/hetzner.sh run  ...       # run the optimiser on it (args passed to opt.run)
 #   ./cloud/hetzner.sh burn ...       # run, fetch the results, then DELETE the box. use this.
 #   ./cloud/hetzner.sh run-bg ...     # run DETACHED (survives ssh drop / local reboot)
+#                                     #   EXOKEY_SEEDS="1 2 3" runs the seeds one after another
 #   ./cloud/hetzner.sh watch          # poll the detached run; fetch + DELETE when it finishes
 #   ./cloud/hetzner.sh tail           # tail the detached run's log
 #   ./cloud/hetzner.sh fetch          # pull out/ back
@@ -23,7 +24,10 @@ set -euo pipefail
 
 API=https://api.hetzner.cloud/v1
 NAME=${EXOKEY_SERVER:-exokey-burst}
-TYPE_DEFAULT=ccx53
+# ⚠ SHARED (cpx), not dedicated (ccx). This account cannot create ccx at all -- "dedicated core
+# limit exceeded" -- and the catalogue lies about the rest: /server_types lists cpx51 in nbg1 while
+# /datacenters says it is unavailable there. cpx62 (16 vCPU) is the one that actually creates.
+TYPE_DEFAULT=cpx62
 IMAGE=ubuntu-24.04
 LOCATION=${HCLOUD_LOCATION:-nbg1}
 SSH_KEY_FILE=${SSH_KEY_FILE:-$HOME/.ssh/id_ed25519.pub}
@@ -171,10 +175,19 @@ cmd_status() {
 }
 
 cmd_down() {
+  # ⚠ NO TTY => NO PROMPT => DELETE ANYWAY. The confirm is a guard against a slip of the hand at a
+  # keyboard, and there is no hand here: run from a script, cron or an agent, `read` gets EOF
+  # instantly, takes the "not y" branch, and this command QUIETLY DOES NOTHING while the meter
+  # keeps running. That is the one failure this whole file exists to prevent, so when there is
+  # nobody to ask, the safe default is to delete -- not to keep billing.
   local id; id=$(server_json | jq -r '.id // empty')
   [[ -z "$id" ]] && { echo "nothing to delete"; return; }
-  read -rp "DELETE server '$NAME' (id $id)? results not fetched are lost. [y/N] " a
-  [[ "$a" == "y" ]] || { echo "aborted"; return; }
+  if [[ -t 0 ]]; then
+    read -rp "DELETE server '$NAME' (id $id)? results not fetched are lost. [y/N] " a
+    [[ "$a" == "y" ]] || { echo "aborted"; return; }
+  else
+    echo "no tty -- deleting without confirmation (unfetched results are lost)."
+  fi
   api DELETE "/servers/$id" >/dev/null
   echo "deleted. billing stopped."
 }
@@ -186,24 +199,36 @@ cmd_run_bg() {
   # the ssh channel, this shell, and a reboot of this laptop. A DONE marker signals completion;
   # `watch` fetches + deletes only then. Teardown is deliberately NOT wired to this command --
   # the box must survive this machine.
+  # MULTI-SEED, like `burn`. This took one seed while `burn` looped, and multi-seed is the ONLY
+  # resilience this pipeline has -- there is no checkpoint/resume, so a seed that converges to
+  # nothing is simply a lost run. The seeds go SEQUENTIALLY inside the one detached shell (each
+  # already saturates the box at --procs n-1; running them concurrently would just timeshare the
+  # same cores) and DONE is touched only after the LAST one, so `watch` still means "all finished".
   local n; n=$(ssh_run nproc)
   local procs=$(( n > 2 ? n - 1 : 1 ))
-  local sd=${EXOKEY_SEEDS:-1}
-  echo "detaching run on $(server_ip): $n vCPU (--procs $procs), seed $sd, args: $*"
+  local seeds=${EXOKEY_SEEDS:-1}
+  echo "detaching run on $(server_ip): $n vCPU (--procs $procs), seeds: $seeds, args: $*"
   ssh_run "cd /opt/exokey && mkdir -p out && rm -f out/DONE && \
-    setsid sh -c 'PYTHONPATH=. OMP_NUM_THREADS=1 EXOKEY_OUT=out/pareto_seed${sd}.pkl \
-      .venv/bin/python -u -m opt.run --procs $procs --seed $sd $* > out/nsga_seed${sd}.log 2>&1; \
-      touch out/DONE' >/dev/null 2>&1 < /dev/null &"
+    setsid sh -c 'for sd in $seeds; do \
+        PYTHONPATH=. OMP_NUM_THREADS=1 EXOKEY_OUT=out/pareto_seed\$sd.pkl \
+        .venv/bin/python -u -m opt.run --procs $procs --seed \$sd $* > out/nsga_seed\$sd.log 2>&1; \
+      done; touch out/DONE' >/dev/null 2>&1 < /dev/null &"
   sleep 2
   echo "started -- it now runs independently of this machine."
   echo "  progress:  ./cloud/hetzner.sh tail"
   echo "  finish:    ./cloud/hetzner.sh watch    (fetches out/ and DELETES the box when done)"
+  echo "  then:      .venv/bin/python -m opt.merge   (unions the seed fronts -- NOT automatic)"
 }
 
 cmd_tail() {
-  local sd=${EXOKEY_SEEDS:-1}
-  ssh_run "test -f /opt/exokey/out/DONE && echo '[DONE]'; \
-           tail -n 25 /opt/exokey/out/nsga_seed${sd}.log 2>/dev/null || echo 'no log yet'"
+  # Follows whichever seed is live (newest log) and says which ones are already banked. It used to
+  # interpolate ${EXOKEY_SEEDS} straight into the filename, which with more than one seed asked for
+  # `nsga_seed1 2 3.log` and reported "no log yet" through a perfectly healthy run.
+  ssh_run "cd /opt/exokey/out 2>/dev/null || { echo 'no out/ yet'; exit 0; }; \
+           test -f DONE && echo '[ALL SEEDS DONE]'; \
+           for p in pareto_seed*.pkl; do [ -e \"\$p\" ] && echo \"[banked] \$p\"; done; \
+           l=\$(ls -t nsga_seed*.log 2>/dev/null | head -1); \
+           if [ -n \"\$l\" ]; then echo \"--- \$l ---\"; tail -n 25 \"\$l\"; else echo 'no log yet'; fi"
 }
 
 cmd_watch() {
