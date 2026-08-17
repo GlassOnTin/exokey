@@ -30,21 +30,33 @@ PAD_BODIES = {
 }
 FINGERS = tuple(PAD_BODIES)
 
-# FINGERTIP BREADTH, ACROSS THE NAIL. Calipers, one adult male hand -- n=1, logged as a GUESS
-# for the population in VISION.md.
+# FINGERTIP BREADTH, ACROSS THE NAIL, AT THE 185 mm REFERENCE HAND. Calipers, one adult male hand
+# -- n=1, logged as a GUESS for the population in VISION.md.
 #
 # MyoHand's own distal-phalanx capsules are a SLIM model. Left alone they produce finger cups
 # 12.0-15.4 mm across (thumb 12.3, index 15.4, middle 14.7, ring 12.1, little 12.0), which is
 # below any adult finger -- the first printed gauntlet could not be worn. It is not a hand-LENGTH
 # error either: matching breadth by scaling hand length implies a 278 mm hand.
 #
+# ⚠ THESE ARE REFERENCE-SCALE (185 mm) VALUES, NOT THE RAW MEASUREMENT. The measurement was taken
+# on a 200 mm hand (thumb 25, index/middle/ring 20, little 15 mm), and the whole device is a
+# uniformly-scaled median: it optimises at the 185 mm reference and `export_stl --hand-mm 200`
+# scales the winner by 200/185 = 1.081 to fit. `_fit_fingertips` multiplies these by that same
+# `scale`, so storing the raw 25 mm here would export to a 27 mm cup -- ~1 mm of play per side in a
+# TILT-sensing well, straight into the Hall signal. Stored at measurement x 185/200 instead, so the
+# 200 mm export lands on the real 25/20/20/20/15 mm, and the GA's packing problem is the user's
+# actual hand (25 mm-on-200 mm, scale-invariant to these on 185 mm) rather than an ~8%-too-tight
+# proxy. Re-derive if the reference hand length or the measurement changes.
+#
 # The capsule radius is the one lever that fixes both width models at once: design.vector.
 # well_radius reads it directly (so the GA's well-fit constraints see the real finger) and the
 # printed cup reads it through hand.flesh.skin -> manufacture.mount._seat. Correct it here and
-# the two cannot drift apart. Applied BEFORE hand-length scaling, so `scale` still multiplies on
-# top. Pinned by tests/test_mount.py::test_cups_fit_the_measured_fingertips.
-FINGERTIP_BREADTH = {"thumb": 0.025, "index": 0.020, "middle": 0.020,
-                     "ring": 0.020, "little": 0.015}
+# the two cannot drift apart. Pinned by tests/test_mount.py::test_cups_fit_the_measured_fingertips.
+_MEASURED_MM = {"thumb": 25.0, "index": 20.0, "middle": 20.0, "ring": 20.0, "little": 15.0}
+_MEASURED_HAND_MM = 200.0                      # the hand those widths were measured on
+_REF_HAND_MM = 185.0                           # ANSUR 50th pct -- the scale the model IS
+FINGERTIP_BREADTH = {f: 1e-3 * mm * _REF_HAND_MM / _MEASURED_HAND_MM
+                     for f, mm in _MEASURED_MM.items()}
 
 # The model's own fingertip markers.
 TIP_SITES = {
