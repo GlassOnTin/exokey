@@ -61,7 +61,13 @@ def main():
               for k, e in enumerate(live)]
 
     # THE WHOLE PRINTED SOLID (struts + mounts + housing), decimated, normals fixed, translucent.
+    # ⚠ export_stl.py scales the mesh to MILLIMETRES for slicing (apply_scale(1000)); every other
+    # trace here -- skin, struts, mounts, entry sweeps -- is in the model's native METRES. Left in
+    # mm the gauntlet is 1000x everything else, so plotly's data range is all gauntlet and the
+    # fingers collapse to an invisible speck at the origin (and `grams` reads mm^3 as m^3: ~4e10).
+    # Bring it back to metres so the whole scene shares one unit.
     gm = trimesh.load("out/gauntlet.stl", process=True)
+    gm.apply_scale(0.001)
     Vd, Fd = _decimate(np.asarray(gm.vertices), np.asarray(gm.faces))
     md = trimesh.Trimesh(Vd, Fd, process=True)
     md.fix_normals()
