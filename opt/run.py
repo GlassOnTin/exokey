@@ -55,11 +55,40 @@ def main():
 
     from pymoo.algorithms.moo.nsga2 import RankAndCrowdingSurvival
     from pymoo.core.callback import Callback
-    from pymoo.core.mixed import MixedVariableGA
+    from pymoo.core.mixed import MixedVariableGA, MixedVariableSampling
     from pymoo.optimize import minimize
     from pymoo.parallelization import StarmapParallelization
 
     from design.vector import evaluate
+
+    class WarmStartSampling(MixedVariableSampling):
+        """Random initial population with the first rows replaced by KNOWN designs.
+
+        Every fresh seed spends its first ~10-14 generations (1-2 h of a run) just re-finding
+        the feasible band from random draws -- and we already own designs in or near it: prior
+        Pareto fronts, the hand-built feasibility probes. Injecting them costs nothing and
+        skips that ramp. Seeds may come from runs with older variable sets, so each is applied
+        ON TOP of a random sample: known keys overwrite (reals clipped into today's bounds),
+        missing keys keep the random draw, stale keys are dropped.
+
+        Opt-in via EXOKEY_WARM=<pkl> (a list of design dicts, or {"X": [...]}); the default
+        path is untouched.
+        """
+
+        def __init__(self, seeds):
+            super().__init__()
+            self.seeds = list(seeds)
+
+        def _do(self, problem, n_samples, **kwargs):
+            X = super()._do(problem, n_samples, **kwargs)
+            for i, s in enumerate(self.seeds[:n_samples]):
+                for k, v in s.items():
+                    if k not in problem.vars:
+                        continue                      # a variable a past run had and this one lacks
+                    var = problem.vars[k]
+                    b = getattr(var, "bounds", None)
+                    X[i][k] = float(np.clip(v, *b)) if b is not None else v
+            return X
 
     class Live(Callback):
         """THE OPTIMISER STREAMS INTO THE RENDER -- AND KEEPS EVERY FRAME.
@@ -156,7 +185,16 @@ def main():
     # ---- the run -----------------------------------------------------------------------
     pool = multiprocessing.Pool(args.procs)
     problem = ExoKeyProblem(elementwise_runner=StarmapParallelization(pool.starmap))
-    algorithm = MixedVariableGA(pop_size=args.pop, survival=RankAndCrowdingSurvival())
+    warm = os.environ.get("EXOKEY_WARM")
+    sampling = MixedVariableSampling()
+    if warm:
+        w = pickle.load(open(warm, "rb"))
+        seeds = list(w["X"]) if isinstance(w, dict) else list(w)
+        sampling = WarmStartSampling(seeds)
+        print(f"warm start: {len(seeds)} seed designs from {warm} "
+              f"(first {min(len(seeds), args.pop)} of the population)")
+    algorithm = MixedVariableGA(pop_size=args.pop, survival=RankAndCrowdingSurvival(),
+                                sampling=sampling)
 
     n_eval = args.pop * args.gen
     print(f"\nNSGA-II: pop {args.pop} x {args.gen} gens = {n_eval} evals "
