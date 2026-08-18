@@ -275,6 +275,58 @@ def well_channel(h: MyoHand, q: np.ndarray, finger: str) -> tuple[np.ndarray, np
     return distal, proximal, wf["radius"]
 
 
+def _obb_sep(b1, b2) -> float:
+    """SAT separation of two oriented boxes (center, R rows=axes, half-extents), metres.
+    > 0 = gap along some separating axis; < 0 = penetration depth (a genuine overlap)."""
+    c1, R1, h1 = (np.asarray(v, float) for v in b1)
+    c2, R2, h2 = (np.asarray(v, float) for v in b2)
+    T = c2 - c1
+    axes = list(R1) + list(R2)
+    for i in range(3):
+        for j in range(3):
+            cx = np.cross(R1[i], R2[j])
+            n = np.linalg.norm(cx)
+            if n > 1e-6:
+                axes.append(cx / n)
+    worst = -np.inf
+    for L in axes:
+        ra = sum(abs(R1[k] @ L) * h1[k] for k in range(3))
+        rb = sum(abs(R2[k] @ L) * h2[k] for k in range(3))
+        worst = max(worst, abs(T @ L) - (ra + rb))
+    return float(worst)
+
+
+def cup_clearance(h: MyoHand, x: dict) -> tuple[float, tuple | None]:
+    """Worst separation between two different fingers' PRINTED cup boxes (m). < 0 = the parts
+    interpenetrate.
+
+    ⚠ THE CHANNEL TEST BELOW IS NOT ENOUGH, AND A DESIGN THAT PASSED IT SHIPPED OVERLAPPING CUPS.
+    key_separation models a cup as a CAPSULE -- a channel of radius fingertip + WELL_WALL. The
+    printed cup is a BOX: ~15 mm-tall flat flanks, and a box CORNER reaches sqrt(w^2 + h^2) from
+    the axis, far beyond the capsule radius. Two cups tilted relative to each other meet
+    corner-to-face while every capsule test reads clear -- measured: a gate-feasible knee at
+    key_separation -4.1 mm whose index/middle cradles interpenetrated 1.8 mm. Widening WELL_WALL
+    just moved which pair overlapped; the shape was wrong, not the number.
+
+    So the constraint tests the EXACT boxes the print is built from (manufacture.mount.well_insert
+    -- the drop-in cradle, the widest thing at each fingertip), pairwise SAT. The constraint and
+    the printed part share one geometry and cannot drift apart again.
+    """
+    from manufacture import mount
+
+    q = h.compose({f: posture(h, f, tp_of(x, f), tm_of(x, f), float(x.get(f"ab_{f}", 0.0)))
+                   for f in FINGERS})
+    boxes = {f: mount.well_insert(h, q, f)["boxes"] for f in FINGERS}
+    worst, pair = np.inf, None
+    fs = list(FINGERS)
+    for i in range(len(fs)):
+        for j in range(i + 1, len(fs)):
+            s = min(_obb_sep(a, b) for a in boxes[fs[i]] for b in boxes[fs[j]])
+            if s < worst:
+                worst, pair = s, (fs[i], fs[j])
+    return worst, pair
+
+
 def key_separation(keys: dict, h: MyoHand, curls: dict | None = None) -> tuple[float, tuple | None]:
     """Worst well-pair spacing, as a VIOLATION (required - actual; <= 0 is fine).
 
@@ -792,6 +844,11 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
     tp4 = np.array([tp_of(x, f) for f in four])
     spread = max(float(tm4.max() - tm4.min()), float(tp4.max() - tp4.min()))
     sep_violation, sep_pair = key_separation(keys_ref, ref, curls)
+    # ...and the PRINTED cup boxes must not interpenetrate (the capsule test alone let a
+    # feasible design ship overlapping cradles -- see cup_clearance). Worst of the two.
+    cup_gap, cup_pair = cup_clearance(ref, x)
+    if -cup_gap > sep_violation:
+        sep_violation, sep_pair = -cup_gap, cup_pair
     well_finger_gap, wf_pair = well_finger_clearance(ref, x)
     thumb_facing = opposition(keys_ref)
 

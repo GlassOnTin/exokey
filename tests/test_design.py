@@ -664,3 +664,48 @@ def test_no_undefined_names_anywhere():
         ["uv", "tool", "run", "ruff", "check", "--select", "F821", "--quiet", "."],
         capture_output=True, text=True, cwd=os.path.dirname(os.path.dirname(__file__)))
     assert r.returncode == 0, f"UNDEFINED NAMES:\n{r.stdout}{r.stderr}"
+
+
+def test_the_constraint_tests_the_printed_boxes_not_a_capsule(hands):
+    """A DESIGN THE CONSTRAINT CALLED FEASIBLE SHIPPED INTERPENETRATING CUPS -- TWICE.
+
+    key_separation models a cup as a CAPSULE (channel radius fingertip + WELL_WALL). The printed
+    cup is a BOX with ~15 mm flat flanks, and a box corner reaches sqrt(w^2+h^2) from the axis --
+    far beyond any capsule radius. Two tilted cups meet corner-to-face while every capsule test
+    reads clear: measured, a gate knee at key_separation -4.1 mm whose index/middle drop-in
+    cradles interpenetrated 1.8 mm. Widening WELL_WALL (1.5 -> 2.6 mm) only moved which pair
+    overlapped, because the SHAPE was wrong, not the number.
+
+    So `cup_clearance` SATs the exact boxes manufacture.mount.well_insert builds the print from,
+    and evaluate folds it into `key-overlap`. This pins both halves:
+      (a) a spread hand has positive BOX clearance and passes;
+      (b) the archived capsule-feasible-but-box-overlapping design FAILS the folded constraint.
+    """
+    import os
+    from design.vector import cup_clearance, evaluate, key_separation, keys_on_reference
+    from opt.problem import CONSTRAINT_NAMES, hands as H
+
+    ref = hands[50]
+    four = ["index", "middle", "ring", "little"]
+    x = {"tp_hand": 0.15, "tm_hand": 0.2, "tm_thumb": 0.2, "tp_thumb": 0.299,
+         "adjust": 0.025, "material": "cf_pa12"}
+    x.update({f"d{a}_{f}": 0.0 for a in "pm" for f in four})
+    for f, s in zip(four, (0.9, 0.35, -0.35, -0.9)):
+        x[f"ab_{f}"] = s
+    gap, _ = cup_clearance(ref, x)
+    assert gap > 0, f"spread hand should have positive box clearance, got {gap*1000:+.1f} mm"
+
+    if not os.path.exists("out/pareto_gate2.pkl"):
+        pytest.skip("needs out/pareto_gate2.pkl (the archived capsule-blind design)")
+    import pickle
+    d = pickle.load(open("out/pareto_gate2.pkl", "rb"))
+    F = np.atleast_2d(d["F"])
+    Fn = (F - F.min(0)) / (np.ptp(F, 0) + 1e-12)
+    xg = d["X"][int(np.argmin((Fn ** 2).sum(1)))]
+    keys, curls = keys_on_reference(ref, xg)
+    sep, _ = key_separation(keys, ref, curls)
+    gap_g, _ = cup_clearance(ref, xg)
+    assert sep <= 0 < -gap_g, "this design is only a regression case if the capsule test passes it"
+    r = evaluate(xg, H())
+    assert r["G"][CONSTRAINT_NAMES.index("key-overlap")] > 0, \
+        "evaluate must fail a design whose printed cup boxes interpenetrate"
