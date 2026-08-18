@@ -1036,7 +1036,7 @@ These bound every conclusion above.
   | GUESS | value | what it decides |
   |---|---|---|
   | `COMMON_DRIVE` | 0.15 | how differently neighbouring fingers may curl — a stand-in for **enslavement**, which MyoHand does not model at all. ⚠ **This guess is currently the binding constraint on the well layout.** A made-up number is deciding the design. |
-  | `WELL_WALL` | 1.5 mm | wall between adjacent wells; never checked against a print |
+  | `WELL_WALL` | 2.6 mm | material the packing constraint leaves between adjacent cups. **Was a 1.5 mm GUESS "never checked against a print" — and it was wrong.** Now DERIVED = the real printed cup wall `mount.CUP_WALL` (2.2 mm) + `SEAT_CLEAR` (0.4 mm). At 1.5 mm it under-modelled each cup wall by 1.1 mm, so the GA packed the independent drop-in cradles into **overlap** (measured: middle-ring 0.9 mm on the feasible seed-1 winner, 3.6 mm on the old shipped design) — interference between moving parts. Feasible with room: the central cups can spread to 52.6 mm against the 23.7 mm now required. |
   | `REST_GAP` | 3.5 mm | magnet-face to Hall at rest (§8.15l). A frame dimension, not yet confirmed on a print; sets where the field sits in the sensor's range. |
   | `CRADLE_LEVER` | 0.7 | lateral magnet travel per mm of fingertip tilt — sets each tilt direction's signal (§8.15l). A geometry guess until a stage-1 coupon measures it. |
   | `DEFLECTION_MAX` | 0.5 mm | above this a key "feels mushy" — a judgement, not a measurement |

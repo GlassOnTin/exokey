@@ -148,9 +148,17 @@ EARTH_B = P("EARTH_B", 0.05e-3, "T", Source.LITERATURE,
 # cavity the fingertip sits inside, so it cannot be a constant, and it certainly cannot be
 # the 12 mm keycap pitch it was inherited from.
 # ---------------------------------------------------------------------------------------
-WELL_WALL = P("WELL_WALL", 0.0015, "m", Source.GUESS,
-              "wall thickness between adjacent wells. Plausible for a printed shell; not "
-              "checked against a print.",
+WELL_WALL = P("WELL_WALL", 0.0026, "m", Source.DERIVED,
+              "half the material the packing constraint must leave between two cups: it is the "
+              "actual PRINTED cup wall, manufacture.mount.CUP_WALL (2.2 mm flank) + SEAT_CLEAR "
+              "(0.4 mm finger-slide gap) = 2.6 mm. It was a GUESS of 1.5 mm, 'not checked against "
+              "a print' -- and it was wrong: key_separation requires cc-gap >= r_a + r_b + "
+              "2*WELL_WALL, so 1.5 under-modelled each cup wall by 1.1 mm and the GA packed the "
+              "central drop-in cradles into OVERLAP (measured: middle-ring 0.9 mm on the "
+              "otherwise-feasible seed-1 winner, 3.6 mm on the old shipped design). The cradles "
+              "are independent moving parts, so overlap is interference. Re-derive if CUP_WALL or "
+              "SEAT_CLEAR change. Ample room to satisfy it: the central cups can spread to a "
+              "52.6 mm gap against the 23.7 mm this now requires.",
               describes="finger well")
 
 # ---------------------------------------------------------------------------------------

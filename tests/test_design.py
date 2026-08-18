@@ -134,10 +134,12 @@ def test_the_five_wells_must_physically_fit(hands):
     # The well must be at least as wide as the fingertip that lives in it. The band was
     # 5-10 mm, which was the DERIVED-from-MyoHand answer and was wrong on the hand: those
     # capsules are a slim model and the cups printed 12.0-15.4 mm across, too narrow to wear.
-    # It is now the measured fingertip (hand.myohand.FINGERTIP_BREADTH), 15 mm little to 25 mm
-    # thumb, so the band has to admit a real thumb.
+    # It is now the measured fingertip (hand.myohand.FINGERTIP_BREADTH). ⚠ These are REFERENCE-scale
+    # (185 mm) half-widths: the 25/20/20/20/15 mm measured on a 200 mm hand, stored x 185/200, so
+    # the reference little is 13.9 mm across (6.9 mm radius) and the reference thumb 23.1 mm
+    # (11.6 mm). The band admits that spread; at the user's 200 mm export they scale back up.
     for f in FINGERS:
-        assert 0.007 < well_radius(ref, f) < 0.014, f"{f}: implausible well radius"
+        assert 0.006 < well_radius(ref, f) < 0.013, f"{f}: implausible well radius {well_radius(ref, f)*1000:.1f} mm"
 
     curled = mid_design()          # gripping: fingertips converge
     curled["tm_hand"] = 0.60

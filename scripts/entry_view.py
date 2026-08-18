@@ -84,7 +84,9 @@ def main():
     c, L = (lo + hi) / 2, float((hi - lo).max())
     d = np.array([-1.5, 0.8, 0.8]); d /= np.linalg.norm(d)   # the camera eye dir -> light the faces we see
     lpos = dict(x=float(c[0] + d[0] * 2 * L), y=float(c[1] + d[1] * 2 * L), z=float(c[2] + d[2] * 2 * L))
-    LIGHT = dict(ambient=0.35, diffuse=1.0, specular=0.25, roughness=0.4, fresnel=0.1)
+    LIGHT = dict(ambient=0.6, diffuse=0.7, specular=0.2, roughness=0.4, fresnel=0.1)  # higher
+    #   ambient so the orange TPU cradles read ORANGE, not dark brown -- a single low-ambient light
+    #   turned every away-facing cradle face nearly black ("the cups are solid brown, no orange").
 
     def lit(vv, ff, color, opacity, name, show):
         return go.Mesh3d(x=vv[:, 0], y=vv[:, 1], z=vv[:, 2], i=ff[:, 0], j=ff[:, 1], k=ff[:, 2],
