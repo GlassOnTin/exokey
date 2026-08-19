@@ -51,6 +51,8 @@ from design.vector import INT_BOUNDS, MATERIAL_CHOICES, REAL_BOUNDS, evaluate
 CONSTRAINT_NAMES = [
     "travel", "saturation", "adjust-range", "yield", "strap-grip", "supportable", "common-drive",
     "key-overlap", "swept-path", "well-finger", "performable", "coplanar", "thumb-opposed",
+    "entry-route",   # the slide-in clears the GROWN struts + the finger's own mount (artifact-true)
+    "connected",     # one part: tissue springs make islands look supported to the FEM
 ]
 # "travel" and "saturation" now mean ALL THREE ACTIONS (push/lift/contort) on every hand:
 # a key that can be pushed but not lifted is a one-row key.

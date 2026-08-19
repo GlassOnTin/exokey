@@ -548,6 +548,22 @@ def ground(h, q, hug=0.004, layer=None, pitch=0.004, reach=2.2, press_N=0.196, b
     blen = np.linalg.norm(a - b, axis=1)
     keep_bar = (clear >= 0.8 * hug) & (blen >= 0.4 * pitch)
 
+    # ⚠ THE ENTRY ROUTE IS A KEEP-OUT ON THE DOMAIN, NOT A HOPE ABOUT THE RESULT. `hug` clears
+    # the SEATED skin -- but the finger arrives by sliding 20 mm in from proximal, and a strut
+    # 4 mm off the seated skin can sit dead inside that approach. Measured on the first
+    # 13-constraint knee: ESO grew load paths straight through the thumb and ring slide-ins
+    # (-0.85 / -0.84 mm into the entering finger) while every mount cleared. impact_opt.py hit
+    # this exact bug (pre-8.15l) and got the fix; the main grow never inherited it. So the
+    # channel bars leave the domain entirely -- ESO can only route around, and `supportable`
+    # re-judges feasibility on the reduced space. Ends included in the sampling (s=0..1): a
+    # NODE in the channel is just as much a block as a mid-span.
+    from manufacture.entry import TOUCH_TOL, entry_sweep
+    entry_tree = cKDTree(np.concatenate([entry_sweep(h, q, f, n=8) for f in FINGERS]))
+    s_e = np.linspace(0.0, 1.0, 9)
+    mid_e = (a[:, None, :] * (1 - s_e)[None, :, None] + b[:, None, :] * s_e[None, :, None])
+    d_entry = entry_tree.query(mid_e.reshape(-1, 3))[0].reshape(len(pairs), -1).min(axis=1)
+    keep_bar &= d_entry >= float(BAR_R) + FILLET + TOUCH_TOL
+
     bars = [tuple(p) for p in pairs[keep_bar]]
 
     # ⚠ MANUFACTURABILITY AS A HARD CONSTRAINT ON THE DOMAIN, NOT A PENALTY ON THE OBJECTIVE.
@@ -1021,15 +1037,33 @@ def cost(h, q, wired=None, press_N=0.196, pitch=0.008, gate=0.5e-3, mat="cf_pa12
     """
     p = MATERIALS[mat]
     try:
-        nodes, bars, live, btn, cases, ak, an, hist, _pc, _sh, _ls = grow(
+        nodes, bars, live, btn, cases, ak, an, hist, _pc, shells, live_s = grow(
             h, q, pitch=pitch, rate=rate, gate=gate, mat=mat, press_N=press_N, wired=wired,
             relax=False)
     except (RuntimeError, ValueError):
         return dict(mass_g=float("inf"), solid_g=float("inf"), worst=float("inf"),
-                    util=float("inf"), struts=0, grip=0, support_mm=float("inf"), feasible=False)
+                    util=float("inf"), struts=0, grip=0, support_mm=float("inf"),
+                    islands=99, feasible=False)
     if not live or not np.isfinite(hist[-1][1]):
         return dict(mass_g=float("inf"), solid_g=float("inf"), worst=float("inf"),
-                    util=float("inf"), struts=0, grip=0, support_mm=float("inf"), feasible=False)
+                    util=float("inf"), struts=0, grip=0, support_mm=float("inf"),
+                    islands=99, feasible=False)
+
+    # ONE PART, NOT TWO. Tissue springs sit on EVERY node, so a disconnected island lying on
+    # the skin is numerically self-supporting and sails through the deflection gate -- and
+    # falls off the printed device. Count the connected components of what actually survived
+    # (live bars AND live plates both join nodes); anything above 1 is a part in the bin.
+    import scipy.sparse as _sp
+    from scipy.sparse.csgraph import connected_components as _cc
+    edges = [bars[e] for e in live]
+    for t in live_s:
+        i, j, k = shells[t][:3]
+        edges += [(i, j), (j, k), (i, k)]
+    ei, ej = np.array(edges, int).T
+    adj = _sp.coo_matrix((np.ones(len(edges)), (ei, ej)), shape=(len(nodes), len(nodes)))
+    _n_comp, lbl = _cc(adj, directed=False)
+    used = np.unique(np.concatenate([ei, ej]))
+    islands = int(len(np.unique(lbl[used])))
 
     n_solid, w_solid, m_solid = hist[0][:3]
     _n, w, m, _t = hist[-1][:4]
@@ -1054,7 +1088,10 @@ def cost(h, q, wired=None, press_N=0.196, pitch=0.008, gate=0.5e-3, mat="cf_pa12
 
     return dict(mass_g=float(m) * 1000.0, solid_g=float(m_solid) * 1000.0,
                 worst=float(w_solid), util=util, struts=len(live), grip=int(grip),
-                support_mm=float(sup_m),
+                support_mm=float(sup_m), islands=islands,
+                # the grown lattice itself, so the caller can test the ARTIFACT's geometry
+                # (entry routes vs the struts that actually exist) and not a proxy of it
+                nodes=nodes, bars=bars, live=live, btn=btn,
                 feasible=bool(w_solid <= gate and grip >= int(float(STRAP_NODES_MIN))))
 
 

@@ -32,7 +32,7 @@ from hand.myohand import FINGERS, FLEXION_JOINTS, MyoHand
 
 check_coherent(SVALBOARD)  # force and travel must describe the SAME switch
 from structure.frame import DIGIT_FLESH, build_body, clearance, solve
-from structure.lattice import cost as gauntlet_cost
+from structure.lattice import BAR_R as _BAR_R, cost as gauntlet_cost
 
 # Switch travel and cap geometry. These describe a LOW-PROFILE wearable switch, and they
 # must be consistent with PRESS_N below -- they were not, and it cost us the 10-key designs.
@@ -884,6 +884,39 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
     thumb_facing = opposition(keys_ref)
     droop = little_droop(ref, x)
 
+    # THE ENTRY ROUTE, TESTED ON THE ARTIFACT. The domain keep-out (ground()) should make this
+    # unviolable for struts, but the constraint is what carries the invariant: it measures the
+    # slide-in against the struts THAT ACTUALLY GREW plus the finger's own mount and insert --
+    # the exact primitives the STL is marched from. Found because entry_view caught the first
+    # 13-constraint knee with struts -0.85 mm inside the thumb's slide-in while every in-loop
+    # check passed: swept-path sees only OTHER fingers' wells, and nothing here saw the
+    # structure at all. Same lesson as cup_clearance: the constraint must share geometry with
+    # the artifact. And ONE PART: tissue springs make a disconnected island look supported to
+    # the FEM, so connectivity is a constraint, not an assumption (integer, but violations are
+    # a rare, gross pathology -- not a gradient the GA needs to descend).
+    from manufacture import entry as _entry, mount as _mount
+    islands = int(gc.get("islands", 99))
+    if gc.get("live"):
+        _nodes, _bars, _live, _btn = gc["nodes"], gc["bars"], gc["live"], gc["btn"]
+        A = np.array([_nodes[_bars[e][0]] for e in _live])
+        B = np.array([_nodes[_bars[e][1]] for e in _live])
+        entry_gap = np.inf
+        for f in FINGERS:
+            P = _entry.entry_sweep(ref, q_ref, f, n=8)
+            fr = _mount.well_mount(ref, q_ref, f, _nodes[_btn[f]])
+            ins = _mount.well_insert(ref, q_ref, f)
+            d = _entry.mount_sdf(P, boxes=fr["boxes"] + ins["boxes"],
+                                 caps=fr["caps"] + ins["caps"], cyls=fr["cyls"] + ins["cyls"])
+            gap = float(d.min())
+            lo, hi = P.min(0) - 0.005, P.max(0) + 0.005   # only struts near this channel
+            near = ~(np.any((A < lo) & (B < lo), axis=1) | np.any((A > hi) & (B > hi), axis=1))
+            if near.any():
+                caps = [((a_, b_), float(_BAR_R)) for a_, b_ in zip(A[near], B[near])]
+                gap = min(gap, float(_entry.mount_sdf(P, caps=caps).min()))
+            entry_gap = min(entry_gap, gap)
+    else:                                   # no structure grew at all: maximally blocked
+        entry_gap = -0.01
+
     g = [
         worst_travel_deficit,       # every WIRED direction usable, on every hand
         worst_saturation,           # no muscle maxed out in any wired direction
@@ -918,6 +951,8 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
         #   came out 32 mm away and 43 deg rotated from where a thumb can actually use it. The GA
         #   did not do anything wrong: opposition was not priced in either objective or any of the
         #   eleven constraints, so curling tm_thumb to 0.735 was free. Now it costs.
+        -(entry_gap + _entry.TOUCH_TOL),  # EVERY FINGER CAN SLIDE IN past the struts and mounts
+        float(islands - 1),               # ONE CONNECTED PART, not islands held up by tissue springs
     ]
 
     return dict(
@@ -925,6 +960,7 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
         n_keys=n_keys, total_keys=5,
         keys_ref=keys_ref, curls=curls, press_N=press_N,
         key_sep=sep_violation, key_sep_pair=sep_pair, swept=worst_swept,
+        entry_gap=float(entry_gap), islands=islands,
         action_map=action_map, required_adjust=required_adjust, adjust=adjust,
         char_effort_by_hand=per_hand_char_effort,
         feasible=all(v <= 0 for v in g),
