@@ -265,7 +265,8 @@ def _unit(v):
     return v / (np.linalg.norm(v) + 1e-12)
 
 
-def housing(anchor_nodes, outward, live_nodes, *, xiao=(0.021, 0.0178, 0.0035),
+def housing(anchor_nodes, outward, live_nodes, *, along=None,
+            xiao=(0.021, 0.0178, 0.0035),
             lipo=(0.020, 0.010, 0.004), mux=(0.0114, 0.0086, 0.0016),
             clear=0.003, wall=0.0015, wire_slot=0.002):
     # lipo default = a 401020 cell (4.0 x 10 x 20 mm). Thinner than the old 6 mm cell, so the box
@@ -280,10 +281,20 @@ def housing(anchor_nodes, outward, live_nodes, *, xiao=(0.021, 0.0178, 0.0035),
     A = np.asarray(anchor_nodes, float)
     C = A.mean(axis=0)
     z = _unit(outward)
-    x = np.cross(z, np.array([0.0, 0.0, 1.0]))
-    if np.linalg.norm(x) < 1e-6:
-        x = np.cross(z, np.array([0.0, 1.0, 0.0]))
-    x = _unit(x)
+    # ⚠ THE LONG AXIS MUST COME FROM ANATOMY, NOT FROM WORLD-Z. cross(z, [0,0,1]) is whatever the
+    # world frame happens to be; on one design it landed along the forearm by luck, on the next the
+    # box stood tangent to the wrist at ~45 deg with a corner aimed at the arm ("the XIAO holder is
+    # digging directly into the wrist"). Callers pass `along` (the hand's distal axis) and the box
+    # lies with its length down the forearm; the world-Z fallback remains only for legacy callers.
+    if along is not None:
+        x = np.asarray(along, float)
+        x = x - (x @ z) * z
+        x = _unit(x)
+    else:
+        x = np.cross(z, np.array([0.0, 0.0, 1.0]))
+        if np.linalg.norm(x) < 1e-6:
+            x = np.cross(z, np.array([0.0, 1.0, 0.0]))
+        x = _unit(x)
     y = np.cross(z, x)
     R = np.vstack([x, y, z])
     comps = [np.asarray(c, float) for c in (xiao, lipo, mux)]        # a row along y: XIAO | LiPo | mux

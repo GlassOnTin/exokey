@@ -81,9 +81,18 @@ def main(hand_mm=REF_MM, out_path="out/gauntlet.stl"):
     stree = cKDTree(Vsk)
     anchors = [int(a) for a in z["anchors"]]
     live_nodes = np.array(sorted({i for e in live for i in bars[e]}))
-    anchor_c = nodes[np.array(anchors)].mean(axis=0)
-    outward = anchor_c - Vsk[stree.query(anchor_c)[1]]
-    hboxes, hcaps, hcav = mnt.housing(nodes[np.array(anchors)], outward, nodes[live_nodes])
+    # ⚠ "OUTWARD" MUST BE THE HAND'S DORSAL AXIS, NOT CENTROID-TO-NEAREST-SKIN. The strap anchors
+    # WRAP the wrist, so their centroid can land a millimetre off ANY side of it -- on one design
+    # its nearest skin was radial, and the housing was planted standing tangent on the side of the
+    # wrist with a corner into the arm. The anatomy is not something to re-derive from point luck:
+    # hand_axes() states it. The box also seats on the DORSAL anchors only (upper half by dorsal
+    # height), so its centre starts on the face it stands proud of, not mid-band inside the wrist.
+    from structure.frame import hand_axes
+    _o, _ed, _er, _eo = hand_axes(h, q)
+    A = nodes[np.array(anchors)]
+    dh = (A - _o) @ _eo
+    A_dorsal = A[dh >= np.median(dh)]
+    hboxes, hcaps, hcav = mnt.housing(A_dorsal, _eo, nodes[live_nodes], along=_ed)
     seg_r = {frozenset(bars[e]): (float(rr[k]) if rr.size > 1 else float(rr[0]))
              for k, e in enumerate(live)}
     gcyls = []                                       # MINIMAL-COPPER shared bus (§8.15l qqq-2), not
