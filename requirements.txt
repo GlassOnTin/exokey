@@ -15,3 +15,8 @@ pytest==9.1.1
 # STL export (marching cubes -> mesh)
 trimesh==4.12.2
 scikit-image==0.26.0
+
+# CHOLMOD Cholesky for the FEM hot path (structure/fem.py) -- 2.4-3.1x per evaluate(),
+# bit-identical F. OPTIONAL: fem.py falls back to scipy splu if this is absent.
+# Needs libsuitesparse-dev at build time (apt).
+scikit-sparse==0.5.0

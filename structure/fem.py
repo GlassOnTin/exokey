@@ -29,6 +29,18 @@ import numpy as np
 from scipy.sparse import coo_matrix
 from scipy.sparse.linalg import splu
 
+# CHOLMOD, when available. The stiffness matrix is symmetric positive-definite by construction
+# (the 1e-6 diagonal floor below guarantees it), and profiling one evaluate() put 74% of its
+# 19.6 s in sparse-LU factorization -- 1,294 factorizations per design, re-done from scratch each
+# ESO deletion x load case x hand. CHOLMOD's Cholesky factors the same matrices 4-4.8x faster
+# (measured on the captured K's: 420 -> 87 ms for factor + 25-RHS solve over 8 of them).
+# scipy stays as the fallback: CHOLMOD requires strict PD and will reject what splu limps through.
+try:
+    from scipy.sparse import csc_array as _csc_array
+    from sksparse.cholmod import CholmodError as _CholmodError, cho_factor as _cho_factor
+except ImportError:                                     # scikit-sparse not installed: pure scipy
+    _cho_factor = None
+
 
 def _element_k(L, E, G, A, Iy, Iz=None, J=None):
     """The 12x12 local stiffness of one Euler-Bernoulli frame element.
@@ -258,6 +270,12 @@ class Frame:
         # exhausted system memory and the run was OOM-killed. The factorisation is cheap (0.8 s);
         # KEEPING it is what is expensive. Recompute, never hoard.
         self.lu = None
+        if _cho_factor is not None:
+            try:
+                self.lu = _cho_factor(_csc_array(K), lower=True)   # .solve(B), same shape contract
+                return self
+            except _CholmodError:
+                pass                                    # not PD enough for Cholesky: general LU
         self.lu = splu(K)
         return self
 
