@@ -241,6 +241,21 @@ SHIFT_FREQ = P(
     "have; move it to a hold/chord and the mouse fits.",
     describes="keystroke frequency")
 
+DROOP_MAX = P(
+    "DROOP_MAX", 0.010, "m", Source.DERIVED,
+    "How far below the index/middle/ring fingertip plane the LITTLE fingertip may sit at the "
+    "design posture. MEASURED ON THE USER'S HAND (docs/IMG20260819142422.jpg): comfortably "
+    "splayed, every fingertip rests on the table plane -- droop ~0, WITH splay to spare "
+    "(adjacent tip gaps ~22/24/35 mm vs the 23.7 the cups need). The seed-1 knee held the "
+    "little tip 19.4 mm below the plane -- a posture the model's joint ranges permit and a "
+    "real 5th ray does not, which is why the design 'looked like a hand bent 90 deg at the "
+    "wrist'. The model cannot represent 0: its own relaxed pose droops 8.8 mm and its floor "
+    "at full splay is 7.9 mm (a kinematic offset of MyoHand's 5th ray, not anatomy), so the "
+    "bound is that floor plus ~2 mm of representability margin, not the user's true 0. The "
+    "model is being held to the best coplanarity it can express; the residual ~8 mm is a "
+    "known model artifact to re-examine if a printed device still feels dropped.",
+    describes="posture comfort")
+
 DEFLECTION_MAX = P(
     "DEFLECTION_MAX", 0.5e-3, "m", Source.GUESS,
     "Above this a key feels mushy. A judgement, not a measurement.",

@@ -23,7 +23,8 @@ import os
 
 import numpy as np
 
-from design.params import (COMMON_DRIVE as _CD, DEFLECTION_MAX, RESIDUAL_MAX as _RESID,
+from design.params import (COMMON_DRIVE as _CD, DEFLECTION_MAX, DROOP_MAX as _DROOP_MAX,
+                           RESIDUAL_MAX as _RESID,
                            SVALBOARD, THUMB_CMC, WELL_WALL as _WELL_WALL, check_coherent)
 from structure.anchor import STRAP_NODES_MIN
 from hand.cradle import solve as cradle_solve
@@ -368,6 +369,36 @@ def key_separation(keys: dict, h: MyoHand, curls: dict | None = None) -> tuple[f
             if v > worst:
                 worst, pair = v, (fa, fb)
     return worst, pair
+
+DROOP_MAX = float(_DROOP_MAX)
+
+
+def little_droop(h: MyoHand, x: dict) -> float:
+    """How far the LITTLE fingertip sits below the index/middle/ring fingertip plane at the
+    composed design posture (m, positive = below the plane).
+
+    THE USER'S HAND IS THE SPEC (docs/IMG20260819142422.jpg): comfortably splayed, every
+    fingertip rests on one plane -- the flat-keyboard envelope. The model will happily trade
+    splay for palmar drop instead (the seed-1 knee dropped the little tip 19.4 mm below the
+    plane, a posture the joint ranges permit and a real 5th ray does not), and nothing priced
+    it: the GA chose EXTRA little-finger curl (dp +0.055) where LESS curl (-0.06) holds the
+    same splay at 7.9 mm. Constrained against DROOP_MAX, which is the model's own kinematic
+    floor plus margin -- see design/params.py for why it is not the user's true zero.
+    """
+    per = {f: posture(h, f, tp_of(x, f), tm_of(x, f), float(x.get(f"ab_{f}", 0.0)))
+           for f in FINGERS}
+    q = h.compose(per)
+    h.fk(q)
+    tips = {f: h.pad_pose(q, f)[0] for f in FINGERS}
+    p0 = np.mean([tips[f] for f in ("index", "middle", "ring")], axis=0)
+    n = np.cross(tips["index"] - tips["ring"], tips["middle"] - p0)
+    n /= np.linalg.norm(n) + 1e-12
+    from structure.frame import hand_axes
+    _o, _ed, _er, eo = hand_axes(h, q)
+    if n @ eo < 0:
+        n = -n
+    return float(-(tips["little"] - p0) @ n)      # positive = palmar of the plane
+
 
 def well_finger_clearance(h: MyoHand, x: dict) -> tuple[float, tuple | None]:
     """A WELL IS A SOLID OBJECT. No OTHER digit's bones may pass through it.
@@ -851,6 +882,7 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
         sep_violation, sep_pair = -cup_gap, cup_pair
     well_finger_gap, wf_pair = well_finger_clearance(ref, x)
     thumb_facing = opposition(keys_ref)
+    droop = little_droop(ref, x)
 
     g = [
         worst_travel_deficit,       # every WIRED direction usable, on every hand
@@ -872,6 +904,12 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
         -worst_swept,
         -well_finger_gap,           # a well is SOLID: no other digit's bones inside it
         float(margin),              # THE DIGIT MUST ACTUALLY BE ABLE TO PERFORM THE ACTION
+        droop - DROOP_MAX,          # THE LITTLE FINGERTIP STAYS NEAR THE FINGER PLANE. The user's
+        #   comfortably-splayed hand rests every fingertip on one plane (docs/IMG20260819142422.jpg)
+        #   -- the flat-keyboard envelope -- while the seed-1 knee dropped the little tip 19.4 mm
+        #   below it, a posture the model's joint ranges permit and a real 5th ray does not ("looks
+        #   like a hand bent 90 deg from the forearm"). Splay was NOT the problem (the user has it
+        #   to spare); the model was buying splay with palmar drop because drop was free.
         OPPOSED_MIN - thumb_facing,  # THE THUMB MUST STILL BE OPPOSED IN THE POSTURE WE BUILD AT.
         #   test_thumb_rest_is_opposed pinned opposition at the REST posture -- but the mesh, and
         #   the whole device, are built at the DESIGN posture, and NOTHING carried the invariant
