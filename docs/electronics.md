@@ -20,7 +20,7 @@ USB-C.
 
 The TLV493D/TLI493D is fully integrated (3-axis Hall + ADC + I²C on-die), so each fingertip node is:
 
-- **1× bare Hall chip** (PG-TSOP-6) — `TLV493D-A1B6` for the bench, `TLI493D-W2BW` for the device.
+- **1× bare Hall chip** (PG-TSOP-6) — `TLV493D-A1B6` for the bench AND the device (see the fork below).
 - **1× 100 nF** decoupling cap, VDD–GND, close to the chip.
 - **3.3 V** supply — straight off the XIAO's 3V3, no regulator, no level shifter.
 
@@ -39,9 +39,13 @@ nRF52840 has **2 I²C peripherals**, so 2 × 2 = **4 sensors max** on shared bus
 | **Mux** (bench-driven default) | `TCA9548A` 8-ch I²C switch at the wrist; all five sensors at the *same* address, one channel live at a time | **more** — each channel needs its own SDA/SCL to the fingertip (signals fan out; power still shares a trunk) | common `A1B6` |
 | **W2BW + 2 buses** (the repo's minimal-copper plan) | `TLI493D-W2BW` factory-address variants across the two hardware buses, **no mux** (`VISION.md §8.15l qqq`) | **less** — the shared Steiner-tree bus, 4 conductors, 275 mm | production part |
 
-The **mux path** is the near-term choice because it works with the `A1B6` you can buy and reflow now,
-and it also isolates lock-ups (below). The **W2BW path** is the minimal-copper graduation. This is a
-real trade-off, not a default — **OPEN** which ships. Confirm the W2BW address count at BOM time.
+**RESOLVED (2026-08-20): the mux ships.** The W2BW path died at the package check: **the
+TLI493D-W2BW is only available as a wafer-level BGA** (~1 mm ball grid) — nothing hand-solderable,
+no breakout module, so it cannot live on the chip-plus-one-cap fingertip boards this build can
+actually make. Five `TLV493D-A1B6` (order code `TLV493DA1B6HTSA2`) behind a `TCA9548A` at the
+wrist, all at the same address, one channel live at a time. The extra copper (per-channel SDA/SCL
+fan-out) is the accepted price; the lock-up isolation (below) comes free with it. The W2BW row
+above stays as the minimal-copper graduation IF a solderable package or carrier ever appears.
 
 ## Lock-up recovery — three layers
 

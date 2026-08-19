@@ -110,8 +110,10 @@ MAGNET_L = P("MAGNET_L", 0.001, "m", Source.SPEC,
              "at a 3.5 mm gap.",
              describes="cradle magnet")
 
-# The Hall. Typical Infineon TLx493D-family figures; reconfirm against the ordered
-# TLI493D-W2BW variant at BOM time (the exact LSB depends on the range mode selected).
+# The Hall. Typical Infineon TLx493D-family figures. The ordered part is the TLV493D-A1B6
+# (TLV493DA1B6HTSA2, TSOP-6) -- the W2BW plan died because that part only ships as a
+# wafer-level BGA (docs/electronics.md, addressing fork). Same family, same 12-bit 0.098 mT
+# LSB and +-130 mT range; its noise sits in the same 0.1-0.4 mT band HALL_NOISE sweeps.
 HALL_LSB = P("HALL_LSB", 0.098e-3, "T", Source.SPEC,
              "0.098 mT per LSB, Infineon TLV493D/TLI493D 12-bit. The smallest field step "
              "the sensor can report.",

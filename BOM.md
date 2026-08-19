@@ -16,7 +16,8 @@ firmware reads which of five directions the fingertip pushed.
 
 | Qty | Part | Spec | Source |
 |----:|------|------|--------|
-| 5 | **3-axis Hall sensor**, Infineon **TLI493D-W2BW** (TLV493D-family footprint) | 12-bit, 0.098 mT/LSB, ±130 mT, ~0.2 mT RMS noise. One per finger. Split across the MCU's **two hardware I²C buses** using the W2BW address variants — no mux. `SPEC` (reconfirm exact I²C address count against the ordered variant) | `params.py:113` |
+| 5 | **3-axis Hall sensor**, Infineon **TLV493D-A1B6** (order code `TLV493DA1B6HTSA2`, PG-TSOP-6) | 12-bit, 0.098 mT/LSB, ±130 mT, ~0.2 mT RMS noise. One per finger, all at the same I²C address behind the mux. `SPEC`. The W2BW address-variant plan is dead: **TLI493D-W2BW ships only as a wafer-level BGA** (~1 mm ball grid) — no hand-solderable package, no breakout. The A1B6 is the same TLx493D family, so `params.py` HALL_* figures stand | `params.py:113` |
+| 1 | **I²C multiplexer**, TI **TCA9548A** (breakout is fine) | 8-channel switch at the wrist; five channels used, one live at a time. Also isolates a wedged sensor (RESET re-inits all channels — see `docs/electronics.md` lock-up recovery). `SPEC` | `docs/electronics.md` |
 | 5 | **NdFeB disc magnet**, Ø3 × 1 mm, grade **N42**, e.g. supermagnete **S-03-01-N** | Br ≈ 1.29 T. Press-fits into the cradle dome (pocket bored Ø − 0.1 mm for interference). `SPEC` | `params.py:99–111` |
 | 1 | **Seeed XIAO nRF52840** (BLE) | ~21 × 17.8 × 3.5 mm. Sits in the wrist housing; runs the (unwritten) firmware and the BLE HID keyboard. `SPEC` | `mount.py:238` |
 | 1 | **LiPo battery, 100 mAh** | ~20 × 12 × 6 mm. Modelled ~68 h at a 500 Hz scan (~1.5 mA). `SPEC/estimate` | `mount.py:239` |
