@@ -36,8 +36,21 @@ from scipy.sparse.linalg import splu
 # (measured on the captured K's: 420 -> 87 ms for factor + 25-RHS solve over 8 of them).
 # scipy stays as the fallback: CHOLMOD requires strict PD and will reject what splu limps through.
 try:
+    import warnings as _warnings
+
     from scipy.sparse import csc_array as _csc_array
-    from sksparse.cholmod import CholmodError as _CholmodError, cho_factor as _cho_factor
+    from sksparse.cholmod import (
+        CholmodError as _CholmodError,
+        CholmodWarning as _CholmodWarning,
+        cho_factor as _cho_factor,
+    )
+
+    # K is nearly singular BY DESIGN (1e14 clamp springs against a 1e-6 diagonal floor gives
+    # rcond ~1e-14), so CHOLMOD warns on every solve -- and each warning has a fresh rcond in
+    # its text, defeating the once-per-site dedup and flooding run logs (434 lines in the first
+    # 3 generations). The accuracy question is already answered against splu on those exact
+    # matrices: F bit-identical, max dG ~1e-13. The warning carries no news; drop it.
+    _warnings.filterwarnings("ignore", category=_CholmodWarning)
 except ImportError:                                     # scikit-sparse not installed: pure scipy
     _cho_factor = None
 
