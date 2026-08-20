@@ -8,11 +8,48 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** thirty-four times. **All thirty-five stamps stand**, and each
+The disclosure has been **extended and re-anchored** thirty-five times. **All thirty-six stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — THE PRINT-SUPPORT OBJECTIVE WAS BUILT, MEASURED AGAINST A SLICER, AND RETIRED
+### Current — THE CONSTRAINTS LEARN TO TEST THE PRINTED ARTIFACT, and the SEARCH GETS 2.4× FASTER
+
+A month of the same lesson arriving from four directions: **a constraint that does not share geometry
+with the artifact is a wish.** (1) **Box-true cup packing** — the capsule spacing test let a feasible
+design ship interpenetrating printed cradles (passed by 4.1 mm as capsules, overlapped 1.8 mm as the
+boxes actually printed); the constraint now runs SAT separation on the exact `well_insert` boxes, and
+`WELL_WALL` becomes the real printed wall (2.6 mm derived, was a 1.5 mm guess). (2) **The coplanar
+little finger** — the model happily bought packing with an 19.4 mm palmar droop of the little tip, a
+posture its joint ranges permit and the user's photographed hand does not; `little_droop ≤ 10 mm` is
+the new constraint, and a coordinate-descent posture polish (`scripts/comfort.py`) *proves* a winner's
+posture constraint-tight rather than asserting it. (3) **The entry route** — rendering the front's knee
+caught ESO growing load paths straight through the thumb and ring slide-ins (−0.85 mm into the entering
+finger) while every in-loop check passed; the channel bars now leave the growth domain entirely
+(keep-out at `BAR_R+FILLET+TOUCH_TOL`), and a 14th constraint re-measures the slide-in against the
+struts that actually grew plus the finger's own mount. (4) **One part** — tissue springs on every node
+make a disconnected island numerically self-supporting, so connectivity is the 15th constraint, not an
+assumption. Also in this anchor: fingertip breadths reference-scaled (measured on the 200 mm hand,
+stored at the 185 mm reference — the raw values were silently inflating every cup ~1 mm/side); the XIAO
+housing oriented by hand anatomy (`hand_axes`) instead of anchor-centroid luck; the FEM hot path
+factored by **CHOLMOD Cholesky** (F bit-identical to splu, 2.4–3.1× per evaluate) with a warm-start
+sampling that makes generation 1 feasible; and the Hall addressing fork resolved to the **TCA9548A
+mux** with five TSOP-6 `TLV493D-A1B6` (the W2BW address-variant plan died at its BGA-only package).
+The merged 15-constraint front: 16 designs, effort 4.980–5.185e-7, mass 26.4–28.5 g; the knee's shipped
+STL clears every entry channel (+0.4 mm worst) as one printed body. **`VISION.md` DID change** (the
+reference-scaling fix, `WELL_WALL`, and thumb-opposition pricing), so **both `VISION.md` and
+`MANIFEST.sha256` are re-stamped** (113 files).
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) — *re-stamped this anchor: reference-scaled fit, the printed cup wall, opposition priced at the build posture* | `2b38a6188881c6363c221cd545afb4d25ef28262cb4d0318e2e860c6889c5b86` |
+| `MANIFEST.sha256` (hashes of all 113 source + doc files) | `e61b77d26e656a34f7964c254bec18b896897bc0842567dd104a943861dab2f5` |
+
+Stamped: **2026-08-20T00:20:00Z** (UTC, submission time). Proofs: `MANIFEST.sha256.ots` and
+`VISION.md.ots`, both freshly stamped. The outgoing 35th proofs are archived at
+`timestamps/MANIFEST.sha256.2026-08-20a.ots` and `timestamps/VISION.md.2026-08-20a.ots` (both were
+pending Bitcoin confirmation when archived; run `ots upgrade` once the block mines).
+
+### Thirty-fifth — THE PRINT-SUPPORT OBJECTIVE WAS BUILT, MEASURED AGAINST A SLICER, AND RETIRED
 
 A negative result, kept because it *is* the finding. A **third NSGA-II objective — sacrificial print
 support** — was added to the effort × mass search, scored by a cheap in-loop surrogate: the length of
