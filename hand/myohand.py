@@ -58,6 +58,17 @@ _REF_HAND_MM = 185.0                           # ANSUR 50th pct -- the scale the
 FINGERTIP_BREADTH = {f: 1e-3 * mm * _REF_HAND_MM / _MEASURED_HAND_MM
                      for f, mm in _MEASURED_MM.items()}
 
+# THE PIP JOINT IS THE WIDEST PART OF THE FINGER, AND THE FIRST PRINT PROVED IT. The entry
+# model swept only the distal-phalanx skin, so the corridor was sized to the fingertip -- and
+# the printed gauntlet jammed on the user's index PIP (25 mm against a 20 mm tip; the model's
+# own flesh has NO joint bulge at all -- its middle-phalanx capsule is 16 mm, NARROWER than
+# the 17.9 mm distal). Measured with calipers across the widest knuckle point on the same
+# 200 mm hand (thumb = the IP joint), stored at the 185 mm reference like the tips above.
+# Consumed by manufacture.entry (the donning corridor), scaled by each hand's `scale`.
+_MEASURED_PIP_MM = {"thumb": 28.0, "index": 25.0, "middle": 25.0, "ring": 24.0, "little": 20.0}
+PIP_BREADTH = {f: 1e-3 * mm * _REF_HAND_MM / _MEASURED_HAND_MM
+               for f, mm in _MEASURED_PIP_MM.items()}
+
 # The model's own fingertip markers.
 TIP_SITES = {
     "thumb": "THtip", "index": "IFtip", "middle": "MFtip",

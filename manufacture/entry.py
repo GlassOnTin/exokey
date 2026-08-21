@@ -25,14 +25,29 @@ from __future__ import annotations
 import numpy as np
 
 from hand.flesh import skin
+from hand.myohand import PIP_BREADTH
 from manufacture.mesh import _box_sdf, _cyl_sdf, _seg_dist
 
 # a touching cup/guide wall sits at SDF ~= 0; only material deeper than this into the finger blocks.
 TOUCH_TOL = 3e-4        # m
 
+# THE FIRST PRINT'S LESSON (2026-08-21): the corridor was sized to the FINGERTIP, and the user's
+# index PIP -- 25 mm against a 20 mm tip -- jammed in it, yawing the whole hand so no other finger
+# entered straight. Two model fictions compounded: (1) only the DISTAL phalanx was swept, but the
+# PIP traverses the same corridor on the way in; (2) the flesh model has no knuckle at all -- its
+# middle-phalanx capsule (16 mm) is NARROWER than the distal (17.9 mm), where a real PIP is the
+# widest point of the finger. So the entering cloud is now distal + middle phalanx skin PLUS an
+# explicit PIP bulge ring at the measured breadth (hand/myohand.PIP_BREADTH, caliper values).
+# The ring is circular at the LATERAL breadth, which overstates the dorsoventral depth a little --
+# conservative on purpose: dorsal struts crossing above the knuckle are a jam the print also risks.
+_MID_BODIES = {"thumb": "proximal_thumb", "index": "midph2", "middle": "midph3",
+               "ring": "midph4", "little": "midph5"}
+_JOINT_BODIES = {"thumb": "distal_thumb", "index": "midph2", "middle": "midph3",
+                 "ring": "midph4", "little": "midph5"}   # body frame origin sits AT the PIP/IP
+
 
 def phalanx_skin(h, q, finger) -> np.ndarray:
-    """The distal-phalanx skin points (the part of the finger that enters the cup), world coords."""
+    """The distal-phalanx skin points (the part of the finger that seats in the cup), world coords."""
     V, _F, L = skin(h, q, labels=True)
     bid = h.pad[finger][0]                       # the distal-phalanx body id
     tip = np.asarray(V)[np.asarray(L) == bid]
@@ -43,13 +58,60 @@ def phalanx_skin(h, q, finger) -> np.ndarray:
     return tip
 
 
-def entry_sweep(h, q, finger, *, length=0.020, n=16) -> np.ndarray:
-    """The distal-phalanx skin swept along -axis (the proximal slide-in), as one point cloud."""
-    tip = phalanx_skin(h, q, finger)
+def entering_skin(h, q, finger) -> np.ndarray:
+    """Everything that must pass through the corridor: distal + middle phalanx skin, plus the
+    PIP (thumb: IP) joint as two rings of the MEASURED breadth, world coords."""
+    import mujoco
+
+    V, _F, L = skin(h, q, labels=True)
+    V, L = np.asarray(V), np.asarray(L)
+    pts = [V[L == h.pad[finger][0]]]
+    m = h.model
+    mid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, _MID_BODIES[finger])
+    pts.append(V[L == mid])
+    h.fk(q)
+    c = np.array(h.data.xpos[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY,
+                                               _JOINT_BODIES[finger])], float)
     ax = np.asarray(h.well_frame(q, finger)["axis"], float)
     ax = ax / (np.linalg.norm(ax) + 1e-12)
+    n1 = np.cross(ax, [0.0, 0.0, 1.0])
+    if np.linalg.norm(n1) < 1e-6:
+        n1 = np.cross(ax, [0.0, 1.0, 0.0])
+    n1 /= np.linalg.norm(n1)
+    n2 = np.cross(ax, n1)
+    r = 0.5 * float(PIP_BREADTH[finger]) * float(getattr(h, "scale", 1.0))
+    th = np.linspace(0.0, 2.0 * np.pi, 24, endpoint=False)
+    ring = np.cos(th)[:, None] * n1 + np.sin(th)[:, None] * n2
+    pts += [c + off * ax + r * ring for off in (-0.0025, 0.0025)]
+    return np.concatenate(pts)
+
+
+def approach_axis(h, q) -> np.ndarray:
+    """The rigid-hand donning direction: the mean of the four finger well axes.
+
+    The old model slid each finger along its OWN well axis -- five non-parallel translations no
+    rigid hand can perform at once. Fingers can absorb ALONG-axis differences by curling, but they
+    cannot translate SIDEWAYS relative to the palm, so the lateral geometry of donning is one
+    shared direction. The thumb is excluded from the mean AND keeps its own axis in entry_sweep:
+    it genuinely is mobile enough to snake in separately (CMC + MCP + IP), and forcing it onto the
+    fingers' approach would demand a sideways-open thumb cup no design can offer."""
+    from hand.myohand import FINGERS
+    a = np.sum([np.asarray(h.well_frame(q, f)["axis"], float)
+                for f in FINGERS if f != "thumb"], axis=0)
+    return a / (np.linalg.norm(a) + 1e-12)
+
+
+def entry_sweep(h, q, finger, *, length=0.020, n=16) -> np.ndarray:
+    """The entering finger (distal + middle + PIP bulge) swept along the donning direction --
+    the shared rigid-hand approach for the four fingers, the thumb's own axis for the thumb."""
+    pts = entering_skin(h, q, finger)
+    if finger == "thumb":
+        ax = np.asarray(h.well_frame(q, finger)["axis"], float)
+        ax = ax / (np.linalg.norm(ax) + 1e-12)
+    else:
+        ax = approach_axis(h, q)
     ts = np.linspace(0.0, length, n)
-    return np.concatenate([tip - t * ax for t in ts])
+    return np.concatenate([pts - t * ax for t in ts])
 
 
 def mount_sdf(P, boxes=(), caps=(), cyls=()) -> np.ndarray:

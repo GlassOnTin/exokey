@@ -733,13 +733,16 @@ def test_the_live_render_actually_renders():
     from viz.live import scene
 
     h = MyoHand()
-    x = {"tp_hand": 0.45, "tm_hand": 0.45, "adjust": 0.012, "material": "cf_pa12"}
-    for f in ("index", "middle", "ring", "little"):
-        x[f"dp_{f}"] = 0.0
-        x[f"dm_{f}"] = 0.0
-        x[f"ab_{f}"] = 0.0
-    x["tp_thumb"] = 0.5
-    x["tm_thumb"] = 0.5
+    # A DONNABLE layout, not a toy. The old fixture held every finger at ab=0 -- and once the
+    # entry corridors carried the MEASURED PIP breadths (25 mm knuckles on 18 mm-spaced unsplayed
+    # fingers), that hand's corridors ate the whole inter-finger candidate space and grow()
+    # rightly refused it: no bar could reach a button. These are the 15-constraint merged knee's
+    # posture values (2026-08-20), hardcoded so the test stays artifact-free.
+    x = {"tp_hand": 0.2623, "tm_hand": 0.1427, "adjust": 0.0164, "material": "cf_pa12",
+         "tp_thumb": 0.046, "tm_thumb": 0.1025,
+         "ab_index": 0.2662, "ab_middle": -0.181, "ab_ring": -0.6464, "ab_little": -0.7412,
+         "dp_index": 0.0744, "dp_middle": 0.0187, "dp_ring": -0.008, "dp_little": 0.0554,
+         "dm_index": -0.0559, "dm_middle": -0.0421, "dm_ring": -0.0311, "dm_little": 0.0264}
 
     s = scene(h, x, gen=1, note="test")
     assert s["traces"], "the live scene has no traces -- it is drawing nothing"

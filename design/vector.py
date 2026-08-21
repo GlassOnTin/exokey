@@ -900,14 +900,20 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
         _nodes, _bars, _live, _btn = gc["nodes"], gc["bars"], gc["live"], gc["btn"]
         A = np.array([_nodes[_bars[e][0]] for e in _live])
         B = np.array([_nodes[_bars[e][1]] for e in _live])
+        # ALL five mounts, not just the finger's own: under the shared rigid-hand approach a
+        # corridor can cross a NEIGHBOUR's cup wall, and the printed part blocks with all of it.
+        # Own guide walls still read SDF >= 0 (beside the finger, not across its path).
+        _mb, _mc, _my = [], [], []
+        for _f in FINGERS:
+            _fr = _mount.well_mount(ref, q_ref, _f, _nodes[_btn[_f]])
+            _in = _mount.well_insert(ref, q_ref, _f)
+            _mb += _fr["boxes"] + _in["boxes"]
+            _mc += _fr["caps"] + _in["caps"]
+            _my += _fr["cyls"] + _in["cyls"]
         entry_gap = np.inf
         for f in FINGERS:
             P = _entry.entry_sweep(ref, q_ref, f, n=8)
-            fr = _mount.well_mount(ref, q_ref, f, _nodes[_btn[f]])
-            ins = _mount.well_insert(ref, q_ref, f)
-            d = _entry.mount_sdf(P, boxes=fr["boxes"] + ins["boxes"],
-                                 caps=fr["caps"] + ins["caps"], cyls=fr["cyls"] + ins["cyls"])
-            gap = float(d.min())
+            gap = float(_entry.mount_sdf(P, boxes=_mb, caps=_mc, cyls=_my).min())
             lo, hi = P.min(0) - 0.005, P.max(0) + 0.005   # only struts near this channel
             near = ~(np.any((A < lo) & (B < lo), axis=1) | np.any((A > hi) & (B > hi), axis=1))
             if near.any():

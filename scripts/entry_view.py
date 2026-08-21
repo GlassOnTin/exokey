@@ -102,11 +102,13 @@ def main():
                           "drop-in cradle (TPU)" if i == 0 else None, i == 0))
 
     clr = {}
+    mb, mc, my = [], [], []                       # ALL mounts: a corridor can cross a neighbour's wall
     for f in SHOW:
         fr, ins = mount.well_mount(h, q, f, nodes[btn[f]]), mount.well_insert(h, q, f)
-        clr[f] = entry.entry_clearance(h, q, f, boxes=fr["boxes"] + ins["boxes"],
-                                       caps=fr["caps"] + ins["caps"] + struts,
-                                       cyls=fr["cyls"] + ins["cyls"])          # vs struts AND mount
+        mb += fr["boxes"] + ins["boxes"]; mc += fr["caps"] + ins["caps"]; my += fr["cyls"] + ins["cyls"]
+    for f in SHOW:
+        clr[f] = entry.entry_clearance(h, q, f, boxes=mb, caps=mc + struts,
+                                       cyls=my)   # vs struts AND every mount it passes
         sweep = entry.entry_sweep(h, q, f, length=0.018, n=12)[::4]
         traces.append(go.Scatter3d(x=sweep[:, 0], y=sweep[:, 1], z=sweep[:, 2], mode="markers",
                                    marker=dict(size=1.6, color=CH[f], opacity=0.35),
