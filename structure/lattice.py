@@ -836,9 +836,33 @@ def solve(nodes, bars, live, buttons, cases, anchor_k, anchor_n, r=None, mat="cf
     return float(worst), se, ss, float(mass), float(tension), per_case
 
 
+def handling_cases(h, q, btn, N=None):
+    """HANDLING loads: +-N sideways at every button node, both lateral directions. The keypress
+    gate is 0.196 N along the press axis, and ranking by it alone let ESO prune the thumb cup's
+    support to material that was crisp to press and snapped at the first donning (the 2026-08-21
+    print) -- a 1.8 mm rod yields at ~2-3 N applied at cup distance. Same (label, name, load)
+    shape as load_cases. RANKING AND STRENGTH, NEVER THE DEFLECTION GATE: a cup may flex under
+    abuse, it may not break."""
+    from design.params import HANDLING_N as _HN
+    NN = float(_HN) if N is None else float(N)
+    out = []
+    for f, i in btn.items():
+        ax = np.asarray(h.well_frame(q, f)["axis"], float)
+        ax /= np.linalg.norm(ax) + 1e-12
+        n1 = np.cross(ax, [0.0, 0.0, 1.0])
+        if np.linalg.norm(n1) < 1e-6:
+            n1 = np.cross(ax, [0.0, 1.0, 0.0])
+        n1 /= np.linalg.norm(n1)
+        n2 = np.cross(ax, n1)
+        for k, d in enumerate((n1, -n1, n2, -n2)):
+            # label = the finger: solve() reads case labels as finger names (buttons[label])
+            out.append((f, f"handle_{k}", {i: NN * d}))
+    return out
+
+
 def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
          press_N=0.196, wired=None, relax=True, plates=False, r=None, on_step=None,
-         impact_cases=None):
+         impact_cases=None, handling_N=None):
     """WOLFF'S LAW. Delete the bars that carry no load, until the buttons stop being crisp.
 
     Bone is not designed, it is grown: it lays down material where it is strained and resorbs it
@@ -852,6 +876,10 @@ def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
                                                              press_N=press_N)
     shells = tris if plates else []
     cases = load_cases(h, q, btn, press_N=press_N, wired=wired)
+    # HANDLING IS ALWAYS IN THE RANKING (handling_N=0 to opt out): every grow path -- the GA's
+    # coarse cost(), final.py's fine regrow -- must keep the bracing a grabbed cup leans on.
+    _hc = handling_cases(h, q, btn, N=handling_N) if (handling_N is None or handling_N > 0) else []
+    impact_cases = (list(impact_cases) if impact_cases is not None else []) + _hc or None
     Vs, Fs, _Ls = skin(h, q, labels=True)
     Ns = _normals(Vs, Fs)
     live_s = list(range(len(shells)))
@@ -1080,6 +1108,25 @@ def cost(h, q, wired=None, press_N=0.196, pitch=0.008, gate=0.5e-3, mat="cf_pa12
     U = fr.solve([c[2] for c in cases])
     util = float(fr.stress(U, r).max() / (p["yield_"] / 2.0))        # SF = 2
 
+    # HANDLING COSTS GRAMS, IT DOES NOT KILL LAYOUTS. The printed thumb cup snapped under a
+    # sideways grab the model never priced (2026-08-21) -- but demanding SF 2 at uniform BAR_R
+    # would be the opposite mistake: measured on the shipped knee it reads util 4.9, and the
+    # REAL part carries per-member radii from the sizer, so strength is bought with grams, not
+    # forbidden by topology. So handling enters cost() the way printable.py will physically
+    # build it: fully-stressed design. Solve the grab cases (same factorization, ~free), and
+    # for every bar over the allowable charge the mass of thickening it -- bending dominates a
+    # 0.9 mm rod, sigma ~ 1/r^3, so the surviving radius is r*(sigma/allow)^(1/3). The `yield`
+    # constraint fires only when even the max printable radius (2.5 mm) cannot carry the grab:
+    # that layout genuinely cannot be built strong.
+    allow = p["yield_"] / 2.0
+    Uh = fr.solve([c[2] for c in handling_cases(h, q, btn)])
+    over = fr.stress(Uh, r) / allow                       # per bar, worst grab direction
+    R_MAX_H = 2.5e-3
+    r_need = np.clip(r * np.cbrt(np.maximum(over, 1.0)), r, R_MAX_H)
+    m_handle = float(p["rho"] * np.pi * ((r_need ** 2 - r ** 2) * fr.L).sum())
+    util = max(util, float(over.max()) / (R_MAX_H / r) ** 3)
+    m = m + m_handle
+
     # PRINT-SUPPORT COST, along the wrist-standing build axis (fingers up -- lattice.py:135, the
     # design's intended pose). DIAGNOSTIC for now; becomes objective f3 once Phase 0 confirms it is
     # a genuinely independent axis and not a restatement of mass.
@@ -1087,6 +1134,7 @@ def cost(h, q, wired=None, press_N=0.196, pitch=0.008, gate=0.5e-3, mat="cf_pa12
     sup_m = support_mm(nodes, bars, live, e_d, hot=True)
 
     return dict(mass_g=float(m) * 1000.0, solid_g=float(m_solid) * 1000.0,
+                handle_g=m_handle * 1000.0,
                 worst=float(w_solid), util=util, struts=len(live), grip=int(grip),
                 support_mm=float(sup_m), islands=islands,
                 # the grown lattice itself, so the caller can test the ARTIFACT's geometry

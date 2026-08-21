@@ -263,6 +263,18 @@ DEFLECTION_MAX = P(
     "Above this a key feels mushy. A judgement, not a measurement.",
     describes="key feel")
 
+HANDLING_N = P(
+    "HANDLING_N", 10.0, "N", Source.GUESS,
+    "The lateral force every button mount must SURVIVE (yield/SF2), applied at the button node "
+    "in the worst lateral direction. The first print taught this the hard way (2026-08-21): the "
+    "whole robustness story was the 0.196 N keypress gate, so ESO pruned the thumb cup's support "
+    "to material that was crisp along the press and snapped during the first donning -- a single "
+    "1.8 mm CF-PA12 rod yields at ~2-3 N applied at cup distance, and a hand fighting a jammed "
+    "corridor delivers far more. 10 N is a firm-handling estimate (with SF 2, ~20 N ultimate), "
+    "not a measurement; raise it if the next print still feels fragile, and NEVER let it into "
+    "the deflection gate -- a cup may flex under abuse, it may not break.",
+    describes="robustness")
+
 
 THUMB_CMC = P(
     "THUMB_CMC", 0.299, "-", Source.DERIVED,

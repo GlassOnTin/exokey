@@ -134,6 +134,58 @@ def main():
     print(f"  {idle}/{len(live)} struts sit ON the nozzle floor doing no work "
           f"{'-- CLEAN' if idle == 0 else '-- the pruner could not remove them'}")
 
+    # ---- HANDLING: FSD-thicken the sized topology until it SURVIVES a grabbed cup -------------
+    # The impact_opt.py recipe, pointed at the loads that actually broke the first print: the
+    # sizer answers the 0.196 N deflection gate, and a structure sized to that snapped at the
+    # thumb cup the first time a hand pushed newtons into it sideways (2026-08-21). Handling is
+    # a per-member STRESS limit, never a deflection gate, so it enters as fully-stressed design
+    # on the sized radii: r_e <- r_e*sqrt(sigma_e*SF/yield), iterated to a fixed point.
+    # Thickening only stiffens, so the deflection gate stays met by construction.
+    from structure.frame import MATERIALS as _MATS
+    from structure.lattice import handling_cases
+    yld, SF, R_MAX = _MATS["cf_pa12"]["yield_"], 2.0, 2.5e-3
+    hcs = handling_cases(ref, q, btn)
+    idx = S.fr.idx
+    anch = [i for i in ak if i in idx]
+    band = set(sn) & set(anch)
+    ktot = sum(ak[i] for i in band) or 1.0
+    ks = {i: (float(STRAP_K) * ak[i] / ktot if i in band else 0.0) for i in anch}
+    T, dofs = S.fr.T, S.fr.dofs
+
+    def _hstress(rr):
+        lift: set = set()
+        U = kl = None
+        for _ in range(8):                       # tissue cannot pull: iterate the lifted set
+            spring = {i: (ks[i] if i in lift else ak[i]) for i in anch}
+            U, _lu, kl = S.solve(rr, spring, hcs)
+            nxt = {i for i in anch if float(U[0][6 * idx[i]:6 * idx[i] + 3] @ an[i]) > 0}
+            if nxt == lift:
+                break
+            lift = nxt
+        A_ = np.pi * rr ** 2
+        I_ = np.pi * rr ** 4 / 4.0
+        peak = np.zeros(len(rr))
+        for c in range(len(hcs)):
+            ul = np.einsum("bij,bj->bi", T, U[c][dofs])
+            f = np.einsum("bij,bj->bi", kl, ul)
+            N_ = np.abs(f[:, 0])
+            M_ = np.maximum(np.hypot(f[:, 4], f[:, 5]), np.hypot(f[:, 10], f[:, 11]))
+            peak = np.maximum(peak, N_ / A_ + M_ * rr / I_)
+        return peak, float(peak.max())
+
+    m_before = mass(r)
+    for it in range(30):
+        sig, worst = _hstress(r)
+        if worst <= yld / SF * 1.02:
+            break
+        r = np.clip(np.maximum(r, r * np.sqrt(np.maximum(sig, 0.0) * SF / yld)), n, R_MAX)
+    sig, worst = _hstress(r)
+    print(f"  HANDLING ({len(hcs)} grab cases): sized for stress in {it} FSD passes, "
+          f"worst sigma {worst/1e6:.0f} MPa vs {yld/SF/1e6:.0f} allowed, "
+          f"{mass(r) - m_before:+.2f} g over the gate-sized mass", flush=True)
+    if worst > yld / SF * 1.05:
+        raise SystemExit("HANDLING STRENGTH NOT MET: the sized structure would snap in the hand")
+
     # ---- RULES 2+3: the build direction, chosen for the FEWEST SUPPORT POINTS -----------------
     # ⚠ PILLARS ARE NOT THE WHOLE SUPPORT BILL. A node with nothing under it needs a pillar off the
     # bed; a strut that is SHALLOW *and* longer than a bridge can span needs a prop under its middle.
