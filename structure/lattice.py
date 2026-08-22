@@ -431,7 +431,8 @@ def repair_support(nodes, bars, live, build_dir, pool=None):
     return sorted(live)
 
 
-def ground(h, q, hug=0.004, layer=None, pitch=0.004, reach=2.2, press_N=0.196, build_dir=None):
+def ground(h, q, hug=0.004, layer=None, pitch=0.004, reach=2.2, press_N=0.196, build_dir=None,
+           curls=None):
     """The free-form design space: (nodes, bars, buttons, loads, anchor_k, anchor_n).
 
     `buttons` maps finger -> node index; `loads` maps that node to the force vector the digit
@@ -557,12 +558,49 @@ def ground(h, q, hug=0.004, layer=None, pitch=0.004, reach=2.2, press_N=0.196, b
     # channel bars leave the domain entirely -- ESO can only route around, and `supportable`
     # re-judges feasibility on the reduced space. Ends included in the sampling (s=0..1): a
     # NODE in the channel is just as much a block as a mid-span.
-    from manufacture.entry import TOUCH_TOL, entry_sweep
-    entry_tree = cKDTree(np.concatenate([entry_sweep(h, q, f, n=8) for f in FINGERS]))
+    from design.params import DON_CLEAR as _DC
+    from manufacture.entry import entry_sweep
+    # THE KEEP-OUT FOLLOWS THE DONNING MOTION, not a rigid translation, and composes the WHOLE
+    # HAND once per step rather than meshing it per finger (hand.flesh.skin is ~18 ms and it was
+    # being called 5x per step for two phalanges each time). Sweeping the SEATED posture 80 mm
+    # backwards carved a tunnel so wide it took the palm anchor with it -- every design then failed
+    # strap-grip by 2 nodes at 76-82 g -- but no hand enters that way: it comes in EXTENDED, which
+    # is slim, and curls once the tips are in. Without `curls` (final.py's direct grow) fall back to
+    # the seated posture over the short slide-in and let the entry-route CONSTRAINT do the rest: a
+    # keep-out that is merely helpful may be approximate, one that is binding may not.
+    import mujoco as _mj
+
+    from manufacture.entry import (CORRIDOR_STRIDE as _CS, _MID_BODIES, _pip_ring, approach_axis,
+                                   entering_skin)
+    _clouds = []
+    _ax = {f: (np.asarray(h.well_frame(q, f)["axis"], float) if f == "thumb"
+               else approach_axis(h, q)) for f in FINGERS}
+    _ax = {f: a / (np.linalg.norm(a) + 1e-12) for f, a in _ax.items()}
+    if curls is None:
+        for f in FINGERS:
+            _clouds.append(np.concatenate([entering_skin(h, q, f)[::_CS] - t * _ax[f]
+                                           for t in np.linspace(0.0, 0.020, 6)]))
+    else:
+        from design.params import DON_LEN as _DL
+        from design.vector import posture as _posture
+        _L = float(_DL)
+        for _s in np.linspace(0.0, 1.0, 6):
+            _qs = h.compose({f: _posture(h, f,
+                                         0.05 + _s * (float(curls[(f, 0)][0]) - 0.05),
+                                         0.05 + _s * (float(curls[(f, 0)][1]) - 0.05),
+                                         float(curls[(f, 0)][2])) for f in FINGERS})
+            _V, _Fm, _Lb = skin(h, _qs, labels=True)
+            _V, _Lb = np.asarray(_V), np.asarray(_Lb)
+            for f in FINGERS:
+                _mid = _mj.mj_name2id(h.model, _mj.mjtObj.mjOBJ_BODY, _MID_BODIES[f])
+                _p = np.concatenate([_V[_Lb == h.pad[f][0]], _V[_Lb == _mid]])[::_CS]
+                _p = np.vstack([_p, _pip_ring(h, _qs, f)])
+                _clouds.append(_p - (1.0 - _s) * _L * _ax[f])
+    entry_tree = cKDTree(np.concatenate(_clouds))
     s_e = np.linspace(0.0, 1.0, 9)
     mid_e = (a[:, None, :] * (1 - s_e)[None, :, None] + b[:, None, :] * s_e[None, :, None])
     d_entry = entry_tree.query(mid_e.reshape(-1, 3))[0].reshape(len(pairs), -1).min(axis=1)
-    keep_bar &= d_entry >= float(BAR_R) + FILLET + TOUCH_TOL
+    keep_bar &= d_entry >= float(BAR_R) + FILLET + float(_DC)   # room, not just no-contact
 
     bars = [tuple(p) for p in pairs[keep_bar]]
 
@@ -747,7 +785,8 @@ def load_cases(h, q, buttons, press_N=0.196, wired=None):
 
 
 def solve(nodes, bars, live, buttons, cases, anchor_k, anchor_n, r=None, mat="cf_pa12",
-          strap_k=None, iters=8, shells=(), live_s=(), shell_t=None, strap_n=None):
+          strap_k=None, iters=8, shells=(), live_s=(), shell_t=None, strap_n=None,
+          rank_only=False):
     """(worst button deflection over all cases, {bar: strain energy}, mass, strap tension N).
 
     ⚠ THE ANCHOR IS BILINEAR, AND GETTING THAT WRONG IS WHAT MAKES A GAUNTLET LOOK GOOD ON PAPER.
@@ -808,6 +847,21 @@ def solve(nodes, bars, live, buttons, cases, anchor_k, anchor_n, r=None, mat="cf
     lift: set = set()
     fr.factorise(springs(lift))
 
+    # ⚠ RANKING DOES NOT NEED THE ANCHOR ITERATED, AND PAYING FOR IT IS EXPENSIVE. The lift set is
+    # carried between cases because consecutive digits agree on it -- but the HANDLING grabs push
+    # four different directions at five different buttons, so each one drags the active set
+    # somewhere new and forces a refactorisation. Measured: 879 factorisations per evaluate, ~44%
+    # of them from the 20 grab cases alone. Those cases exist ONLY to tell ESO which struts carry
+    # a sideways grab; the anchor nonlinearity moves the magnitudes, not which members are working.
+    # So rank_only solves them all as multiple right-hand sides on ONE factorisation, tissue
+    # springs everywhere. The GATE and the reported deflection never take this path.
+    if rank_only:
+        U = fr.solve([load for _f, _a, load in cases])
+        se_arr = fr.strain_energy(U)
+        ss_arr = fr.shell_energy(U)
+        return (0.0, {e: float(se_arr[k]) for k, e in enumerate(live)},
+                {e: float(ss_arr[k]) for k, e in enumerate(live_s)}, 0.0, 0.0, {})
+
     worst, tension, per_case = 0.0, 0.0, {}
     U_all = []
     for f, act, load in cases:
@@ -862,7 +916,7 @@ def handling_cases(h, q, btn, N=None):
 
 def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
          press_N=0.196, wired=None, relax=True, plates=False, r=None, on_step=None,
-         impact_cases=None, handling_N=None):
+         impact_cases=None, handling_N=None, curls=None):
     """WOLFF'S LAW. Delete the bars that carry no load, until the buttons stop being crisp.
 
     Bone is not designed, it is grown: it lays down material where it is strained and resorbs it
@@ -873,7 +927,7 @@ def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
     is mushy, however crisp the other fourteen are.
     """
     nodes, bars, btn, _loads, ak, an, tris, strap_n = ground(h, q, hug=hug, pitch=pitch,
-                                                             press_N=press_N)
+                                                             press_N=press_N, curls=curls)
     shells = tris if plates else []
     cases = load_cases(h, q, btn, press_N=press_N, wired=wired)
     # HANDLING IS ALWAYS IN THE RANKING (handling_N=0 to opt out): every grow path -- the GA's
@@ -907,7 +961,8 @@ def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
         rank_se = se
         if impact_cases is not None:
             _wi, sei, *_rest = solve(nodes, bars, live, btn, impact_cases, ak, an, mat=mat, r=r,
-                                     shells=shells, live_s=live_s, strap_n=strap_n)
+                                     shells=shells, live_s=live_s, strap_n=strap_n,
+                                     rank_only=True)
             rank_se = {e: se.get(e, 0.0) + sei.get(e, 0.0) for e in live}
         pool = ([("b", e, rank_se.get(e, 0.0)) for e in live]
                 + [("s", e, ss.get(e, 0.0)) for e in live_s])
@@ -1040,7 +1095,8 @@ def _clears(nodes, bars, live, skin_V, hug):
                 >= float(SEG_CLEAR) * hug)
 
 
-def cost(h, q, wired=None, press_N=0.196, pitch=0.008, gate=0.5e-3, mat="cf_pa12", rate=0.20):
+def cost(h, q, wired=None, press_N=0.196, pitch=0.008, gate=0.5e-3, mat="cf_pa12", rate=0.20,
+         curls=None):
     """THE STRUCTURAL COST OF A LAYOUT: how many grams of bone does it need? GROW IT. Coarsely.
 
     This is what the GA calls ~2500 times, so it has to be cheap -- but NOT at the price of being
@@ -1067,7 +1123,7 @@ def cost(h, q, wired=None, press_N=0.196, pitch=0.008, gate=0.5e-3, mat="cf_pa12
     try:
         nodes, bars, live, btn, cases, ak, an, hist, _pc, shells, live_s = grow(
             h, q, pitch=pitch, rate=rate, gate=gate, mat=mat, press_N=press_N, wired=wired,
-            relax=False)
+            relax=False, curls=curls)
     except (RuntimeError, ValueError):
         return dict(mass_g=float("inf"), solid_g=float("inf"), worst=float("inf"),
                     util=float("inf"), struts=0, grip=0, support_mm=float("inf"),

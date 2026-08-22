@@ -263,6 +263,35 @@ DEFLECTION_MAX = P(
     "Above this a key feels mushy. A judgement, not a measurement.",
     describes="key feel")
 
+DON_CLEAR = P(
+    "DON_CLEAR", 0.002, "m", Source.GUESS,
+    "The room a finger needs BESIDE it, all the way down its donning corridor, over and above "
+    "not intersecting the part. ⚠ THE BUG THIS EXISTS TO KILL (2026-08-22): the entry constraint "
+    "demanded only `gap >= -TOUCH_TOL` -- i.e. the gauntlet may not push more than 0.3 mm INTO "
+    "the finger. That is a no-interference test, not a fit test, and a mass-minimising optimiser "
+    "parks every corridor exactly on it: the shipped design cleared by 0.07-0.72 mm, which the "
+    "model called feasible and a hand called jammed. A real donning needs slack for FDM tolerance "
+    "(~0.2 mm), for a hand that cannot be perfectly aligned on the way in, and for a knuckle that "
+    "is bone, not compressible pulp. 2 mm per side is an estimate, NOT a measurement -- the honest "
+    "way to set it is to print a corridor coupon and find where a hand stops binding. Note the "
+    "binding element is the CUP WALLS, not the struts (measured: mounts 0.07-0.72 mm vs struts "
+    "1.0-2.9 mm), so this constraint is paid for by SPREADING THE WELLS, which is a layout change "
+    "and therefore the optimiser's job -- a strut keep-out cannot buy it.",
+    describes="donning fit")
+
+DON_LEN = P(
+    "DON_LEN", 0.080, "m", Source.GUESS,
+    "How far back down the donning path the corridor is checked. ⚠ THE BUG THIS EXISTS TO KILL "
+    "(2026-08-22): entry_sweep swept a fixed 20 mm, so the model inspected only the last stretch of "
+    "insertion -- where a seated design is clear by construction -- and never looked at the 20-70 mm "
+    "stretch the hand actually has to travel through. Measured on the shipped design, that unchecked "
+    "region is obstructed for EVERY finger (-0.03 to -1.10 mm) while the checked 20 mm read +0.4 to "
+    "+1.7 mm: the model called the device donnable and the hand could not get into it. 80 mm is where "
+    "the profile goes clear on this design, NOT a measurement of a real hand's approach -- it is a "
+    "geometry guess, and a longer real path would need more. Cost scales with it, so the cloud is "
+    "strided (see entry.CORRIDOR_STRIDE).",
+    describes="donning fit")
+
 HANDLING_N = P(
     "HANDLING_N", 10.0, "N", Source.GUESS,
     "The lateral force every button mount must SURVIVE (yield/SF2), applied at the button node "

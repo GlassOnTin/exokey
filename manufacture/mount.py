@@ -100,16 +100,48 @@ def _stack(v_pad):
     return dict(floor=s_floor, magface=s_magface, hall=s_hall, base=s_base)
 
 
-def _cup(cc, fl, lat, R, half, vf, vd, w_half):
+def _pip_half(h, finger):
+    """Half the MEASURED knuckle breadth for this hand (PIP; the thumb's IP), metres.
+    Scaled by the hand's own `scale` like FINGERTIP_BREADTH, so a --hand-mm fit relieves
+    the cup by the same proportion it widens it."""
+    from hand.myohand import PIP_BREADTH
+    return 0.5 * float(PIP_BREADTH[finger]) * float(getattr(h, "scale", 1.0))
+
+
+def ax_of(R):
+    """The finger-axis row of a well frame R = vstack([ax, fl, lat])."""
+    return np.asarray(R)[0]
+
+
+def _cup(cc, fl, lat, R, half, vf, vd, w_half, w_half_prox=None):
     """Two lateral flanks BESIDE the finger (spanning the dorsal opening vd .. floor vf+FLOOR_T) + a
     palmar floor plate under the pad at vf. OPEN proximally and dorsally. All offset from the flesh by
-    SEAT_CLEAR so the finger slides in."""
+    SEAT_CLEAR so the finger slides in.
+
+    ⚠ THE FLANKS STEP OUT PROXIMALLY, AND THE FIRST PRINT IS WHY (2026-08-22). They were ONE straight
+    box per side at FINGERTIP width, running the cup's whole length -- and the thing that has to travel
+    past them is not the fingertip, it is the KNUCKLE, which is 1.4-2.3 mm wider PER SIDE (PIP 23.1 mm
+    vs tip 18.5 mm on the index at the 185 mm reference). So the user's hand jammed on the way in, and
+    measurement put the block exactly here: worst clearance 10-12 mm proximal of the seated tip, 1.6 mm
+    off-axis, against the flank's own proximal end -- each finger's OWN cup, not its neighbours (which
+    clear by 4.6-45 mm) and not the struts (1.0-2.9 mm).
+    
+    NO design variable could fix that: cup width is derived from the fingertip, so the optimiser had no
+    lever, which is why the search kept returning the same jammed layout. The cup stays SNUG where the
+    tip actually seats (the distal half -- a loose well would wreck the tilt read-out) and steps out to
+    knuckle width over the proximal half, where only the knuckle passes."""
     lw = w_half + SEAT_CLEAR + 0.5 * CUP_WALL
+    lw_p = lw if w_half_prox is None else max(lw, w_half_prox + SEAT_CLEAR + 0.5 * CUP_WALL)
     mv = 0.5 * (vf + FLOOR_T + vd)               # channel centre
     hv = 0.5 * (vf + FLOOR_T - vd)               # channel half-height (pad -> nail)
-    boxes = [(cc + mv * fl + side * lw * lat, R, np.array([half, hv, 0.5 * CUP_WALL]))
-             for side in (+1.0, -1.0)]
-    boxes.append((cc + (vf + 0.5 * FLOOR_T) * fl, R, np.array([half, 0.5 * FLOOR_T, w_half + CUP_WALL])))
+    boxes = []
+    for side in (+1.0, -1.0):                    # distal half snug, proximal half relieved
+        boxes.append((cc + 0.5 * half * ax_of(R) + mv * fl + side * lw * lat, R,
+                      np.array([0.5 * half, hv, 0.5 * CUP_WALL])))
+        boxes.append((cc - 0.5 * half * ax_of(R) + mv * fl + side * lw_p * lat, R,
+                      np.array([0.5 * half, hv, 0.5 * CUP_WALL])))
+    fw = (w_half if w_half_prox is None else max(w_half, w_half_prox)) + CUP_WALL
+    boxes.append((cc + (vf + 0.5 * FLOOR_T) * fl, R, np.array([half, 0.5 * FLOOR_T, fw])))
     return boxes
 
 
@@ -120,7 +152,8 @@ def well_mount(h, q, finger, mount_node, *, wire_len=0.010):
     vf, vd, lw = v_pad + SEAT_CLEAR, v_nail - SEAT_CLEAR, w_half + SEAT_CLEAR + 0.5 * CUP_WALL
     s = _stack(vf)
     boxes, caps, cyls, carve_cyls, carve_boxes = [], [], [], [], []
-    boxes += _cup(cc, fl, lat, R, half, vf, vd, w_half)          # flanks BESIDE the finger + palmar floor
+    boxes += _cup(cc, fl, lat, R, half, vf, vd, w_half, _pip_half(h, finger))
+    #                       ^ the flanks step out to knuckle width over the proximal half
 
     # SENSOR TAIL: a Hall seat palmar of the pad, PCB-width, below the finger and clear of the entry.
     pcb_half = 0.5 * PCB[1] + PA_WALL
@@ -184,7 +217,8 @@ def cluster_mount(h, q, fingers, mount_nodes, *, wire_len=0.010):
     for f in fingers:
         ax, fl, lat, R, pos, ccf, r, half, v_pad, v_nail, w_half = fr[f]
         boxes.append((ccf + (vf[f] + 0.5 * FLOOR_T) * fl, R,
-                      np.array([half, 0.5 * FLOOR_T, w_half + CUP_WALL + FLOOR_REACH])))    # cup floor
+                      np.array([half, 0.5 * FLOOR_T,
+                                max(w_half, _pip_half(h, f)) + CUP_WALL + FLOOR_REACH])))  # cup floor
         #                                    widened to REACH the shared flanks (see FLOOR_REACH)
         boxes.append((ccf + s[f]["base"] * fl, R, np.array([half, 0.5 * BASE_T, pcb_half])))  # Hall seat
         for side in (+1.0, -1.0):
@@ -216,11 +250,15 @@ def cluster_mount(h, q, fingers, mount_nodes, *, wire_len=0.010):
     for f in fingers:
         ax, fl, lat, R, pos, ccf, r, half, v_pad, v_nail, w_half = fr[f]
         lw = w_half + SEAT_CLEAR + 0.5 * CUP_WALL                 # inner face beside the finger
+        # ...and stepped OUT to knuckle width over the proximal half, so the PIP can get past on the
+        # way in (see _cup: the first print jammed on exactly this wall, 10-12 mm back from the tip).
+        lw_p = max(lw, _pip_half(h, f) + SEAT_CLEAR + 0.5 * CUP_WALL)
         m_fl = vf[f] + FLOOR_T - 0.5 * WALL_H                     # wall centre: floor-anchored
         for side in (+1.0, -1.0):
-            m = ccf + m_fl * fl + side * lw * lat
-            boxes.append((m, R, np.array([half, 0.5 * WALL_H, 0.5 * CUP_WALL])))
-            caps.append(((m, ccf + s[f]["base"] * fl), 0.5 * PA_WALL + 0.0006))   # tie wall to its base
+            for sgn, off in ((+1.0, lw), (-1.0, lw_p)):           # distal snug, proximal relieved
+                m = ccf + sgn * 0.5 * half * ax + m_fl * fl + side * off * lat
+                boxes.append((m, R, np.array([0.5 * half, 0.5 * WALL_H, 0.5 * CUP_WALL])))
+                caps.append(((m, ccf + s[f]["base"] * fl), 0.5 * PA_WALL + 0.0006))  # tie to its base
 
     return dict(boxes=boxes, caps=caps, cyls=cyls, carve_cyls=carve_cyls, carve_boxes=carve_boxes)
 

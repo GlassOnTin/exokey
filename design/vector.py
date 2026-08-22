@@ -23,7 +23,8 @@ import os
 
 import numpy as np
 
-from design.params import (COMMON_DRIVE as _CD, DEFLECTION_MAX, DROOP_MAX as _DROOP_MAX,
+from design.params import (COMMON_DRIVE as _CD, DEFLECTION_MAX, DON_CLEAR as _DON_CLEAR,
+                           DROOP_MAX as _DROOP_MAX,
                            RESIDUAL_MAX as _RESID,
                            SVALBOARD, THUMB_CMC, WELL_WALL as _WELL_WALL, check_coherent)
 from structure.anchor import STRAP_NODES_MIN
@@ -105,7 +106,13 @@ PRESS_N = float(SVALBOARD.force)  # 20 gf, Svalboard spec — see design/params.
 COMMON_DRIVE = float(_CD)
 RESIDUAL_MAX = float(_RESID)
 
-MATERIAL_CHOICES = ["al6061", "al7075", "cf_pa12"]
+# ⚠ ONE MATERIAL, BECAUSE ONE MATERIAL IS WHAT GETS MADE. al6061/al7075 were choices while
+# nothing downstream read the choice: final.py, printable.py and export_stl.py all hardcode
+# cf_pa12, so an aluminium winner was scored on aluminium physics and then exported as plastic.
+# Latent for months; it surfaced when HANDLING_N made strength valuable and the GA flipped to
+# al7075 (same layout: 29.10 g in al7075 vs 33.65 g in cf_pa12 -- it was buying a part nobody
+# can print on an FDM machine). Restore the choice only when the pipeline honours it.
+MATERIAL_CHOICES = ["cf_pa12"]
 
 # Continuous variables: name -> (lo, hi). Per-finger curl, splay, switch force, structure.
 REAL_BOUNDS: dict[str, tuple[float, float]] = {}
@@ -860,7 +867,7 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
     q_ref = ref.compose({f: posture(ref, f, tp_of(x, f), tm_of(x, f),
                                     float(x.get(f"ab_{f}", 0.0))) for f in FINGERS})
     gc = gauntlet_cost(ref, q_ref, wired=used, press_N=press_N,
-                       gate=float(DEFLECTION_MAX), mat=str(x["material"]))
+                       gate=float(DEFLECTION_MAX), mat=str(x["material"]), curls=curls)
 
     f1 = float(np.mean(per_hand_char_effort))  # effort/char typing English QWERTY
     f2 = float(gc["mass_g"]) + adj_mass        # g of grown bone + the adjusters
@@ -910,10 +917,13 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
             _mb += _fr["boxes"] + _in["boxes"]
             _mc += _fr["caps"] + _in["caps"]
             _my += _fr["cyls"] + _in["cyls"]
-        entry_gap = np.inf
+        _dg = _entry.donning_gaps(ref, curls, boxes=_mb, caps=_mc, cyls=_my)
+        entry_gap = np.inf          # approach: needs REAL room (DON_CLEAR)
+        seat_gap = np.inf           # seated: needs only non-interference (the pad is on its floor)
         for f in FINGERS:
+            sg, gap = _dg[f]
+            seat_gap = min(seat_gap, sg)
             P = _entry.entry_sweep(ref, q_ref, f, n=8)
-            gap = float(_entry.mount_sdf(P, boxes=_mb, caps=_mc, cyls=_my).min())
             lo, hi = P.min(0) - 0.005, P.max(0) + 0.005   # only struts near this channel
             near = ~(np.any((A < lo) & (B < lo), axis=1) | np.any((A > hi) & (B > hi), axis=1))
             if near.any():
@@ -921,7 +931,7 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
                 gap = min(gap, float(_entry.mount_sdf(P, caps=caps).min()))
             entry_gap = min(entry_gap, gap)
     else:                                   # no structure grew at all: maximally blocked
-        entry_gap = -0.01
+        entry_gap, seat_gap = -0.01, -0.01
 
     g = [
         worst_travel_deficit,       # every WIRED direction usable, on every hand
@@ -957,7 +967,15 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
         #   came out 32 mm away and 43 deg rotated from where a thumb can actually use it. The GA
         #   did not do anything wrong: opposition was not priced in either objective or any of the
         #   eleven constraints, so curling tm_thumb to 0.735 was free. Now it costs.
-        -(entry_gap + _entry.TOUCH_TOL),  # EVERY FINGER CAN SLIDE IN past the struts and mounts
+        max(float(_DON_CLEAR) - entry_gap,      # room along the APPROACH...
+            -(seat_gap + _entry.TOUCH_TOL)),    # ...and no interference where it SEATS.
+        #   EVERY FINGER SLIDES IN WITH ROOM TO SPARE. This was
+        #   `-(entry_gap + TOUCH_TOL)`: satisfied by a corridor that merely does not push more
+        #   than 0.3 mm INTO the finger. A mass-minimising optimiser parks exactly there, so the
+        #   shipped design cleared by 0.07-0.72 mm, the model called it feasible, and the hand
+        #   called it jammed. And the binding element is the CUP WALLS (mounts 0.07-0.72 mm vs
+        #   struts 1.0-2.9 mm), so the strut keep-out could never buy this: it is paid for by
+        #   SPREADING THE WELLS, which only the layout can do. Hence a real margin, DON_CLEAR.
         float(islands - 1),               # ONE CONNECTED PART, not islands held up by tissue springs
     ]
 

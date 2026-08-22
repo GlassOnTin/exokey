@@ -15,7 +15,8 @@ Fn=(F-F.min(0))/(F.max(0)-F.min(0)+1e-12); i=int(np.argmin((Fn**2).sum(1))); x=X
 r=evaluate(x,H); wired=used_actions(r["action_map"])
 q=ref.compose({f: posture(ref,f,tp_of(x,f),tm_of(x,f),float(x.get(f"ab_{f}",0.0))) for f in FINGERS})
 t0=time.time()
-N,bars,live,btn,cases,ak,an,hist,pc,_sh,_ls = grow(ref,q,wired=wired,gate=float(DEFLECTION_MAX),relax=True)
+N,bars,live,btn,cases,ak,an,hist,pc,_sh,_ls = grow(ref,q,wired=wired,gate=float(DEFLECTION_MAX),
+                                                  relax=True,curls=r["curls"])
 print(f"KNEE OF THE CO-OPTIMISED FRONT, full resolution, nodes free  [{time.time()-t0:.0f}s]")
 print(f"  {hist[0][0]} candidates -> {len(live)} struts ({100*(1-len(live)/hist[0][0]):.1f}% deleted)")
 print(f"  bone {hist[-1][2]*1000:.1f} g   buttons {hist[-1][1]*1e6:.0f} um (gate 500)   "
@@ -26,5 +27,12 @@ np.savez("out/final.npz", nodes=N, bars=np.array(bars), live=np.array(live),
          anchors=np.array(sorted(ak)), bone_g=hist[-1][2]*1000, button_um=hist[-1][1]*1e6,
          strap_N=hist[-1][3], bars0=hist[0][0], mass0=hist[0][2], defl0=hist[0][1],
          effort=r["F"][0], design_index=i)
+# THE ENTRY ANIMATION'S DATA, banked with the result. The same interpolation the entry-route
+# constraint is judged on, so a render of it shows what the optimiser actually promised.
+from manufacture.entry import donning_frames
+_fr = donning_frames(ref, r["curls"])
+np.savez("out/donning.npz", q=np.array([f[0] for f in _fr]),
+         offset=np.array([f[1] for f in _fr]), fingers=np.array(FINGERS))
+print(f"  wrote out/donning.npz  ({len(_fr)} entry frames, for the donning animation)")
 pickle.dump(dict(x=dict(x), wired={k:sorted(v) for k,v in wired.items()},
                  action_map=r["action_map"]), open("out/final_design.pkl","wb"))

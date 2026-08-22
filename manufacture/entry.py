@@ -25,11 +25,21 @@ from __future__ import annotations
 import numpy as np
 
 from hand.flesh import skin
+from design.params import DON_CLEAR as _DON_CLEAR, DON_LEN as _DON_LEN
 from hand.myohand import PIP_BREADTH
 from manufacture.mesh import _box_sdf, _cyl_sdf, _seg_dist
 
 # a touching cup/guide wall sits at SDF ~= 0; only material deeper than this into the finger blocks.
 TOUCH_TOL = 3e-4        # m
+
+# The corridor check runs over a long path, so the cloud is strided: we need the finger's OUTER
+# ENVELOPE, not every skin vertex, and every 4th point preserves it to well under the tolerances
+# that matter here while keeping the check affordable inside the GA loop.
+CORRIDOR_STRIDE = 4
+SEAT_ZONE = 0.005       # m -- within this of seated, the pad is ON its cup floor by design
+                        # (SEAT_CLEAR), so contact there is the SEAT, not an obstruction. Measuring
+                        # the whole sweep with one threshold reported that seat as the binding
+                        # clearance and hid the real jam 20-70 mm out.
 
 # THE FIRST PRINT'S LESSON (2026-08-21): the corridor was sized to the FINGERTIP, and the user's
 # index PIP -- 25 mm against a 20 mm tip -- jammed in it, yawing the whole hand so no other finger
@@ -99,6 +109,93 @@ def approach_axis(h, q) -> np.ndarray:
     a = np.sum([np.asarray(h.well_frame(q, f)["axis"], float)
                 for f in FINGERS if f != "thumb"], axis=0)
     return a / (np.linalg.norm(a) + 1e-12)
+
+
+def donning_gaps(h, curls, boxes=(), caps=(), cyls=(), *, n=9) -> dict:
+    """{finger: (seated gap, approach gap)} along the donning motion a hand actually makes.
+
+    ⚠ ONE POSTURE FOR THE WHOLE HAND PER STEP, and that is both faster AND more honest. Doing it
+    per finger meant hand.flesh.skin() -- which meshes the WHOLE HAND -- ran once per finger per
+    step: 95 calls, 2.0 s of a 7.1 s evaluate, to look at two phalanges each time. But the fingers
+    do not enter one at a time. The hand comes in as one object, fingers EXTENDED (a straight
+    finger is slim and slips past struts a curled one would foul), and CURLS as the tips seat --
+    which is also what COMMON_DRIVE says the four fingers must do anyway. So compose the whole
+    hand at each step and read all five fingers off one mesh: 9 calls, not 95.
+
+    (Capsule-axis sampling was tried as the cheaper alternative and REJECTED: MyoHand's capsules
+    run 1.5-6 mm fatter than the skin, and the cups are fitted to the SKIN -- mount._seat measures
+    skin extents -- so capsules report the cup penetrating a finger that is in fact seated in it.
+    Fast and wrong. The saving here is the same order and keeps the geometry the artifact uses.)
+
+    Two zones: within SEAT_ZONE of seated the pad rests on its own cup floor at SEAT_CLEAR by
+    design, so contact there is the seat working, not a jam."""
+    from design.vector import FINGERS, posture
+
+    q0 = h.compose({f: posture(h, f, *(float(v) for v in curls[(f, 0)])) for f in FINGERS})
+    ax = {f: (np.asarray(h.well_frame(q0, f)["axis"], float) if f == "thumb"
+              else approach_axis(h, q0)) for f in FINGERS}
+    ax = {f: a / (np.linalg.norm(a) + 1e-12) for f, a in ax.items()}
+    L = float(_DON_LEN)
+    out = {f: [np.inf, np.inf] for f in FINGERS}
+    for s in np.linspace(0.0, 1.0, n):
+        q_s = h.compose({f: posture(h, f,
+                                    0.05 + s * (float(curls[(f, 0)][0]) - 0.05),
+                                    0.05 + s * (float(curls[(f, 0)][1]) - 0.05),
+                                    float(curls[(f, 0)][2])) for f in FINGERS})
+        V, _F, Lb = skin(h, q_s, labels=True)
+        V, Lb = np.asarray(V), np.asarray(Lb)
+        import mujoco
+        for f in FINGERS:
+            mid = mujoco.mj_name2id(h.model, mujoco.mjtObj.mjOBJ_BODY, _MID_BODIES[f])
+            pts = np.concatenate([V[Lb == h.pad[f][0]], V[Lb == mid]])[::CORRIDOR_STRIDE]
+            pts = np.vstack([pts, _pip_ring(h, q_s, f)]) - (1.0 - s) * L * ax[f]
+            d = float(mount_sdf(pts, boxes, caps, cyls).min())
+            z = 0 if (1.0 - s) * L <= SEAT_ZONE else 1
+            out[f][z] = min(out[f][z], d)
+    return {f: (v[0], v[1] if np.isfinite(v[1]) else v[0]) for f, v in out.items()}
+
+
+def _pip_ring(h, q, finger, k=16):
+    """The knuckle at its MEASURED breadth, as a ring of points (the flesh model has no bulge)."""
+    import mujoco
+
+    h.fk(q)
+    c = np.asarray(h.data.xpos[mujoco.mj_name2id(h.model, mujoco.mjtObj.mjOBJ_BODY,
+                                                 _JOINT_BODIES[finger])], float)
+    ax = np.asarray(h.well_frame(q, finger)["axis"], float)
+    ax = ax / (np.linalg.norm(ax) + 1e-12)
+    n1 = np.cross(ax, [0.0, 0.0, 1.0])
+    if np.linalg.norm(n1) < 1e-6:
+        n1 = np.cross(ax, [0.0, 1.0, 0.0])
+    n1 /= np.linalg.norm(n1)
+    n2 = np.cross(ax, n1)
+    r = 0.5 * float(PIP_BREADTH[finger]) * float(getattr(h, "scale", 1.0))
+    th = np.linspace(0.0, 2.0 * np.pi, k, endpoint=False)
+    ring = c + r * (np.cos(th)[:, None] * n1 + np.sin(th)[:, None] * n2)
+    return np.vstack([ring - 0.0025 * ax, ring + 0.0025 * ax])
+
+
+def donning_frames(h, curls, *, n=24):
+    """The donning motion as renderable frames: [(q, offset), ...] from fully withdrawn+extended
+    to seated. `q` is a whole-hand joint vector; `offset` is the rigid translation to apply to the
+    hand at that frame (metres, world). Feed to a viewer to animate the hand entering the gauntlet.
+
+    Saved with every final result (scripts/final.py -> out/donning.npz) so the entry can be
+    rendered without re-deriving the trajectory -- the same interpolation the entry-route
+    CONSTRAINT is judged on, so the animation shows what the optimiser was actually promising."""
+    from design.vector import FINGERS, posture
+
+    q0 = h.compose({f: posture(h, f, *(float(v) for v in curls[(f, 0)])) for f in FINGERS})
+    ax = approach_axis(h, q0)
+    L = float(_DON_LEN)
+    frames = []
+    for s in np.linspace(0.0, 1.0, n):
+        q_s = h.compose({f: posture(h, f,
+                                    0.05 + s * (float(curls[(f, 0)][0]) - 0.05),
+                                    0.05 + s * (float(curls[(f, 0)][1]) - 0.05),
+                                    float(curls[(f, 0)][2])) for f in FINGERS})
+        frames.append((np.asarray(q_s, float), -(1.0 - s) * L * ax))
+    return frames
 
 
 def entry_sweep(h, q, finger, *, length=0.020, n=16) -> np.ndarray:
