@@ -8,11 +8,62 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** thirty-five times. **All thirty-six stamps stand**, and each
+The disclosure has been **extended and re-anchored** thirty-six times. **All thirty-seven stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — THE CONSTRAINTS LEARN TO TEST THE PRINTED ARTIFACT, and the SEARCH GETS 2.4× FASTER
+### Current — THE FIRST PRINT WAS WORN, AND IT FOUND TWO THINGS NO MODEL HAD
+
+`gauntlet_200mm.stl` was printed and put on a hand. It failed twice, and both failures were
+model blind spots the constraint set could not see.
+
+**(1) The PIP joint does not fit the corridor.** The entry model swept only the DISTAL phalanx,
+so every donning corridor was sized to a fingertip -- and the index PIP is 25 mm against a 20 mm
+tip. The hand jammed, then yawed anticlockwise to force the index through, at which point no
+other finger met its cup at the right angle. The flesh model was complicit: MyoHand has no
+knuckle at all, its middle-phalanx capsule (16 mm) being NARROWER than the distal (17.9 mm). A
+third fiction compounded it -- each finger slid along its OWN well axis, five non-parallel
+translations no rigid hand can perform. Fixed together: the entering cloud is distal + middle
+phalanx skin plus PIP/IP bulge rings at CALIPER-MEASURED breadths (`PIP_BREADTH`,
+28/25/25/24/20 mm on the 200 mm hand, reference-scaled like the fingertips); the four fingers
+sweep along ONE shared approach axis (the thumb keeps its own -- CMC+MCP+IP really can snake it
+in); and the corridor is tested against all five mounts, since a shared approach can cross a
+NEIGHBOUR's cup wall. The honest model reproduces the printed jam from geometry alone: index
+-0.69 mm, middle -0.22, ring -0.49, little -0.59, thumb +0.20.
+
+**(2) The thumb cup snapped off at the first donning.** Not a topology hole -- min-cut says four
+independent strut paths to the anchors -- but a strength blind spot: the ONLY structural demand
+anywhere in the loop was the 0.196 N keypress deflection gate, so ESO ranked and the sizer
+thinned purely for press stiffness, and a 1.8 mm CF-PA12 rod yields at ~2-3 N applied at cup
+distance. The "oddly dropped" thumb elements were ESO correctly deleting everything idle under a
+keypress -- which is exactly the bracing a grabbed cup leans on. `HANDLING_N` (10 N, GUESS,
+disclosed) now enters the ESO ranking, `cost()` as a fully-stressed-design MASS SURCHARGE
+(strength is bought in grams, never a deflection gate -- demanding SF 2 at uniform BAR_R would
+read util 4.9 and kill layouts the sizer can build), and `printable.py`'s radius sizing as an
+FSD fixed point that HARD-FAILS the export rather than ship a part that would snap. Measured on
+the shipped part: 20 grab cases, 5 FSD passes, worst stress 35 MPa against 35 MPa allowable,
+**+4.05 g**, and 0/374 struts idle on the nozzle floor.
+
+The re-run merged front: 19 designs, effort 4.963-5.246e-7, mass 28.6-37.8 g. The comfort-polished
+knee (effort 4.993e-7, 29.10 g; the polish reclaimed 0.56 g) grows to 560 struts from 12,410
+candidates, buttons 489 um against the 500 um gate, and every entry channel now clears on the
+SHIPPED geometry under the honest model (+0.4/+0.4/+0.7/+0.5/+0.1 mm) as one printed body. The
+two defects cost about 6 g between them -- ~2.1 g of layout in the search, ~4.05 g of radius in
+the part -- and bought a device that can be put on and handled. ⚠ The little finger's +0.1 mm is
+THIN against FDM tolerance; it is the number to watch on the next print. **`VISION.md` changed**
+(HANDLING_N disclosed), so **both files are re-stamped** (113 files).
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) — *re-stamped this anchor: discloses the `HANDLING_N` grab load* | `27dc2ad402e9082d5e338dc296749eae364a92440d8bff1ff66457c14d6bf7c3` |
+| `MANIFEST.sha256` (hashes of all 113 source + doc files) | `8fd67f840a1ad759aad1bc96071aae9a6b6158407e141ba7d400b8fd0a682864` |
+
+Stamped: **2026-08-22T03:53:00Z** (UTC, submission time). Proofs: `MANIFEST.sha256.ots` and
+`VISION.md.ots`, both freshly stamped. The outgoing 36th proofs are archived at
+`timestamps/MANIFEST.sha256.2026-08-22a.ots` and `timestamps/VISION.md.2026-08-22a.ots` (run
+`ots upgrade` once the block mines).
+
+### Thirty-sixth — THE CONSTRAINTS LEARN TO TEST THE PRINTED ARTIFACT, and the SEARCH GETS 2.4× FASTER
 
 A month of the same lesson arriving from four directions: **a constraint that does not share geometry
 with the artifact is a wish.** (1) **Box-true cup packing** — the capsule spacing test let a feasible
