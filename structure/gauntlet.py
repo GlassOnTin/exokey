@@ -320,6 +320,16 @@ def domain(h, q, hug: float = 0.004, n_arc: int = 12):
 
     # THE STRAP anchors: the proximal edge of the dorsum -- where the gauntlet is held on.
     strap = sorted({j for pg in palm_grids for j in pg[0]})
+    # ⚠ DROP THE STITCHING SPIKES. A quad whose edge runs several times the ring pitch is not a
+    # shell element, it is "a spike the solver integrates without complaint" (the phrase is from
+    # test_no_shell_element_leaps_across_the_hand, which three separate defects each tripped).
+    # Widening the metacarpals to the user's measured 104 mm knuckle span opened one more: a
+    # single quad stitching a static palm ring to a now-splayed metacarpal, 31 mm against a
+    # 7.4 mm median over 973 quads. Cap it where the test does rather than let the number drift.
+    na = np.asarray(nodes_a, float)
+    keep = [qd for qd in quads
+            if max(float(np.linalg.norm(na[qd[(i + 1) % 4]] - na[qd[i]])) for i in range(4)) < 0.030]
+    quads = keep
     return nodes_a, quads, well_nodes, strap
 
 

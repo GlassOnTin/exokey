@@ -30,6 +30,23 @@ PAD_BODIES = {
 }
 FINGERS = tuple(PAD_BODIES)
 
+# ⚠ THE FINGER IS NOT ONLY ITS TIP, AND THE FIRST PRINT PROVED IT (2026-08-23). _fit_fingertips
+# grew the DISTAL capsules to the measured fingertip breadth and stopped there -- so the model's
+# fingers were right at the pads and up to 1.77x TOO THIN everywhere else (middle phalanx 12.6-15.0
+# mm against a measured 18.5-23.1 mm PIP). Measured consequence: the four fingers spanned 64.9 mm
+# at the knuckle row scaled to the user's 200 mm hand, when the user's four fingers' own breadths
+# sum to 94 mm -- the fingers were narrower than themselves. The user, holding the print: "too
+# narrow for my hand". Every well is placed at this hand's fingertips, so the whole device
+# inherited the narrowness. These bodies are fitted to PIP_BREADTH the same way the pads are
+# fitted to FINGERTIP_BREADTH.
+SHAFT_BODIES = {
+    "thumb": ("proximal_thumb",),
+    "index": ("proxph2", "midph2"),
+    "middle": ("proxph3", "midph3"),
+    "ring": ("proxph4", "midph4"),
+    "little": ("proxph5", "midph5"),
+}
+
 # FINGERTIP BREADTH, ACROSS THE NAIL, AT THE 185 mm REFERENCE HAND. Calipers, one adult male hand
 # -- n=1, logged as a GUESS for the population in VISION.md.
 #
@@ -66,6 +83,21 @@ FINGERTIP_BREADTH = {f: 1e-3 * mm * _REF_HAND_MM / _MEASURED_HAND_MM
 # 200 mm hand (thumb = the IP joint), stored at the 185 mm reference like the tips above.
 # Consumed by manufacture.entry (the donning corridor), scaled by each hand's `scale`.
 _MEASURED_PIP_MM = {"thumb": 28.0, "index": 25.0, "middle": 25.0, "ring": 24.0, "little": 20.0}
+
+# KNUCKLE BREADTH ACROSS THE FOUR MCPs, measured on the same 200 mm hand ("my knuckle width is
+# 10 mm more than my total finger pip breadth": 25+25+24+20 = 94, so 104).
+#
+# ⚠ MyoHand IS A NARROW HAND, AND NOTHING NOTICED FOR THREE OPTIMISATION RUNS. Its index->little
+# MCP span is 48.0 mm scaled to a 200 mm hand, where any adult is 60-70 mm; its four fingers span
+# 64.9 mm at the knuckle row while the user's four fingers' own breadths sum to 94 mm. Widening the
+# FLESH alone does not fix it (that only makes the fingers overlap) -- the span is set by where the
+# metacarpals sit, so the metacarpal lateral offsets are scaled to hit the measured breadth.
+# ⚠ THIS MOVES BONES, so muscle paths and moment arms move with them. The physics constraints
+# (travel, saturation, performable) re-check it every evaluate, and the suite covers it, but it is
+# a bigger intervention than the capsule fits and it is the number to re-measure first if the
+# effort model starts behaving oddly.
+_MEASURED_KNUCKLE_MM = 104.0
+KNUCKLE_BREADTH = 1e-3 * _MEASURED_KNUCKLE_MM * _REF_HAND_MM / _MEASURED_HAND_MM
 PIP_BREADTH = {f: 1e-3 * mm * _REF_HAND_MM / _MEASURED_HAND_MM
                for f, mm in _MEASURED_PIP_MM.items()}
 
@@ -246,6 +278,8 @@ class MyoHand:
         self.flexion_axes = self._flexion_axes()  # must precede q_neutral: it uses them
         self.q_neutral = self._functional_rest()
         self._fit_fingertips()        # needs pad + q_neutral; rebuilds pad
+        self._widen_knuckles()        # the hand's TRANSVERSE scale: MyoHand is far too narrow
+        self._fit_shafts()            # ...and the REST of the finger, not just its tip
 
         # Equilibrium is imposed on the PRESSING DIGIT's dofs. Nothing else.
         #
@@ -570,6 +604,126 @@ class MyoHand:
                     m.geom_size[caps[f]][0] += d
                     grew = True
             self.pad = {f: self._pad_frame(f) for f in FINGERS}   # radius moved: repose the pads
+            if not grew:
+                return
+
+    def _widen_knuckles(self) -> None:
+        """Splay the metacarpals until the four knuckles span the MEASURED breadth.
+
+        See KNUCKLE_BREADTH. Scales each metacarpal's lateral offset about the middle finger's and
+        iterates, because the MCP heads sit distal of the offsets being scaled (the metacarpals fan
+        outward), so the relation is affine, not identity. Only ever widens."""
+        from structure.frame import hand_axes
+
+        m = self.model
+        q = self.q_neutral
+        mcs = [mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, b)
+               for b in ("secondmc", "thirdmc", "fourthmc", "fifthmc")]
+        heads = [mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, b)
+                 for b in ("proxph2", "proxph3", "proxph4", "proxph5")]
+        if any(i < 0 for i in mcs + heads):
+            return
+        target = (float(KNUCKLE_BREADTH) * self.scale
+                  - 0.5 * (float(PIP_BREADTH["index"]) + float(PIP_BREADTH["little"])) * self.scale)
+
+        # ⚠ MUSCLES MUST BE SCALED WITH THE BONES THEY SPAN, or the skeleton is right and the
+        # physics is nonsense. Splaying the metacarpals lengthens every path that crosses between
+        # them -- the interossei run thirdmc->fifthmc, and FDP5/FDS5 run capitate->fourthmc->
+        # fifthmc -- but MuJoCo's muscle model reads its force-length curve off actuator_lengthrange,
+        # which still described the NARROW hand. Measured: at the user's 104 mm the little finger
+        # needed 1.000 activation just to hold its own rest posture (it needs 0.000), and could not
+        # actuate at all. This is the same operation OpenSim performs when scaling a model to a
+        # subject: after moving the bones, re-measure every actuator's path and carry its operating
+        # range with it.
+        self.fk(q)
+        L0 = np.array(self.data.ten_length, float).copy()
+
+        for _ in range(12):
+            self.fk(q)
+            _o, _ed, e_r, _eo = hand_axes(self, q)
+            lat = [float(np.asarray(self.data.xpos[i], float) @ e_r) for i in heads]
+            span = abs(lat[0] - lat[-1])
+            if span <= 0 or span >= target - 1e-4:
+                break
+            k = target / span
+            Rp = np.asarray(self.data.xmat[m.body_parentid[mcs[0]]], float).reshape(3, 3)
+            er = Rp.T @ e_r                       # the lateral axis in the shared parent's frame
+            ref = float(m.body_pos[mcs[1]] @ er)  # splay about the middle metacarpal
+            for bid in mcs:
+                d = float(m.body_pos[bid] @ er) - ref
+                m.body_pos[bid] = m.body_pos[bid] + (k - 1.0) * d * er
+        # ⚠ ONCE, AFTER THE BONES SETTLE -- never inside the loop. Rescaling each pass multiplies
+        # lengthrange by a ratio measured against the ORIGINAL length every time, compounding it:
+        # the ring finger came out needing full activation for a 0.5 N press while its moment arms
+        # were provably unchanged (+0.0%), which is the signature of a muscle shoved off its
+        # force-length curve by bookkeeping rather than by anatomy.
+        self._rescale_muscles(L0, q)
+
+    def _rescale_muscles(self, L0, q) -> None:
+        """Carry each actuator's operating range along with the path length it now spans.
+
+        `L0` is every tendon's length at q_neutral BEFORE the bones moved. After moving them, a
+        muscle whose path grew by 12% is 12% further along its force-length curve than the model
+        intends; shifting its lengthrange by the same factor puts it back where it was, which is
+        what "the same muscle on a wider hand" means. Muscles that do not cross the moved joints
+        have ratio 1.0 and are untouched."""
+        m = self.model
+        self.fk(q)
+        L1 = np.array(self.data.ten_length, float)
+        for a in range(m.nu):
+            t = int(m.actuator_trnid[a, 0])
+            if t < 0 or t >= len(L0) or L0[t] <= 1e-9:
+                continue
+            ratio = float(L1[t] / L0[t])
+            if abs(ratio - 1.0) < 1e-9:
+                continue
+            m.actuator_lengthrange[a] = m.actuator_lengthrange[a] * ratio
+            if m.tendon_lengthspring.shape[1] >= 2:
+                m.tendon_lengthspring[t] = m.tendon_lengthspring[t] * ratio
+
+    def _fit_shafts(self) -> None:
+        """Grow the proximal/middle phalanx capsules until the SKIN is the measured PIP breadth.
+
+        ⚠ THE BUG THIS EXISTS TO KILL, and it survived THREE optimisation runs. _fit_fingertips
+        fitted the PADS and nothing else, so the model's fingers were correct at the tips and up to
+        1.77x too thin along the shaft (middle phalanx 12.6-15.0 mm against a measured 18.5-23.1).
+        The four fingers then spanned 64.9 mm at the knuckle row scaled to the user's 200 mm hand,
+        while the user's four fingers' OWN breadths sum to 94 mm -- the model's fingers were
+        narrower than themselves, which is not a modelling simplification, it is impossible. Every
+        well is placed at this hand's fingertips and every corridor is checked against this hand's
+        flesh, so the whole device came out narrow: "too narrow for my hand", holding the print.
+
+        Same Newton step as the pads (the skin's lateral extent moves 1:1 with capsule radius), and
+        the same ONLY-EVER-WIDENS rule. Pinned by tests/test_hand.py::test_the_whole_finger_is_the
+        _measured_width, and by the pre-flight check in opt/run.py -- a run must not start on a
+        hand that is not the user's."""
+        from hand.flesh import skin
+
+        m, q = self.model, self.q_neutral
+        caps = {}
+        for f, bodies in SHAFT_BODIES.items():
+            for bname in bodies:
+                bid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, bname)
+                g = next((g for g in range(m.body_geomadr[bid],
+                                           m.body_geomadr[bid] + m.body_geomnum[bid])
+                          if m.geom_type[g] == mujoco.mjtGeom.mjGEOM_CAPSULE), None)
+                if g is not None:
+                    caps[(f, bname)] = g
+        for _ in range(8):
+            V, _F, L = skin(self, q, labels=True)
+            V, L = np.asarray(V), np.asarray(L)
+            grew = False
+            for (f, bname), g in caps.items():
+                lat = np.asarray(self.well_frame(q, f)["lateral"], float)
+                bid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, bname)
+                P = V[L == bid]
+                if not len(P):
+                    continue
+                w = float((P @ lat).max() - (P @ lat).min())
+                d = 0.5 * (float(PIP_BREADTH[f]) * self.scale - w)
+                if d > 1e-5:
+                    m.geom_size[g][0] += d
+                    grew = True
             if not grew:
                 return
 

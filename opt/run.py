@@ -45,7 +45,57 @@ def baseline() -> dict:
     return x
 
 
+def preflight() -> None:
+    """REFUSE TO START ON A HAND THAT IS NOT THE USER'S.
+
+    Three optimisation runs -- roughly 40 hours of compute and two printed parts -- were spent on
+    a MyoHand whose fingers were up to 1.77x too thin and whose knuckles spanned 65 mm where the
+    user's span 104. Every one of those runs looked healthy: the fronts converged, the constraints
+    were satisfied, the previews rendered. Nothing in the loop knew the anatomy was wrong, because
+    nothing in the loop ever compared it to a measurement.
+
+    So the measurements are now a GATE, not a hope. This runs before the first evaluation and
+    raises rather than lets a long run proceed on the wrong hand."""
+    import mujoco
+
+    from hand.flesh import skin
+    from hand.myohand import (FINGERTIP_BREADTH, KNUCKLE_BREADTH, PAD_BODIES, PIP_BREADTH,
+                              SHAFT_BODIES)
+    from structure.frame import hand_axes
+
+    h = hands()[50]
+    q = h.q_neutral
+    V, _F, L = skin(h, q, labels=True)
+    V, L = np.asarray(V), np.asarray(L)
+    bad = []
+    for f in ("index", "middle", "ring", "little"):
+        lat = np.asarray(h.well_frame(q, f)["lateral"], float)
+        for bname, tgt in ([(b, PIP_BREADTH[f]) for b in SHAFT_BODIES[f]]
+                           + [(PAD_BODIES[f], FINGERTIP_BREADTH[f])]):
+            bid = mujoco.mj_name2id(h.model, mujoco.mjtObj.mjOBJ_BODY, bname)
+            P = V[L == bid]
+            if not len(P):
+                continue
+            w = float((P @ lat).max() - (P @ lat).min())
+            if w < float(tgt) * 0.88:
+                bad.append(f"{f}/{bname} {w*1e3:.1f} mm < measured {float(tgt)*1e3:.1f} mm")
+    _o, _ed, e_r, _eo = hand_axes(h, q)
+    ids = [mujoco.mj_name2id(h.model, mujoco.mjtObj.mjOBJ_BODY, b)
+           for b in ("proxph2", "proxph3", "proxph4", "proxph5")]
+    P = V[np.isin(L, ids)]
+    width = float((P @ e_r).max() - (P @ e_r).min())
+    if width < float(KNUCKLE_BREADTH) * 0.95:
+        bad.append(f"knuckle width {width*1e3:.1f} mm < measured {float(KNUCKLE_BREADTH)*1e3:.1f} mm")
+    if bad:
+        raise SystemExit("PRE-FLIGHT FAILED -- this is not the user's hand:\n  "
+                         + "\n  ".join(bad)
+                         + "\nFix hand/myohand.py before spending a run on it.")
+    print(f"pre-flight: hand matches every measurement "
+          f"(knuckles {width*1e3:.1f} mm, fingers fitted to the caliper breadths)", flush=True)
+
+
 def main():
+    preflight()
     ap = argparse.ArgumentParser()
     ap.add_argument("--pop", type=int, default=60)
     ap.add_argument("--gen", type=int, default=40)
