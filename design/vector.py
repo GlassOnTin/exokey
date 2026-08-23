@@ -911,24 +911,29 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
         # corridor can cross a NEIGHBOUR's cup wall, and the printed part blocks with all of it.
         # Own guide walls still read SDF >= 0 (beside the finger, not across its path).
         _mb, _mc, _my = [], [], []
+        _own = {}
         for _f in FINGERS:
             _fr = _mount.well_mount(ref, q_ref, _f, _nodes[_btn[_f]])
             _in = _mount.well_insert(ref, q_ref, _f)
-            _mb += _fr["boxes"] + _in["boxes"]
-            _mc += _fr["caps"] + _in["caps"]
-            _my += _fr["cyls"] + _in["cyls"]
-        _dg = _entry.donning_gaps(ref, curls, boxes=_mb, caps=_mc, cyls=_my)
+            _own[_f] = (_fr["boxes"] + _in["boxes"], _fr["caps"] + _in["caps"],
+                        _fr["cyls"] + _in["cyls"])
+            _mb += _own[_f][0]
+            _mc += _own[_f][1]
+            _my += _own[_f][2]
+        # the ROOM test sees every cup EXCEPT this finger's own (that one only must not
+        # interfere) -- see entry.donning_gaps: a cup is a destination, not an obstacle.
+        _room = {f: ([b for g in FINGERS if g != f for b in _own[g][0]],
+                     [c for g in FINGERS if g != f for c in _own[g][1]],
+                     [y for g in FINGERS if g != f for y in _own[g][2]]) for f in FINGERS}
+        # room = the OTHER fingers' cups + every strut; own cup = non-interference only
+        _dg = _entry.donning_gaps_split(
+            ref, curls, room=_room, own=_own,
+            struts=[((A[k], B[k]), float(_BAR_R)) for k in range(len(A))])
         entry_gap = np.inf          # approach: needs REAL room (DON_CLEAR)
         seat_gap = np.inf           # seated: needs only non-interference (the pad is on its floor)
-        for f in FINGERS:
+        for f in FINGERS:                 # struts are already inside donning_gaps_split
             sg, gap = _dg[f]
             seat_gap = min(seat_gap, sg)
-            P = _entry.entry_sweep(ref, q_ref, f, n=8)
-            lo, hi = P.min(0) - 0.005, P.max(0) + 0.005   # only struts near this channel
-            near = ~(np.any((A < lo) & (B < lo), axis=1) | np.any((A > hi) & (B > hi), axis=1))
-            if near.any():
-                caps = [((a_, b_), float(_BAR_R)) for a_, b_ in zip(A[near], B[near])]
-                gap = min(gap, float(_entry.mount_sdf(P, caps=caps).min()))
             entry_gap = min(entry_gap, gap)
     else:                                   # no structure grew at all: maximally blocked
         entry_gap, seat_gap = -0.01, -0.01
@@ -938,7 +943,11 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
         worst_saturation,           # no muscle maxed out in any wired direction
         required_adjust - adjust,   # the wells must actually reach: STAGE 5, as a constraint
         gc["util"] - 1.0,           # the grown bone must not yield (SF 2) -- ON THE LATTICE now
-        float(STRAP_NODES_MIN) - gc["grip"],    # ⚠ THE STRAP MUST KEEP HOLD OF *BOTH* BANDS.
+        float(gc.get("grip_need", STRAP_NODES_MIN)) - gc["grip"],   # ⚠ THE STRAP MUST KEEP
+        #   HOLD OF *BOTH* BANDS -- of as many nodes as the domain actually offered it,
+        #   capped at STRAP_NODES_MIN (see cost(): the coarse lattice under-samples the
+        #   bands, and demanding 3 of the 2 it provides fails a defect the real part
+        #   does not have).
         #   Not a strength constraint -- the struts at a strap node run at 4% of allowable, less
         #   than the average strut, because the strap carries ~1 N and a 1.8 mm rod takes 89 N.
         #   It is a SINGLE-POINT-OF-FAILURE constraint: nothing else stops ESO deleting its way

@@ -570,8 +570,8 @@ def ground(h, q, hug=0.004, layer=None, pitch=0.004, reach=2.2, press_N=0.196, b
     # keep-out that is merely helpful may be approximate, one that is binding may not.
     import mujoco as _mj
 
-    from manufacture.entry import (CORRIDOR_STRIDE as _CS, _MID_BODIES, _pip_ring, approach_axis,
-                                   entering_skin)
+    from manufacture.entry import (CORRIDOR_STRIDE as _CS, DON_STEPS as _DS, _MID_BODIES,
+                                   _pip_ring, approach_axis, entering_skin)
     _clouds = []
     _ax = {f: (np.asarray(h.well_frame(q, f)["axis"], float) if f == "thumb"
                else approach_axis(h, q)) for f in FINGERS}
@@ -584,7 +584,7 @@ def ground(h, q, hug=0.004, layer=None, pitch=0.004, reach=2.2, press_N=0.196, b
         from design.params import DON_LEN as _DL
         from design.vector import posture as _posture
         _L = float(_DL)
-        for _s in np.linspace(0.0, 1.0, 6):
+        for _s in np.linspace(0.0, 1.0, _DS):
             _qs = h.compose({f: _posture(h, f,
                                          0.05 + _s * (float(curls[(f, 0)][0]) - 0.05),
                                          0.05 + _s * (float(curls[(f, 0)][1]) - 0.05),
@@ -1029,6 +1029,29 @@ def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
         hist.append((len(live), w, mass, tens, len(live_s)))
         if on_step:
             on_step(step, live, w, mass, tens)
+    # ⚠ DROP THE ISLANDS BEFORE RETURNING. ESO deletes the lowest strain-energy members, and a
+    # deletion can cut a knot of bars loose from the anchor -- which then carries nothing, weighs
+    # something, and falls off the print. `connected()` already knows how to find them (it exists
+    # because such an island has six rigid-body modes, makes the stiffness matrix singular, and
+    # PyNite's NaN then read as a PERFECT zero-deflection score). It ran at the START of growth but
+    # never at the end, so late-formed islands survived into the result: measured on the widened
+    # hand, 2-3 components per design once the donning keep-out fragmented the domain. An island is
+    # not a design choice the constraint should reject, it is scrap the grow should not return.
+    # ⚠ connected() KEEPS ANYTHING THAT REACHES AN ANCHOR, and the anchors are a whole patch of
+    # skin nodes -- so two separate structures each touching the patch BOTH survive it, which is
+    # exactly the two-piece device the `connected` constraint exists to forbid. Prune the true
+    # scrap (components holding no button at all: they carry nothing and fall off the print), and
+    # leave any genuine split for the constraint to fail, because a design whose buttons sit on
+    # different pieces is not something growth may quietly tidy away.
+    import scipy.sparse as _sp
+    from scipy.sparse.csgraph import connected_components as _cc
+
+    if live:
+        _ei, _ej = np.array([bars[e] for e in live], int).T
+        _adj = _sp.coo_matrix((np.ones(len(live)), (_ei, _ej)), shape=(len(nodes),) * 2)
+        _n, _lbl = _cc(_adj, directed=False)
+        _btn_comp = {int(_lbl[i]) for i in btn.values()}
+        live = [e for e in live if int(_lbl[bars[e][0]]) in _btn_comp]
     return nodes, bars, live, btn, cases, ak, an, hist, pc, shells, live_s
 
 
@@ -1151,8 +1174,18 @@ def cost(h, q, wired=None, press_N=0.196, pitch=0.008, gate=0.5e-3, mat="cf_pa12
 
     n_solid, w_solid, m_solid = hist[0][:3]
     _n, w, m, _t = hist[-1][:4]
+    # ⚠ THE STRAP TEST MUST NOT EXCEED WHAT THE DOMAIN OFFERS. STRAP_NODES_MIN exists to stop ESO
+    # deleting a band down to a single point of failure -- but on the coarse GA lattice (8 mm) the
+    # user's widened hand puts only [2, 3] nodes under the two bands, so demanding 3 demanded more
+    # than existed and every design failed a defect the REAL structure does not have: at the 4 mm
+    # pitch final.py grows at, the same design holds 9. Measured 2 / 3 / 9 at 8 / 6 / 4 mm. So the
+    # bar is what ESO was GIVEN, capped at STRAP_NODES_MIN: keep the grip you were handed, and
+    # never fewer than one band's worth. Resolution-independent, and it still forbids the hinge.
+    _sn_all = under_strap(h, q, nodes, sorted(ak))
+    _avail = strap_grip(_sn_all, {i for b in bars for i in b})
     held = {i for e in live for i in bars[e]}
-    grip = strap_grip(under_strap(h, q, nodes, sorted(ak)), held)
+    grip = strap_grip(_sn_all, held)
+    grip_need = min(int(float(STRAP_NODES_MIN)), int(_avail))
 
     # THE STRESS, on the structure that actually survived -- not on the solid, which is a
     # different structure carrying the same load through 30x more material.
@@ -1192,11 +1225,11 @@ def cost(h, q, wired=None, press_N=0.196, pitch=0.008, gate=0.5e-3, mat="cf_pa12
     return dict(mass_g=float(m) * 1000.0, solid_g=float(m_solid) * 1000.0,
                 handle_g=m_handle * 1000.0,
                 worst=float(w_solid), util=util, struts=len(live), grip=int(grip),
-                support_mm=float(sup_m), islands=islands,
+                support_mm=float(sup_m), islands=islands, grip_need=grip_need,
                 # the grown lattice itself, so the caller can test the ARTIFACT's geometry
                 # (entry routes vs the struts that actually exist) and not a proxy of it
                 nodes=nodes, bars=bars, live=live, btn=btn,
-                feasible=bool(w_solid <= gate and grip >= int(float(STRAP_NODES_MIN))))
+                feasible=bool(w_solid <= gate and grip >= grip_need))
 
 
 def relax_nodes(fr, U, nodes, bars, live, buttons, anchor_k, skin_V, skin_N,

@@ -36,6 +36,12 @@ TOUCH_TOL = 3e-4        # m
 # ENVELOPE, not every skin vertex, and every 4th point preserves it to well under the tolerances
 # that matter here while keeping the check affordable inside the GA loop.
 CORRIDOR_STRIDE = 4
+# ⚠ THE KEEP-OUT AND THE CONSTRAINT MUST SAMPLE THE SAME TRAJECTORY. They did not -- ground()
+# swept 6 postures while the constraint checked 9 -- so a strut could sit in a corridor position
+# the keep-out never looked at and the constraint duly failed it. Measured on the merged front:
+# neighbour cups cleared by 14-43 mm and the ONLY binding obstacle was a strut at -0.51 mm, in a
+# design space that was supposed to have excluded it. One constant, both users.
+DON_STEPS = 11
 SEAT_ZONE = 0.005       # m -- within this of seated, the pad is ON its cup floor by design
                         # (SEAT_CLEAR), so contact there is the SEAT, not an obstruction. Measuring
                         # the whole sweep with one threshold reported that seat as the binding
@@ -111,7 +117,7 @@ def approach_axis(h, q) -> np.ndarray:
     return a / (np.linalg.norm(a) + 1e-12)
 
 
-def donning_gaps(h, curls, boxes=(), caps=(), cyls=(), *, n=9) -> dict:
+def donning_gaps(h, curls, boxes=(), caps=(), cyls=(), *, own=None, n=DON_STEPS) -> dict:
     """{finger: (seated gap, approach gap)} along the donning motion a hand actually makes.
 
     ⚠ ONE POSTURE FOR THE WHOLE HAND PER STEP, and that is both faster AND more honest. Doing it
@@ -136,7 +142,7 @@ def donning_gaps(h, curls, boxes=(), caps=(), cyls=(), *, n=9) -> dict:
               else approach_axis(h, q0)) for f in FINGERS}
     ax = {f: a / (np.linalg.norm(a) + 1e-12) for f, a in ax.items()}
     L = float(_DON_LEN)
-    out = {f: [np.inf, np.inf] for f in FINGERS}
+    out = {f: [np.inf, np.inf, np.inf] for f in FINGERS}   # seat, approach, own-cup
     for s in np.linspace(0.0, 1.0, n):
         q_s = h.compose({f: posture(h, f,
                                     0.05 + s * (float(curls[(f, 0)][0]) - 0.05),
@@ -149,10 +155,27 @@ def donning_gaps(h, curls, boxes=(), caps=(), cyls=(), *, n=9) -> dict:
             mid = mujoco.mj_name2id(h.model, mujoco.mjtObj.mjOBJ_BODY, _MID_BODIES[f])
             pts = np.concatenate([V[Lb == h.pad[f][0]], V[Lb == mid]])[::CORRIDOR_STRIDE]
             pts = np.vstack([pts, _pip_ring(h, q_s, f)]) - (1.0 - s) * L * ax[f]
-            d = float(mount_sdf(pts, boxes, caps, cyls).min())
+            # ⚠ A FINGER'S OWN CUP IS NOT AN OBSTACLE, IT IS THE DESTINATION. Held to the same
+            # donning clearance as everything else, the constraint is UNSATISFIABLE: the cup is
+            # built SEAT_CLEAR (0.4 mm) off the finger because it must cradle it, and the finger
+            # is still inside it for the whole cup length (~16-20 mm) on the way out -- so asking
+            # for 2 mm there asks for a cup that does not hold anything. Measured: the GA drove
+            # the corridor to exactly touching and stalled at cv 0.0019772 (= DON_CLEAR - 0) from
+            # generation 60 to 90, and reported NO FEASIBLE DESIGN after 5.7 hours. So the own cup
+            # is held only to non-interference; the STRUTS and the OTHER fingers' cups -- the
+            # things that have no business in this finger's path -- are what must leave room.
+            if own is None:
+                d_room = float(mount_sdf(pts, boxes, caps, cyls).min())
+                d_own = d_room
+            else:
+                ob, oc, oy = own[f]
+                d_room = float(mount_sdf(pts, boxes, caps, cyls).min())
+                d_own = float(mount_sdf(pts, ob, oc, oy).min())
             z = 0 if (1.0 - s) * L <= SEAT_ZONE else 1
-            out[f][z] = min(out[f][z], d)
-    return {f: (v[0], v[1] if np.isfinite(v[1]) else v[0]) for f, v in out.items()}
+            out[f][z] = min(out[f][z], d_room)
+            out[f][2] = min(out[f][2], d_own)
+    return {f: (min(v[0], v[2]), v[1] if np.isfinite(v[1]) else v[0])
+            for f, v in out.items()}   # (non-interference incl. own cup, room needed)
 
 
 def _pip_ring(h, q, finger, k=16):
@@ -196,6 +219,47 @@ def donning_frames(h, curls, *, n=24):
                                     float(curls[(f, 0)][2])) for f in FINGERS})
         frames.append((np.asarray(q_s, float), -(1.0 - s) * L * ax))
     return frames
+
+
+def donning_gaps_split(h, curls, *, room, own, struts=(), n=DON_STEPS) -> dict:
+    """{finger: (seated gap, approach gap)} with the two obstacle sets kept apart.
+
+    `room[f]`  -- everything that must leave DON_CLEAR beside this finger: the OTHER fingers'
+                  cups. Plus `struts`, which apply to every finger.
+    `own[f]`   -- this finger's own cup, held only to non-interference: it is built SEAT_CLEAR
+                  off the finger BECAUSE it cradles it, and the finger is inside it for the whole
+                  cup length on the way out. Demanding donning clearance there is unsatisfiable,
+                  and measurably so: the GA stalled at cv 0.0019772 (DON_CLEAR minus nothing) for
+                  30 generations and returned NO FEASIBLE DESIGN after 5.7 hours."""
+    from design.vector import FINGERS, posture
+
+    q0 = h.compose({f: posture(h, f, *(float(v) for v in curls[(f, 0)])) for f in FINGERS})
+    ax = {f: (np.asarray(h.well_frame(q0, f)["axis"], float) if f == "thumb"
+              else approach_axis(h, q0)) for f in FINGERS}
+    ax = {f: a / (np.linalg.norm(a) + 1e-12) for f, a in ax.items()}
+    L = float(_DON_LEN)
+    seat = {f: np.inf for f in FINGERS}
+    app = {f: np.inf for f in FINGERS}
+    import mujoco
+    for s in np.linspace(0.0, 1.0, n):
+        q_s = h.compose({f: posture(h, f,
+                                    0.05 + s * (float(curls[(f, 0)][0]) - 0.05),
+                                    0.05 + s * (float(curls[(f, 0)][1]) - 0.05),
+                                    float(curls[(f, 0)][2])) for f in FINGERS})
+        V, _F, Lb = skin(h, q_s, labels=True)
+        V, Lb = np.asarray(V), np.asarray(Lb)
+        for f in FINGERS:
+            mid = mujoco.mj_name2id(h.model, mujoco.mjtObj.mjOBJ_BODY, _MID_BODIES[f])
+            pts = np.concatenate([V[Lb == h.pad[f][0]], V[Lb == mid]])[::CORRIDOR_STRIDE]
+            pts = np.vstack([pts, _pip_ring(h, q_s, f)]) - (1.0 - s) * L * ax[f]
+            rb, rc, ry = room[f]
+            d_room = float(mount_sdf(pts, rb, list(rc) + list(struts), ry).min())
+            ob, oc, oy = own[f]
+            d_own = float(mount_sdf(pts, ob, oc, oy).min())
+            seat[f] = min(seat[f], d_own, d_room if (1.0 - s) * L <= SEAT_ZONE else np.inf)
+            if (1.0 - s) * L > SEAT_ZONE:
+                app[f] = min(app[f], d_room)
+    return {f: (seat[f], app[f] if np.isfinite(app[f]) else seat[f]) for f in FINGERS}
 
 
 def entry_sweep(h, q, finger, *, length=0.020, n=16) -> np.ndarray:
