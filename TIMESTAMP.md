@@ -8,11 +8,72 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** thirty-seven times. **All thirty-eight stamps stand**, and each
+The disclosure has been **extended and re-anchored** thirty-eight times. **All thirty-nine stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — THE MODEL IS THE USER'S HAND, AND THE CHECKS TEST THE PART
+### Current — THE MOVING PART HAS TO BE ABLE TO MOVE
+
+The user, looking at the render: *"I'm concerned that there are some struts dropping down onto the
+index and middle cup bases."* Measured, that instinct led straight past what it pointed at to
+something worse next door.
+
+Struts fuse **3.6-4.1 mm into all five RIGID cup frames**, and that is intended -- the button node
+sits on the mount and its strut has to tie in. But nothing had ever checked the structure against
+the **DROP-IN TPU CRADLE**, the part the fingertip tilts over the Hall sensor, and a key that
+cannot move cannot be read. The export carves only the PCB slot and the magnet pocket, so the STL
+reserved no space for it either. Measured with export-accurate geometry (`cluster_mount` for the
+four long fingers, as `export_stl` builds them): thumb **+0.26**, index +1.65, middle +1.84, ring
+**+0.27**, little **-2.10 mm**. The little finger's cradle was blocked outright; thumb and ring sat
+inside FDM tolerance (~0.2 mm) of fusing. **Three of five keys dead**, on a part that had passed
+every check the project had.
+
+`CRADLE_CLEAR` (1.5 mm, GUESS, disclosed) now reserves the cradle's swing envelope in the growth
+keep-out and as a sixteenth constraint, so the search prices it rather than discovering it after
+export.
+
+⚠ **AND THE FIRST VERSION OF THAT FIX KILLED THE DESIGN SPACE** -- 0 of 31 designs grew at all,
+`yield +inf` across the board -- because reserving 3 mm around each cradle also forbids every bar
+that reaches the button, and the button *sits on the mount*. That is the third instance in a week
+of one shape of error, and it is worth stating as a rule: **the thing the structure must ATTACH to
+cannot also be a keep-out.** (The others: a finger's own cup is its destination, not an obstacle,
+which made the donning constraint unsatisfiable until it was exempted; and `connected()` keeping
+anything that touches the anchor *patch*, so two separate anchored pieces both passed the check
+that exists to forbid exactly that.) A bar ENDING at a button is a tie-in and is exempt; a bar
+PASSING THROUGH a cradle is a jam and is not.
+
+Re-picked from the existing front rather than re-run: **21 of 31 designs survive**. The new knee
+(design 13) carries **+5.00 mm** of cradle clearance against a 1.5 mm bar -- deliberately not the
+boundary-hugging choice that cost two rebuilds this week, and it gives up nothing measurable
+(effort 5.262e-7 / 32.25 g against 5.242e-7 / 32.03 g). Verified on the geometry that actually
+gets printed, both checks together:
+
+| finger | donning (need +2.00) | cradle (need +1.50) |
+|---|---|---|
+| thumb | +2.50 | +12.39 |
+| index | +2.55 | +3.49 |
+| middle | +3.61 | +7.88 |
+| ring | +2.99 | +3.26 |
+| little | +2.83 | +9.93 |
+
+The shipped part: 115 x 159 x 147 mm, one watertight body, 49.9 g of CF-PA12, buttons at 478 um
+against the 500 um gate. ⚠ Still open: the search has NOT converged (all three seeds contribute);
+`scripts/entry_view.py` still prints the retired 20 mm sweep (+0.4 to +0.7 mm here, which is the
+check that passed a gauntlet the user could not put on -- ignore that line); the grab margin is
+36 MPa against 35 allowed; and `CRADLE_CLEAR` is a guess awaiting a printed cradle's measured
+travel. **Both files re-stamped** (114 files).
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) — *re-stamped: discloses `CRADLE_CLEAR`* | `08a9035ecf789b01ecfdccd6dc62984d7200724ef54db2578f168056a2c64f24` |
+| `MANIFEST.sha256` (hashes of all 114 source + doc files) | `b3e26f423514513b4b4524d1ee38c591704e79783a4a5810f0f4d19b00042c81` |
+
+Stamped: **2026-08-24T16:49:00Z** (UTC, submission time). Proofs: `MANIFEST.sha256.ots` and
+`VISION.md.ots`, both freshly stamped. The outgoing 38th proofs are archived at
+`timestamps/MANIFEST.sha256.2026-08-24b.ots` and `timestamps/VISION.md.2026-08-24b.ots` (run
+`ots upgrade` once the block mines).
+
+### Thirty-eighth — THE MODEL IS THE USER'S HAND, AND THE CHECKS TEST THE PART
 
 The user, holding the printed gauntlet: *"my hand doesn't fit"*; *"too narrow for my hand"*;
 *"the last 3 model runs all had that basic bug"*. All three correct. MyoHand had never been the
