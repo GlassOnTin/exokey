@@ -570,12 +570,14 @@ def ground(h, q, hug=0.004, layer=None, pitch=0.004, reach=2.2, press_N=0.196, b
     # keep-out that is merely helpful may be approximate, one that is binding may not.
     import mujoco as _mj
 
-    from manufacture.entry import (CORRIDOR_STRIDE as _CS, DON_STEPS as _DS, _MID_BODIES,
-                                   _pip_ring, approach_axis, entering_skin)
+    from manufacture.entry import (CORRIDOR_STRIDE as _CS, DON_STEPS as _DS, SEAT_ZONE as _SEAT_ZONE,
+                                   TOUCH_TOL as _TT, _MID_BODIES, _pip_ring, approach_axis,
+                                   entering_skin)
     _clouds = []
     _ax = {f: (np.asarray(h.well_frame(q, f)["axis"], float) if f == "thumb"
                else approach_axis(h, q)) for f in FINGERS}
     _ax = {f: a / (np.linalg.norm(a) + 1e-12) for f, a in _ax.items()}
+    _seat_clouds = []
     if curls is None:
         for f in FINGERS:
             _clouds.append(np.concatenate([entering_skin(h, q, f)[::_CS] - t * _ax[f]
@@ -584,6 +586,14 @@ def ground(h, q, hug=0.004, layer=None, pitch=0.004, reach=2.2, press_N=0.196, b
         from design.params import DON_LEN as _DL
         from design.vector import posture as _posture
         _L = float(_DL)
+        # ⚠ TWO ZONES HERE TOO, OR THE KEEP-OUT EATS THE BUTTONS. The seat zone must be carved at
+        # NON-INTERFERENCE only, exactly as the constraint judges it: near s=1 the finger is IN its
+        # cup, and reserving DON_CLEAR (3.5 mm of centreline) around it deletes the very struts
+        # that hold that finger's button. Measured when this was one zone: final.py's fine grow
+        # deleted 0 of 13070 bars, weighed 242 g and still missed the gate by 16x (8084 um), because
+        # no candidate could reach a button any more. The approach is where a finger needs ROOM;
+        # where it is seated it needs only to not be inside the part.
+        _seat_clouds = []
         for _s in np.linspace(0.0, 1.0, _DS):
             _qs = h.compose({f: _posture(h, f,
                                          0.05 + _s * (float(curls[(f, 0)][0]) - 0.05),
@@ -595,12 +605,19 @@ def ground(h, q, hug=0.004, layer=None, pitch=0.004, reach=2.2, press_N=0.196, b
                 _mid = _mj.mj_name2id(h.model, _mj.mjtObj.mjOBJ_BODY, _MID_BODIES[f])
                 _p = np.concatenate([_V[_Lb == h.pad[f][0]], _V[_Lb == _mid]])[::_CS]
                 _p = np.vstack([_p, _pip_ring(h, _qs, f)])
-                _clouds.append(_p - (1.0 - _s) * _L * _ax[f])
-    entry_tree = cKDTree(np.concatenate(_clouds))
+                _off = (1.0 - _s) * _L
+                (_seat_clouds if _off <= _SEAT_ZONE else _clouds).append(_p - _off * _ax[f])
+    entry_tree = cKDTree(np.concatenate(_clouds)) if _clouds else None
+    seat_tree = cKDTree(np.concatenate(_seat_clouds)) if curls is not None and _seat_clouds else None
     s_e = np.linspace(0.0, 1.0, 9)
     mid_e = (a[:, None, :] * (1 - s_e)[None, :, None] + b[:, None, :] * s_e[None, :, None])
-    d_entry = entry_tree.query(mid_e.reshape(-1, 3))[0].reshape(len(pairs), -1).min(axis=1)
-    keep_bar &= d_entry >= float(BAR_R) + FILLET + float(_DC)   # room, not just no-contact
+    _P = mid_e.reshape(-1, 3)
+    if entry_tree is not None:                        # the APPROACH: real room beside the finger
+        d_entry = entry_tree.query(_P)[0].reshape(len(pairs), -1).min(axis=1)
+        keep_bar &= d_entry >= float(BAR_R) + FILLET + float(_DC)
+    if seat_tree is not None:                         # SEATED: only stay out of the flesh
+        d_seat = seat_tree.query(_P)[0].reshape(len(pairs), -1).min(axis=1)
+        keep_bar &= d_seat >= float(BAR_R) + FILLET + float(_TT)
 
     bars = [tuple(p) for p in pairs[keep_bar]]
 
@@ -916,7 +933,7 @@ def handling_cases(h, q, btn, N=None):
 
 def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
          press_N=0.196, wired=None, relax=True, plates=False, r=None, on_step=None,
-         impact_cases=None, handling_N=None, curls=None):
+         impact_cases=None, handling_N=None, curls=None, reach=2.2):
     """WOLFF'S LAW. Delete the bars that carry no load, until the buttons stop being crisp.
 
     Bone is not designed, it is grown: it lays down material where it is strained and resorbs it
@@ -927,7 +944,8 @@ def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
     is mushy, however crisp the other fourteen are.
     """
     nodes, bars, btn, _loads, ak, an, tris, strap_n = ground(h, q, hug=hug, pitch=pitch,
-                                                             press_N=press_N, curls=curls)
+                                                             press_N=press_N, curls=curls,
+                                                             reach=reach)
     shells = tris if plates else []
     cases = load_cases(h, q, btn, press_N=press_N, wired=wired)
     # HANDLING IS ALWAYS IN THE RANKING (handling_N=0 to opt out): every grow path -- the GA's

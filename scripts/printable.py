@@ -87,8 +87,16 @@ def main():
     # ⚠ RUN THE WHOLE PIPELINE. This used to load a topology found by an EARLIER, unconstrained run
     # and merely fatten it to the nozzle -- which meant the printable structure was never actually
     # OPTIMISED under the printing constraints, only projected onto them.
-    pitch, reach = 0.008, 2.2
-    nodes, bars, btn, _l, ak, an, _t, sn = ground(ref, q, pitch=pitch, reach=reach)
+    # ⚠ THE PRINTED PART MUST BE GROWN UNDER THE DONNING KEEP-OUT TOO. This domain had no `curls`,
+    # so every corridor guarantee the GA and final.py enforced was thrown away here: the structure
+    # that actually gets exported was re-derived from an UNCONSTRAINED domain, and the shipped STL
+    # measured -1.20 mm into the entering finger (needs +2.00) while final.py's lattice cleared it.
+    # The same class of error as the cup capsules and the 20 mm sweep -- the check and the artifact
+    # were not the same object. `reach` is raised with it for the same reason final.py needs it:
+    # a ~3.5 mm reserved corridor severs a lattice whose bars are only 2.2*pitch long.
+    curls = {(f, 0): (tp_of(x, f), tm_of(x, f), float(x.get(f"ab_{f}", 0.0))) for f in FINGERS}
+    pitch, reach = 0.008, 3.0
+    nodes, bars, btn, _l, ak, an, _t, sn = ground(ref, q, pitch=pitch, reach=reach, curls=curls)
     cases = load_cases(ref, q, btn, wired=wired)
     rho = MATERIALS["cf_pa12"]["rho"]
     n = float(NOZZLE_R)

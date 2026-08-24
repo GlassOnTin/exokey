@@ -15,8 +15,16 @@ Fn=(F-F.min(0))/(F.max(0)-F.min(0)+1e-12); i=int(np.argmin((Fn**2).sum(1))); x=X
 r=evaluate(x,H); wired=used_actions(r["action_map"])
 q=ref.compose({f: posture(ref,f,tp_of(x,f),tm_of(x,f),float(x.get(f"ab_{f}",0.0))) for f in FINGERS})
 t0=time.time()
+# ⚠ REACH 3.6, NOT THE DEFAULT 2.2, AND THE DONNING KEEP-OUT IS WHY. The keep-out reserves a
+# ~3.5 mm corridor for the entering finger; at this 4 mm pitch that moat is as wide as the node
+# spacing, and bars of 2.2*pitch = 8.8 mm cannot route around it -- the lattice is severed. It
+# fails LOUDLY but confusingly: the SOLID lattice (13141 bars, every candidate present) deflected
+# 8084 um against a 500 um gate, so ESO deleted nothing and returned 243 g of bone, while the
+# COARSER 8 mm grow the GA uses was fine at 48 um. More material, 170x floppier -- the giveaway
+# that it was severance, not stiffness. Measured at 4 mm: reach 2.2 -> 8084 um (broken),
+# 3.0 -> 116 um, 3.6 -> 48 um, matching the coarse solid exactly.
 N,bars,live,btn,cases,ak,an,hist,pc,_sh,_ls = grow(ref,q,wired=wired,gate=float(DEFLECTION_MAX),
-                                                  relax=True,curls=r["curls"])
+                                                  relax=True,curls=r["curls"],reach=3.6)
 print(f"KNEE OF THE CO-OPTIMISED FRONT, full resolution, nodes free  [{time.time()-t0:.0f}s]")
 print(f"  {hist[0][0]} candidates -> {len(live)} struts ({100*(1-len(live)/hist[0][0]):.1f}% deleted)")
 print(f"  bone {hist[-1][2]*1000:.1f} g   buttons {hist[-1][1]*1e6:.0f} um (gate 500)   "
