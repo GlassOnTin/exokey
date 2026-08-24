@@ -8,11 +8,80 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** thirty-six times. **All thirty-seven stamps stand**, and each
+The disclosure has been **extended and re-anchored** thirty-seven times. **All thirty-eight stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — THE FIRST PRINT WAS WORN, AND IT FOUND TWO THINGS NO MODEL HAD
+### Current — THE MODEL IS THE USER'S HAND, AND THE CHECKS TEST THE PART
+
+The user, holding the printed gauntlet: *"my hand doesn't fit"*; *"too narrow for my hand"*;
+*"the last 3 model runs all had that basic bug"*. All three correct. MyoHand had never been the
+user's hand, and nothing in the loop ever compared it to a measurement -- so every signal a run
+produces (converged fronts, satisfied constraints, rendered previews) was consistent with a
+device built for somebody else.
+
+**THE ANATOMY.** Three defects, each invisible to every other check. `_fit_fingertips` grew only
+the PADS, leaving the shaft up to **1.77x too thin** -- the model's fingers were narrower than
+their own measured breadths, which is impossible, and the PIP that jammed the print lives on that
+shaft. Fitting the shafts did not widen the HAND, because flesh cannot: the span is set by the
+metacarpals, and the four fingers still covered 66 mm at the knuckles against a measured 104.
+Splaying the metacarpals then broke the physics -- the interossei run `thirdmc->fifthmc` and
+FDP5/FDS5 run `capitate->fourthmc->fifthmc`, so every path crossing between them lengthened while
+MuJoCo still read its force-length curve off the NARROW hand's `actuator_lengthrange`: the little
+finger needed **1.000 activation to hold its own rest posture**. Muscles are now scaled with the
+bones they span, as OpenSim does when fitting a model to a subject. Result: MCP span 48.0 ->
+**81.5 mm**, knuckle width 64.9 -> **102.1 mm** (user: 104), all five digits 0.000 at rest.
+And a GATE: `opt.run:preflight()` checks the hand against every measurement before the first
+evaluation and REFUSES to start otherwise -- verified to fire by neutering the fits.
+
+**THE DONNING CORRIDOR**, rebuilt after the print jammed on a 25 mm knuckle in a corridor sized
+to a 20 mm fingertip. The old check swept the DISTAL phalanx only, 20 mm, along each finger's own
+axis -- three fictions. It now sweeps distal + middle phalanx plus caliper-measured PIP bulges
+(`PIP_BREADTH`), over the full `DON_LEN` = 80 mm the hand actually travels, along ONE shared
+approach with the fingers entering EXTENDED and curling as they seat, demanding real room
+(`DON_CLEAR` = 2 mm) rather than mere non-interference. Each finger's OWN cup is exempt from that
+room demand -- it is the destination, not an obstacle -- which is what made the constraint
+satisfiable at all.
+
+**AND FIVE CHECKS THAT MEASURED THE MODEL INSTEAD OF THE ARTIFACT**, every one found by
+measurement after a 5.7-hour seed returned NO FEASIBLE DESIGN with its violation pinned at
+0.0019772 from generation 60 to 90: the keep-out and the constraint sampled different
+trajectories (6 postures vs 9); `strap-grip` demanded 3 nodes of the 2 the coarse 8 mm lattice
+provides, where the 4 mm part holds 9; islands were pruned at the start of growth and never at
+the end; `connected()` passed two separate anchored pieces because the anchor is a whole patch;
+and -- last and worst -- `printable.py`, which builds the geometry that is actually EXPORTED,
+grew it with no keep-out at all, so the shipped STL measured **-1.20 mm into the entering
+finger** while every intermediate lattice cleared. A reserved corridor also severs a fine
+lattice: at 4 mm pitch the 3.5 mm moat is as wide as the node spacing and 8.8 mm bars cannot
+route around it, so the SOLID 13141-bar lattice deflected 8084 um where the coarser 8 mm one gave
+48 um -- five times the material, 170x floppier, impossible as stiffness and obvious as
+severance.
+
+**HANDLING.** The printed thumb cup snapped at the first donning: the only structural demand
+anywhere was the 0.196 N keypress gate, so ESO pruned its support to material crisp along the
+press, and a 1.8 mm CF-PA12 rod yields at ~2-3 N at cup distance. `HANDLING_N` (10 N) now enters
+the ESO ranking, `cost()` as a fully-stressed-design mass surcharge, and `printable.py`'s radius
+sizing as an FSD fixed point that HARD-FAILS the export rather than ship a part that would snap.
+
+The result: a 31-design front (effort 4.516e-7 .. 1.360e-6, mass 28.8 .. 62.6 g) on a hand that
+is the user's, with the best effort figure the project has produced. The shipped knee -- 436
+struts, buttons 478 um against the 500 um gate, 116 x 159 x 146 mm, 49.9 g of CF-PA12, one
+watertight body -- clears every finger's donning corridor **on the geometry that gets printed**:
++2.56 / +3.63 / +3.23 / +3.14 / +2.57 mm. ⚠ The search has NOT converged (all three seeds still
+contribute), `scripts/entry_view.py` still reports the retired 20 mm sweep, and the grab margin
+is 36 MPa against 35 allowed. **Both files re-stamped** (114 files).
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) — *re-stamped: discloses `DON_CLEAR`, `DON_LEN`, `HANDLING_N`* | `4221c06e71c73e70653b09a7ef1e33418657641744c49cd591e1c4a6160a5994` |
+| `MANIFEST.sha256` (hashes of all 114 source + doc files) | `2f13abdfda9179abae1cc97542e8025c7f38db7c2cabe41449d2d5664257fb59` |
+
+Stamped: **2026-08-24T09:27:00Z** (UTC, submission time). Proofs: `MANIFEST.sha256.ots` and
+`VISION.md.ots`, both freshly stamped. The outgoing 37th proofs are archived at
+`timestamps/MANIFEST.sha256.2026-08-24a.ots` and `timestamps/VISION.md.2026-08-24a.ots` (run
+`ots upgrade` once the block mines).
+
+### Thirty-seventh — THE FIRST PRINT WAS WORN, AND IT FOUND TWO THINGS NO MODEL HAD
 
 `gauntlet_200mm.stl` was printed and put on a hand. It failed twice, and both failures were
 model blind spots the constraint set could not see.
