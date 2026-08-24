@@ -23,7 +23,8 @@ import os
 
 import numpy as np
 
-from design.params import (COMMON_DRIVE as _CD, DEFLECTION_MAX, DON_CLEAR as _DON_CLEAR,
+from design.params import (COMMON_DRIVE as _CD, CRADLE_CLEAR as _CRADLE_CLEAR,
+                           DEFLECTION_MAX, DON_CLEAR as _DON_CLEAR,
                            DROOP_MAX as _DROOP_MAX,
                            RESIDUAL_MAX as _RESID,
                            SVALBOARD, THUMB_CMC, WELL_WALL as _WELL_WALL, check_coherent)
@@ -925,6 +926,25 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
         _room = {f: ([b for g in FINGERS if g != f for b in _own[g][0]],
                      [c for g in FINGERS if g != f for c in _own[g][1]],
                      [y for g in FINGERS if g != f for y in _own[g][2]]) for f in FINGERS}
+        # THE MOVING CRADLE NEEDS ITS SWING ENVELOPE. Struts may fuse into the RIGID frame -- the
+        # button node sits on it and its strut must tie in -- but the drop-in cradle tilts over the
+        # Hall sensor, and a key that cannot move cannot be read. Measured on a shipped design
+        # before this existed: little BLOCKED by a strut 2.10 mm inside its cradle, thumb and ring
+        # clear by 0.26/0.27 mm that print tolerance closes. Three of five keys dead.
+        cradle_gap = np.inf
+        for _f in FINGERS:
+            _in = _mount.well_insert(ref, q_ref, _f)
+            if not (_in["boxes"] or _in["caps"] or _in["cyls"]):
+                continue
+            _btn_nodes = set(_btn.values())
+            for _k, _e in enumerate(_live):
+                if _bars[_e][0] in _btn_nodes or _bars[_e][1] in _btn_nodes:
+                    continue          # the button's own tie-in: it must reach the mount
+                _t = np.linspace(0.0, 1.0, 7)[:, None]
+                _P = A[_k] * (1 - _t) + B[_k] * _t
+                cradle_gap = min(cradle_gap, float(
+                    _entry.mount_sdf(_P, _in["boxes"], _in["caps"], _in["cyls"]).min()) - float(_BAR_R))
+
         # room = the OTHER fingers' cups + every strut; own cup = non-interference only
         _dg = _entry.donning_gaps_split(
             ref, curls, room=_room, own=_own,
@@ -936,7 +956,7 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
             seat_gap = min(seat_gap, sg)
             entry_gap = min(entry_gap, gap)
     else:                                   # no structure grew at all: maximally blocked
-        entry_gap, seat_gap = -0.01, -0.01
+        entry_gap, seat_gap, cradle_gap = -0.01, -0.01, -0.01
 
     g = [
         worst_travel_deficit,       # every WIRED direction usable, on every hand
@@ -986,6 +1006,7 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
         #   struts 1.0-2.9 mm), so the strut keep-out could never buy this: it is paid for by
         #   SPREADING THE WELLS, which only the layout can do. Hence a real margin, DON_CLEAR.
         float(islands - 1),               # ONE CONNECTED PART, not islands held up by tissue springs
+        float(_CRADLE_CLEAR) - cradle_gap,   # EVERY CRADLE CAN STILL MOVE (see above)
     ]
 
     return dict(
@@ -993,7 +1014,7 @@ def evaluate(x: dict, hands: dict[int, MyoHand], ref_pct: int = 50) -> dict:
         n_keys=n_keys, total_keys=5,
         keys_ref=keys_ref, curls=curls, press_N=press_N,
         key_sep=sep_violation, key_sep_pair=sep_pair, swept=worst_swept,
-        entry_gap=float(entry_gap), islands=islands,
+        entry_gap=float(entry_gap), islands=islands, cradle_gap=float(cradle_gap),
         action_map=action_map, required_adjust=required_adjust, adjust=adjust,
         char_effort_by_hand=per_hand_char_effort,
         feasible=all(v <= 0 for v in g),

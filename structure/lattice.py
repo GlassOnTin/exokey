@@ -611,6 +611,19 @@ def ground(h, q, hug=0.004, layer=None, pitch=0.004, reach=2.2, press_N=0.196, b
     seat_tree = cKDTree(np.concatenate(_seat_clouds)) if curls is not None and _seat_clouds else None
     s_e = np.linspace(0.0, 1.0, 9)
     mid_e = (a[:, None, :] * (1 - s_e)[None, :, None] + b[:, None, :] * s_e[None, :, None])
+    # ⚠ AND RESERVE THE MOVING CRADLE. The structure was kept off the FINGER and allowed to fuse
+    # into the rigid frame (which is intentional -- the button node sits on the mount and its strut
+    # must tie in), but nothing kept it out of the DROP-IN CRADLE, the part that tilts over the Hall
+    # sensor. A key that cannot move cannot be read. Measured on the shipped design: little BLOCKED
+    # by a strut 2.10 mm inside its cradle, thumb and ring clear by 0.26/0.27 mm which print
+    # tolerance closes. The cradle's own solids, plus CRADLE_CLEAR of swing room.
+    from design.params import CRADLE_CLEAR as _CC
+    from manufacture.mount import well_insert as _well_insert
+    _ib, _ic, _iy = [], [], []
+    for _f in FINGERS:
+        _in = _well_insert(h, q, _f)
+        _ib += _in["boxes"]; _ic += _in["caps"]; _iy += _in["cyls"]
+
     _P = mid_e.reshape(-1, 3)
     if entry_tree is not None:                        # the APPROACH: real room beside the finger
         d_entry = entry_tree.query(_P)[0].reshape(len(pairs), -1).min(axis=1)
@@ -618,6 +631,18 @@ def ground(h, q, hug=0.004, layer=None, pitch=0.004, reach=2.2, press_N=0.196, b
     if seat_tree is not None:                         # SEATED: only stay out of the flesh
         d_seat = seat_tree.query(_P)[0].reshape(len(pairs), -1).min(axis=1)
         keep_bar &= d_seat >= float(BAR_R) + FILLET + float(_TT)
+    if _ib or _ic or _iy:                             # the cradle's swing envelope
+        # ⚠ EXEMPT THE BUTTON'S OWN TIE-IN, or this deletes the structure entirely. The button
+        # node sits ON the mount, so a keep-out that reserves CRADLE_CLEAR around the cradle also
+        # forbids every bar that reaches the button -- measured: 0 of 31 designs grew at all,
+        # `yield +inf` across the board. Same shape of error as holding a finger's own cup to the
+        # donning clearance: the thing the structure must ATTACH to cannot also be a keep-out.
+        # A bar ENDING at a button is a tie-in; a bar PASSING THROUGH a cradle is a jam.
+        from manufacture.entry import mount_sdf as _msdf
+        _btn_nodes = set(btn.values())
+        _ties = np.array([(p[0] in _btn_nodes) or (p[1] in _btn_nodes) for p in pairs], bool)
+        d_cr = _msdf(_P, _ib, _ic, _iy).reshape(len(pairs), -1).min(axis=1)
+        keep_bar &= _ties | (d_cr >= float(BAR_R) + FILLET + float(_CC))
 
     bars = [tuple(p) for p in pairs[keep_bar]]
 

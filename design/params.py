@@ -279,6 +279,20 @@ DON_CLEAR = P(
     "and therefore the optimiser's job -- a strut keep-out cannot buy it.",
     describes="donning fit")
 
+CRADLE_CLEAR = P(
+    "CRADLE_CLEAR", 0.0015, "m", Source.GUESS,
+    "The room the DROP-IN TPU CRADLE needs around it, clear of the grown structure. ⚠ The cradle "
+    "is the MOVING part -- the fingertip tilts it over the Hall sensor, and a key that cannot move "
+    "cannot be read. Nothing reserved its envelope: the structure was checked against the finger "
+    "and against the rigid frame, never against the part that has to travel, and the export carves "
+    "only the PCB slot and magnet pocket. Measured on the shipped design, three of five cradles "
+    "were compromised -- little BLOCKED by a strut 2.10 mm inside it, thumb and ring clear by only "
+    "0.26/0.27 mm, which FDM tolerance (~0.2 mm) closes. 1.5 mm is SWITCH_TRAVEL's 1.5 mm plunge "
+    "plus nothing: it is a plausible swing envelope, NOT a measurement of the cradle's real motion "
+    "(CRADLE_LEVER, itself a guess, puts the lateral component near 1 mm). Re-derive from a printed "
+    "cradle's measured travel.",
+    describes="cradle clearance")
+
 DON_LEN = P(
     "DON_LEN", 0.080, "m", Source.GUESS,
     "How far back down the donning path the corridor is checked. ⚠ THE BUG THIS EXISTS TO KILL "

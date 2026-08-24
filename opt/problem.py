@@ -53,6 +53,7 @@ CONSTRAINT_NAMES = [
     "key-overlap", "swept-path", "well-finger", "performable", "coplanar", "thumb-opposed",
     "entry-route",   # the slide-in clears the GROWN struts + the finger's own mount (artifact-true)
     "connected",     # one part: tissue springs make islands look supported to the FEM
+    "cradle-free",   # the drop-in cradle can still TILT: a key that cannot move cannot be read
 ]
 # "travel" and "saturation" now mean ALL THREE ACTIONS (push/lift/contort) on every hand:
 # a key that can be pushed but not lifted is a one-row key.
