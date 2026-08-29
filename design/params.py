@@ -25,6 +25,13 @@ So: every constant is tagged, and:
   * GUESS    -- we made it up. These are enumerated by test_no_undeclared_guesses and they
                 MUST appear in VISION.md's limitations, because a guess that nobody knows is
                 a guess is indistinguishable from a fact.
+  * UNMEASURED -- not yet known. A 0 here is a FACT (nothing has been measured), not a guess.
+                Added by the 2026-08-29 reframe for the Svalboard kit payload: the kit is
+                purchased hardware, its STEP files are customer-gated, and no dimension is
+                published anywhere, so its constants can only be measured out of the
+                delivered kit. Every consumer must REFUSE to run until then
+                (manufacture/payload.require_measured); test_no_undeclared_unmeasured
+                applies the same VISION.md disclosure tripwire the GUESSes get.
 
 And parameters that describe ONE PHYSICAL THING live together (see Switch, Well), so they
 cannot quietly come to describe two different things.
@@ -40,6 +47,7 @@ class Source(Enum):
     SPEC = "vendor specification"
     LITERATURE = "published figure"
     GUESS = "made up — must be listed in VISION.md limitations"
+    UNMEASURED = "not yet known (value 0) — measured from the delivered kit; consumers refuse until then"
 
 
 @dataclass(frozen=True)
@@ -364,3 +372,44 @@ def check_coherent(switch: Switch) -> None:
             f"{switch.travel.name} describes '{switch.travel.describes}' — "
             "these are two different switches"
         )
+
+
+# ---------------------------------------------------------------------------------------
+# THE KIT PAYLOAD — the 2026-08-29 reframe (VISION.md §1). This structure's load is now a
+# purchased Svalboard kit, and NOTHING about it is published: the cluster STEP files are
+# customer-gated and no dimension appears in any public Svalboard material (checked
+# 2026-08-29). So these are registered at 0 with source UNMEASURED — a 0 that says "unknown",
+# deliberately distinct from a GUESS, which says "we made it up". No value here may be
+# invented: they are measured out of the delivered kit (scale, calipers — the session laid
+# out in VISION.md §7 item 9), and until then every consumer refuses. See
+# manufacture/payload.py, which turns them into the carrier's boundary conditions.
+#
+# Names follow the VISION.md §7 item 9 measurement list: mass, cluster envelope
+# (across digits / along digits / stack depth) and mount pitch. All in SI.
+# ---------------------------------------------------------------------------------------
+KIT_MASS = P("KIT_MASS", 0.0, "kg", Source.UNMEASURED,
+             "Total payload mass carried on the dorsum: printed cluster parts + PCBAs + "
+             "magnets + tower brackets, per what the gauntlet actually mounts. To be "
+             "measured on a kitchen scale as the assembled carrier-side kit weighs in "
+             "(VISION.md §7 item 9). Drives the gauntlet's static load case.",)
+
+KIT_ENV_W = P("KIT_ENV_W", 0.0, "m", Source.UNMEASURED,
+              "Keywell-cluster envelope ACROSS the digits (thumb..little). Calipers on the "
+              "delivered cluster. Bounds where the carrier plane can sit without fouling "
+              "the strap's donning corridor.")
+
+KIT_ENV_L = P("KIT_ENV_L", 0.0, "m", Source.UNMEASURED,
+              "Keywell-cluster envelope ALONG the digits (proximal-distal). Calipers on the "
+              "delivered cluster. Sets how far the payload lever arm reaches onto the "
+              "fingers for the keypress + mass moment cases.")
+
+KIT_ENV_T = P("KIT_ENV_T", 0.0, "m", Source.UNMEASURED,
+              "Stack depth of the payload: well block + stainless tower bracket + any "
+              "backing plate the carrier must clear. Calipers. Sets the gauntlet's standoff "
+              "budget against LAYER's ~10 mm wearable limit (§6).")
+
+KIT_PITCH = P("KIT_PITCH", 0.0, "m", Source.UNMEASURED,
+              "Mount-attachment pitch: spacing of the holes/features the gauntlet actually "
+              "bolts to on the kit side (tower brackets). Calipers on the delivered "
+              "brackets. This is the hard interface: mount point positions must be DERIVED "
+              "from KIT_PITCH, never fitted to the structure.")

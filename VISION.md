@@ -1080,6 +1080,23 @@ These bound every conclusion above.
   | `HANDLING_N` | 10 N | the sideways force every button mount must SURVIVE (stress with SF 2, worst lateral direction at the button node). ⚠ The first printed gauntlet taught this (2026-08-21): the only structural demand anywhere was the 0.196 N keypress deflection gate, so ESO pruned the thumb cup's support to material crisp along the press — and it snapped at the first donning, as a single 1.8 mm CF-PA12 rod yields at ~2–3 N applied at cup distance. 10 N is a firm-handling estimate, not a measurement; nothing has instrumented a hand donning the device. It enters the ESO ranking, the `yield` constraint (as a fully-stressed-design mass surcharge — strength is bought in grams, never a deflection gate), and `printable.py`'s radius sizing. Raise it if a print still feels fragile. |
   | `FINGERTIP_BREADTH` | 23.1/18.5/18.5/18.5/13.9 mm (185 mm ref) | fingertip width across the nail — thumb, index, middle, ring, little, **at the 185 mm reference hand**. **Measured, but n=1**: calipers on one adult male hand — raw **25/20/20/20/15 mm on a 200 mm hand**, stored here rescaled by 185/200 so that `export_stl --hand-mm 200` lands back on the measured widths (`_fit_fingertips` multiplies by the same scale; storing the raw values would export to a 27 mm cup — ~1 mm play per side in a tilt-sensing well). It replaces MyoHand's own distal-phalanx capsules, which are a slim model and printed cups **12.0–15.4 mm** across — below any adult finger, and the first gauntlet could not be worn. ⚠ **A population claim resting on one hand.** It is not a hand-LENGTH error (matching breadth by scaling length implies a 278 mm hand), so the 5th/50th/95th percentile model still scales these by hand length with no independent evidence that finger breadth scales that way. Real anthropometric finger-breadth data would replace it. Load-bearing: the five real-width wells only pack in a narrow band of postures, and `key-overlap`/`well-finger` become binding constraints they were not before. |
 
+- **The 2026-08-29 reframe adds kit constants registered as `UNMEASURED`** — value 0.0, which is
+  a *different thing* from a GUESS. A guess says "we made it up"; a 0 here says "unknown, and we
+  refuse to pretend otherwise": no kit dimension is published anywhere (the cluster STEP files are
+  customer-gated; checked against the public Svalboard material 2026-08-29), so these are measured
+  out of the delivered kit — the session laid out in §7 item 9 — and until then every consumer of
+  the payload seam refuses (`manufacture/payload.require_measured` raises `NotImplementedError`
+  naming the missing numbers; `test_no_undeclared_unmeasured` applies this same disclosure
+  tripwire). Measured values re-register with their honest source:
+
+  | UNMEASURED | to be measured | what it decides |
+  |---|---|---|
+  | `KIT_MASS` | kitchen scale, assembled carrier-side kit | the static load case the gauntlet carries |
+  | `KIT_ENV_W` | calipers: cluster across the digits | where the carrier plane can sit without fouling the donning corridor |
+  | `KIT_ENV_L` | calipers: cluster along the digits | the payload's lever arm for the mass-moment cases |
+  | `KIT_ENV_T` | calipers: well block + tower-bracket stack depth | the standoff budget against `LAYER`'s ~10 mm wearable limit |
+  | `KIT_PITCH` | calipers: tower-bracket mount features | the hard interface — mount points derive from it, never the reverse |
+
 - **`SOFT_TISSUE_K`** (25 N/mm) is literature, not measurement: the band is 10–50 N/mm and
   the deflection answer moves **1.40×** across it.
 - **Comfort ≠ minimum activation.** A device can be metabolically cheap and still feel bad.
@@ -1119,8 +1136,9 @@ Roughly in order of value.
    mass and centre of mass, keywell geometry and mount pitch, controller board. Re-run the
    anchor/gauntlet stages with the kit as the load — the MRI tissue map, the anchor-extent and
    shell findings (§5c–5e) and the impact case (§8.15k) all apply unchanged. Retires, per §1:
-   the wells, the read-out, the layout, and the percentile well travel (Svalboard ships 5-axis
    adjustment). The fingertip measurements stay: they now govern strap and anchor fit.
+   The measurements land in `design/params.py` as `KIT_*` constants — currently `UNMEASURED`
+   (value 0, consumers refuse, §6) — and `manufacture/payload.py` is the seam they feed.
 
 ---
 
