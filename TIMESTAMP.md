@@ -8,11 +8,41 @@ and rewritten by any rebase. So the disclosure is anchored independently.
 
 ## What is anchored
 
-The disclosure has been **extended and re-anchored** thirty-eight times. **All thirty-nine stamps stand**, and each
+The disclosure has been **extended and re-anchored** thirty-nine times. **All forty stamps stand**, and each
 one proves what was disclosed *at that moment*. An earlier proof is not invalidated by a later one —
 it is a *floor* on the date, and floors do not move.
 
-### Current — THE MOVING PART HAS TO BE ABLE TO MOVE
+### Current — THE KEYS ARE PURCHASED NOW
+
+2026-08-29. A Svalboard kit was ordered, and the project is re-scoped: ExoKey stops being a
+self-built keyboard and becomes the **support structure that carries Svalboard's hardware** —
+the dorsal gauntlet, its tissue-measured anchors, the strap, the impact load case, the
+human-factors floor, and the one-printer constraint. The wells, the Hall read-out (§8.15l),
+the optimised layout (§3b) and the percentile well travel retire as design obligations; the
+fingertip caliper measurements stay, because they now govern strap and anchor fit instead of
+well width.
+
+Two existing claims are marked inside their own scope in VISION.md §1 and §3 rather than
+deleted, because both were measured: "an exoskeleton cannot reach" was already withdrawn in
+§5d for the open hand, and the strap-body-vs-exoskeleton table was measured on the ~60 g
+self-built device, whose payload decision a purchased kit supersedes. What the new load
+actually needs is not yet measured — kit mass, centre of mass and mount geometry arrive with
+the kit. This anchor records the scope change and the retraction boundary the same day it was
+made.
+
+**Both files re-stamped** (114 files).
+
+| file | sha256 |
+|---|---|
+| `VISION.md` (the disclosure) — *re-stamped: records the 2026-08-29 reframe* | `f1ea7eee080cceac0e754d1eb97b2b9806da0931ab8e3876653198ba156d4aff` |
+| `MANIFEST.sha256` (hashes of all 114 source + doc files) | `5204377ef3ca7eaa12a4648bfe20506024f076ebf901648ec6c2b79c0623a718` |
+
+Stamped: **2026-08-29T11:11:31Z** (UTC, submission time). Proofs: `MANIFEST.sha256.ots` and
+`VISION.md.ots`, both freshly stamped. The outgoing 39th proofs are archived at
+`timestamps/MANIFEST.sha256.2026-08-24c.ots` and `timestamps/VISION.md.2026-08-24c.ots` (run
+`ots upgrade` once the block mines).
+
+### Thirty-ninth — THE MOVING PART HAS TO BE ABLE TO MOVE
 
 The user, looking at the render: *"I'm concerned that there are some struts dropping down onto the
 index and middle cup bases."* Measured, that instinct led straight past what it pointed at to

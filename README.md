@@ -9,6 +9,11 @@ away with it on.
 > **Status — research. Nothing has been built; everything here is simulation.** The model says the
 > device is feasible, and its numbers come with their gates and caveats in **[VISION.md](VISION.md)**.
 > The disclosure is Bitcoin-anchored — see **[TIMESTAMP.md](TIMESTAMP.md)**.
+>
+> **Scope change (2026-08-29).** A Svalboard kit has been ordered. The project is being re-scoped:
+> instead of building its own wells, sensors and layouts, ExoKey is becoming the **support
+> structure that carries Svalboard's hardware** — the gauntlet work above is the part that
+> carries over. VISION.md §1 and §3 record what is withdrawn and what survives.
 
 **See it move → the live gallery: [glassontin.github.io/exokey](https://glassontin.github.io/exokey/out/)**
 — the hand posed into every keypress, the gauntlet drawn at the radius the physics chose for each

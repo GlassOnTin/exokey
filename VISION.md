@@ -30,6 +30,18 @@ The wells sit on a **body in the palm**, strapped over the back of the hand. Not
 exoskeleton: an exoskeleton cannot reach a thumb key that sits under the fingers without
 crossing the hand (we proved this three ways — §5).
 
+> **Scope change, 2026-08-29: the device will carry a purchased Svalboard kit.** The
+> self-built wells, Hall-flexure read-out (§8.15l) and optimised layout (§3b) retire as design
+> obligations; what survives is everything that survives *carrying* hardware — the gauntlet
+> (§8.10–8.15k), the tissue-measured anchors, the strap, the impact load case, the human-factors
+> floor, and the one-printer constraint. The paragraph above is kept but both of its legs have
+> moved: the "exoskeleton cannot reach" objection was withdrawn in §5d for an open hand, and with
+> the payload fixed, the question is no longer "which body holds five wells best" but "what holds
+> Svalboard's cluster off the palm" — a load-carriage problem, which is closer to an exoskeleton's
+> shape of problem. The measurement that decides it is not done yet: kit mass, centre of mass and
+> mount geometry arrive with the kit. The §3 comparison below is unchanged history, read it inside
+> its own scope.
+
 ### Why this is not encumbered
 
 - **DataHand's patents (early 1990s) have expired.** The 5-direction finger well is prior art.
@@ -133,6 +145,13 @@ stronger; the *small* hand binds.
 
 3× stiffer *and* lighter, because the keypress reacts straight into the palm it rests on
 instead of being carried around the hand through a cantilever.
+
+⚠ **Both columns above are the SELF-BUILT five-well device**, measured at its own ~60 g. The
+comparison decided that device's body, and it stands as history. It does not decide the
+architecture once the payload is a Svalboard kit (2026-08-29 reframe, §1): the hardware is
+heavier than the wells it replaces, its geometry is not ours to optimise, and carrying mass
+and reacting a keypress become separable problems. Whether a palm reaction and a dorsal
+carriage still win on *that* load is a measurement on the kit, not a re-use of this table.
 
 ---
 
@@ -746,7 +765,9 @@ palm from outside" — its thumb arm cut the hand three ways. **But that was whe
 deep in a GRIPPING palm.** The hand is now **open** and the wells are **at the fingertips**,
 which a dorsal rail reaches by running along the finger and wrapping the tip. **The topological
 trap died with the gripping posture, and it was never re-examined.** It should have been, and it
-took the user's ergonomic intuition to force the re-examination.
+took the user's ergonomic intuition to force the re-examination. *(This is now the load-bearing
+finding: the 2026-08-29 reframe makes the support a dorsal exoskeleton carrying Svalboard
+hardware — see §1.)*
 
 ---
 
@@ -1094,6 +1115,12 @@ Roughly in order of value.
    opens fully? The spring-steel clip idea (from Typeware) is good and we have not modelled it
    — the clip is currently just a beam.
 8. **Both hands.** Everything here is the left hand.
+9. **Carry a Svalboard kit (the 2026-08-29 reframe).** Measure the kit on arrival: cluster
+   mass and centre of mass, keywell geometry and mount pitch, controller board. Re-run the
+   anchor/gauntlet stages with the kit as the load — the MRI tissue map, the anchor-extent and
+   shell findings (§5c–5e) and the impact case (§8.15k) all apply unchanged. Retires, per §1:
+   the wells, the read-out, the layout, and the percentile well travel (Svalboard ships 5-axis
+   adjustment). The fingertip measurements stay: they now govern strap and anchor fit.
 
 ---
 
