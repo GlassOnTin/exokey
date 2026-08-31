@@ -82,7 +82,7 @@ def main():
 
     # anchors, buttons, strap band -- from ground (deterministic); grow relaxes NODES, so each grow
     # keeps its own node positions, but connectivity/anchor indices are shared.
-    _n, _b, btn, _l, ak, an, _t, strap_n = ground(ref, q)
+    _n, _b, btn, _l, ak, an, _t, strap_n, _deck = ground(ref, q)
     knock_at = {f: int(btn[f]) for f in FINGERS}
     dorsal = max((i for i in ak), key=lambda i: (_n[i] - o) @ e_o)
 

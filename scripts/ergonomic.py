@@ -55,7 +55,7 @@ def main():
                      for f in FINGERS})
 
     pitch, reach = 0.008, 2.2
-    nodes, bars, btn, _l, ak, an, _t, sn = ground(ref, q, pitch=pitch, reach=reach)
+    nodes, bars, btn, _l, ak, an, _t, sn, _deck = ground(ref, q, pitch=pitch, reach=reach)
     cases = load_cases(ref, q, btn, wired=wired)
     z = np.load("out/printable.npz", allow_pickle=True)
     build = np.asarray(z["build_dir"], float)

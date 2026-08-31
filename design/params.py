@@ -413,3 +413,44 @@ KIT_PITCH = P("KIT_PITCH", 0.0, "m", Source.UNMEASURED,
               "bolts to on the kit side (tower brackets). Calipers on the delivered "
               "brackets. This is the hard interface: mount point positions must be DERIVED "
               "from KIT_PITCH, never fitted to the structure.")
+
+# ---------------------------------------------------------------------------------------
+# THE CARRIER BRACKET — OUR part, so its geometry is a DESIGN CHOICE, not a kit dimension.
+#
+# The KIT_* numbers above describe the purchased hardware and stay UNMEASURED (a 0 that
+# says "unknown"); manufacture/payload.require_measured() refuses to SHIP on them. But the
+# optimiser can still run NOW, against a carrier we declare rather than a kit we invent:
+# these describe the printed bracket — how high its mount plane stands off the dorsum, how
+# tall the keywell towers are, what mass we budget the kit at — and every one is a GUESS,
+# disclosed in VISION.md's limitations like every other. The distinction is the whole point:
+# "our mount plane stands 12 mm off the dorsum" is a decision we are allowed to make; "the
+# kit's cluster is 62 mm wide" would be a fabricated kit dimension. When the kit is measured
+# these GUESSes are replaced by DERIVED values computed from the real KIT_* — manufacture/
+# carrier.py::carrier_from_kit() is that path, and it stays gated behind require_measured().
+# ---------------------------------------------------------------------------------------
+CARRIER_STANDOFF = P("CARRIER_STANDOFF", 0.012, "m", Source.GUESS,
+                     "Height of the carrier's mount plane above the dorsal skin — the deck "
+                     "the kit bolts to. A GUESS: our bracket's choice, not a kit dimension. "
+                     "Sits inside the ~10 mm wearable stack budget (§6) once the grown shell "
+                     "is counted; replaced by a DERIVED value off the measured KIT_ENV_T.")
+
+CARRIER_TOWER = P("CARRIER_TOWER", 0.010, "m", Source.GUESS,
+                  "How far each keywell sits above the mount plane — the tower the key rides "
+                  "on, so the fingertip reaches its well from the typing posture. A GUESS at "
+                  "our bracket; the kit's own tower bracket height supersedes it on arrival.")
+
+CARRIER_MASS = P("CARRIER_MASS", 0.080, "kg", Source.GUESS,
+                 "Mass budget the carrier is sized to carry, for the static load case. A "
+                 "GUESS bracket value (80 g — a Svalboard cluster is hand-held light); the "
+                 "real number is KIT_MASS off the kitchen scale, and shipping uses that.")
+
+CARRIER_COM_D = P("CARRIER_COM_D", 0.55, "-", Source.GUESS,
+                  "Payload centre of mass along the cluster footprint, as a fraction of the "
+                  "mount span from its proximal edge (0=proximal, 1=distal). A GUESS: the "
+                  "keywells sit toward the distal end of the deck, so the mass moment loads "
+                  "the wrist anchor. Replaced by the measured CoM on arrival.")
+
+CARRIER_COM_R = P("CARRIER_COM_R", 0.50, "-", Source.GUESS,
+                  "Payload centre of mass across the cluster footprint, as a fraction of the "
+                  "mount span from the little-finger edge (0=little, 1=index). A GUESS at "
+                  "~centre; the thumb-key mass pulls it index-ward on the real kit.")

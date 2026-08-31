@@ -432,13 +432,19 @@ def repair_support(nodes, bars, live, build_dir, pool=None):
 
 
 def ground(h, q, hug=0.004, layer=None, pitch=0.004, reach=2.2, press_N=0.196, build_dir=None,
-           curls=None):
-    """The free-form design space: (nodes, bars, buttons, loads, anchor_k, anchor_n).
+           curls=None, carrier=None):
+    """The free-form design space: (nodes, bars, buttons, loads, anchor_k, anchor_n, tris,
+    strap_n, deck).
 
     `buttons` maps finger -> node index; `loads` maps that node to the force vector the digit
     applies when it presses. `anchor_k` maps node index -> tissue spring stiffness (N/m), and
     `anchor_n` to that node's OUTWARD normal -- which is what tells the solver whether the node is
     pressing INTO the hand (tissue bears) or lifting OFF it (the strap must pull).
+
+    `carrier` (manufacture/carrier.py) is the 2026-08-29 reframe's payload: a rigid mount deck
+    on the dorsum that the kit bolts to. When given, its deck nodes join the design space (so
+    struts can reach them) and are returned as `deck` -- the node indices the payload mass loads.
+    Without a carrier `deck` is empty and the grow is the self-built five-well device.
     """
     from design.vector import action_dirs, well_channel
 
@@ -514,7 +520,17 @@ def ground(h, q, hug=0.004, layer=None, pitch=0.004, reach=2.2, press_N=0.196, b
         extra.append(p)
         btn[f] = len(nodes) + len(extra) - 1
         loads[btn[f]] = np.asarray(click) * press_N
-    nodes = np.vstack([nodes, np.array(extra)])
+
+    # THE CARRIER DECK (the reframe's payload). Its mount-plane nodes join the design space so
+    # struts can reach them; the payload mass then loads them (grow() applies carrier.mass_case).
+    # The deck is the load path's PROXIMAL end -- the kit hangs off it and it must be held by the
+    # grown shell, so its tie-in nodes are reachable candidates like any other.
+    deck = []
+    if carrier is not None:
+        for row in np.asarray(carrier.deck, float):
+            extra.append(row)
+            deck.append(len(nodes) + len(extra) - 1)
+    nodes = np.vstack([nodes, np.array(extra)]) if extra else nodes
 
     # CANDIDATE BARS: every pair close enough to be a strut...
     # ⚠ CANDIDATE PLATES, NOT JUST STRUTS.
@@ -534,11 +550,29 @@ def ground(h, q, hug=0.004, layer=None, pitch=0.004, reach=2.2, press_N=0.196, b
 
     tree = cKDTree(nodes)
     pairs = np.array(sorted(tree.query_pairs(r=reach * pitch)), dtype=int)
-    # ...plus the buttons, which must be able to reach whatever is near them.
-    for f, i in btn.items():
+    # ...plus the buttons and the carrier deck, which must be able to reach whatever is near
+    # them. A deck node the struts cannot reach is a payload hanging off nothing.
+    for i in list(btn.values()) + list(deck):
         for j in tree.query_ball_point(nodes[i], 1.6 * (hug + layer + pitch)):
             if j < len(nodes) - len(extra):
                 pairs = np.vstack([pairs, [i, j]])
+
+    # ⚠ THE DECK FLOATS; THE PITCH REACH CANNOT BRIDGE IT. The deck is a RIGID plane the kit
+    # bolts to, so it cannot follow the curved dorsum -- it stands off the TALLEST bearing point
+    # and floats 20-39 mm above the lower skin (measured). A pitch-scaled reach of ~26 mm leaves
+    # the proximal corner with zero candidate bars, and connected() (deck as terminal) then
+    # correctly fails the whole domain: a payload hanging off nothing. The grown shell is exactly
+    # what fills that gap -- columns from the deck down to the inner sheet. So offer each deck
+    # node its nearest inner-sheet nodes as candidate columns, sized to its own float height, and
+    # let the skin-clearance check below reject any that clip the hand. A rigid plate over a
+    # curved hand is bridged by struts; that is the optimiser's job, not a reason to shrink the
+    # plate into the flesh.
+    if deck and n_in:
+        inner_tree = cKDTree(nodes[:n_in])
+        for i in deck:
+            _d, _j = inner_tree.query(nodes[i], k=min(6, n_in))
+            for j in np.atleast_1d(_j):
+                pairs = np.vstack([pairs, [i, int(j)]])
 
     # ⚠ AND NOW THE CHECK THAT KILLED THE EXOSKELETON. A bar is only a candidate if it does not
     # pass THROUGH the hand. Sample along each one and ask the skin.
@@ -714,7 +748,7 @@ def ground(h, q, hug=0.004, layer=None, pitch=0.004, reach=2.2, press_N=0.196, b
         anchor_n[i] = v / (np.linalg.norm(v) + 1e-12)
     # WHICH anchor nodes the strap can pull on. Not all of them: a strap is a BAND.
     strap_n = under_strap(h, q, nodes, sorted(anchor_k))
-    return nodes, bars, btn, loads, anchor_k, anchor_n, tris, strap_n
+    return nodes, bars, btn, loads, anchor_k, anchor_n, tris, strap_n, deck
 
 
 def _sheet_triangles(nodes, n_in, seeds, snorm, pitch, skin_tree, hug):
@@ -765,7 +799,7 @@ def _sheet_triangles(nodes, n_in, seeds, snorm, pitch, skin_tree, hug):
     return sorted(out)
 
 
-def connected(bars, live, anchor_k, buttons, n_nodes, shells=(), live_s=()):
+def connected(bars, live, anchor_k, buttons, n_nodes, shells=(), live_s=(), deck=()):
     """The live bars that actually have a path to an ANCHOR. Everything else is a floating island.
 
     ⚠ THIS IS WHY THE LATTICE SOLVED TO NaN AND REPORTED IT AS ZERO. A lattice sampled off a skin
@@ -798,7 +832,9 @@ def connected(bars, live, anchor_k, buttons, n_nodes, shells=(), live_s=()):
     _n, lab = connected_components(g, directed=False)
     root = {lab[i] for i in anchor_k}
     keep = [e for e in live if lab[bars[e][0]] in root]
-    ok = all(lab[i] in root for i in buttons.values())
+    # the carrier deck is a terminal like a button: the payload mass loads it, so a deck node
+    # cut loose from the anchor is a kit hanging off nothing -- fail the connectivity check.
+    ok = all(lab[i] in root for i in buttons.values()) and all(lab[i] in root for i in deck)
     return keep, ok
 
 
@@ -958,7 +994,7 @@ def handling_cases(h, q, btn, N=None):
 
 def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
          press_N=0.196, wired=None, relax=True, plates=False, r=None, on_step=None,
-         impact_cases=None, handling_N=None, curls=None, reach=2.2):
+         impact_cases=None, handling_N=None, curls=None, reach=2.2, carrier=None):
     """WOLFF'S LAW. Delete the bars that carry no load, until the buttons stop being crisp.
 
     Bone is not designed, it is grown: it lays down material where it is strained and resorbs it
@@ -968,20 +1004,28 @@ def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
     The gate is the WORST of the load cases, not their sum: a key that is mushy when you press it
     is mushy, however crisp the other fourteen are.
     """
-    nodes, bars, btn, _loads, ak, an, tris, strap_n = ground(h, q, hug=hug, pitch=pitch,
-                                                             press_N=press_N, curls=curls,
-                                                             reach=reach)
+    nodes, bars, btn, _loads, ak, an, tris, strap_n, deck = ground(
+        h, q, hug=hug, pitch=pitch, press_N=press_N, curls=curls, reach=reach, carrier=carrier)
     shells = tris if plates else []
     cases = load_cases(h, q, btn, press_N=press_N, wired=wired)
+    # THE PAYLOAD MASS. The kit hangs off the deck, so its weight is a load the grown shell must
+    # carry -- folded into the ESO RANKING (like print gravity and handling), not the deflection
+    # gate: the gate stays "is the key crisp", the ranking learns "does this strut also hold the
+    # kit up". A deck node with no strut under it is a payload hanging off nothing, so the deck
+    # is a connectivity terminal too (connected(deck=...)).
+    _mass_case = None
+    if carrier is not None and deck:
+        _mass_case = [("index", "payload_mass", carrier.mass_case())]
     # HANDLING IS ALWAYS IN THE RANKING (handling_N=0 to opt out): every grow path -- the GA's
     # coarse cost(), final.py's fine regrow -- must keep the bracing a grabbed cup leans on.
     _hc = handling_cases(h, q, btn, N=handling_N) if (handling_N is None or handling_N > 0) else []
-    impact_cases = (list(impact_cases) if impact_cases is not None else []) + _hc or None
+    impact_cases = ((list(impact_cases) if impact_cases is not None else []) + _hc
+                    + (_mass_case or [])) or None
     Vs, Fs, _Ls = skin(h, q, labels=True)
     Ns = _normals(Vs, Fs)
     live_s = list(range(len(shells)))
     live, reachable = connected(bars, list(range(len(bars))), ak, btn, len(nodes),
-                                shells=shells, live_s=live_s)
+                                shells=shells, live_s=live_s, deck=deck)
     if not reachable:
         raise RuntimeError("a button has no load path to the anchor: the domain is disconnected")
     w, se, ss, mass, tens, pc = solve(nodes, bars, live, btn, cases, ak, an, mat=mat, r=r,

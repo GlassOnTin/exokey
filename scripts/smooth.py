@@ -50,7 +50,7 @@ def main():
     build /= np.linalg.norm(build)
     pitch = float(z["pitch"])
 
-    _n, _b, _bt, _l, ak, an, _t, sn = ground(ref, q, pitch=pitch, reach=2.2)
+    _n, _b, _bt, _l, ak, an, _t, sn, _deck = ground(ref, q, pitch=pitch, reach=2.2)
     cases = load_cases(ref, q, btn, wired=wired)
     rho = MATERIALS["cf_pa12"]["rho"]
     n = float(NOZZLE_R)

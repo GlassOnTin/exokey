@@ -48,7 +48,7 @@ def main():
     # the buttons, from the ground domain, to place the knocks. NB the case's first field must be a
     # real finger: lattice.solve reports buttons[f] deflection per case (we discard it and use only
     # the per-bar strain energy, which is label-independent) -- but the lookup must not KeyError.
-    nodes0, bars0, btn0, _l, ak0, an0, _t, _sn = ground(ref, q)
+    nodes0, bars0, btn0, _l, ak0, an0, _t, _sn, _deck = ground(ref, q)
     impact_cases = [(f, f"knock_{f}", {int(btn0[f]): -KNOCK_N * e_o}) for f in FINGERS]
     dorsal = max((i for i in ak0), key=lambda i: (nodes0[i] - o) @ e_o)   # a knock on the back
     impact_cases.append((FINGERS[0], "knock_dorsal", {int(dorsal): -KNOCK_N * e_o}))

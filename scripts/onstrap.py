@@ -52,7 +52,7 @@ def main():
                      for f in FINGERS})
     wired = used_actions(evaluate(x, hands())["action_map"])
     btn = {f: int(i) for f, i in zip(z["fingers"], z["buttons"])}
-    _n, _b, _bt, _l, ak, an, _tris, sn = ground(ref, q, pitch=float(z["pitch"]), reach=2.2)
+    _n, _b, _bt, _l, ak, an, _tris, sn, _deck = ground(ref, q, pitch=float(z["pitch"]), reach=2.2)
     cases = load_cases(ref, q, btn, wired=wired)
 
     nodes = z["nodes"]

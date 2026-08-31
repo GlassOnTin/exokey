@@ -36,7 +36,7 @@ def main():
     q = ref.compose({f: posture(ref, f, tp_of(x, f), tm_of(x, f), float(x.get(f"ab_{f}", 0.0)))
                      for f in FINGERS})
     o, e_d, e_r, e_o = hand_axes(ref, q)
-    _n, _b, btn, _l, ak, an, _t, strap_n = ground(ref, q)
+    _n, _b, btn, _l, ak, an, _t, strap_n, _deck = ground(ref, q)
     yld, rho = MATERIALS["cf_pa12"]["yield_"], MATERIALS["cf_pa12"]["rho"]
 
     z = np.load("out/impact_opt.npz", allow_pickle=True)

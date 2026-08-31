@@ -96,7 +96,7 @@ def main():
     # a ~3.5 mm reserved corridor severs a lattice whose bars are only 2.2*pitch long.
     curls = {(f, 0): (tp_of(x, f), tm_of(x, f), float(x.get(f"ab_{f}", 0.0))) for f in FINGERS}
     pitch, reach = 0.008, 3.0
-    nodes, bars, btn, _l, ak, an, _t, sn = ground(ref, q, pitch=pitch, reach=reach, curls=curls)
+    nodes, bars, btn, _l, ak, an, _t, sn, _deck = ground(ref, q, pitch=pitch, reach=reach, curls=curls)
     cases = load_cases(ref, q, btn, wired=wired)
     rho = MATERIALS["cf_pa12"]["rho"]
     n = float(NOZZLE_R)
