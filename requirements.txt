@@ -15,6 +15,9 @@ pytest==9.1.1
 # STL export (marching cubes -> mesh)
 trimesh==4.12.2
 scikit-image==0.26.0
+# manifold rebuild before writing the STL: the float32 mm round-trip welds tangential
+# fillet-graze pinches into non-manifold edges (scripts/export_carrier_stl.py)
+manifold3d==3.5.2
 
 # CHOLMOD Cholesky for the FEM hot path (structure/fem.py) -- 2.4-3.1x per evaluate(),
 # bit-identical F. OPTIONAL: fem.py falls back to scipy splu if this is absent.

@@ -81,6 +81,22 @@ def main(hand_mm=REF_MM, out_path="out/gauntlet_carrier.stl"):
         m = trimesh.util.concatenate(keep) if len(keep) > 1 else keep[0]
         print(f"  dropped {len(bodies)-len(keep)} debris shells; kept {len(keep)} real")
 
+    # THE STL ROUND-TRIP. Marching cubes is watertight by construction, but STL stores
+    # float32 millimetres and the loader re-welds vertices: where a fillet grazes the slab
+    # face tangentially, two topologically-distinct points land on the same coordinate and
+    # weld into a non-manifold junction (measured 2026-08-31: the raw mesh reloaded with 8
+    # such edges in 3 pinch clusters -- exactly the failure to_mesh's docstring warns about,
+    # arriving via the file instead of via process=True). manifold3d rebuilds the surface as
+    # a guaranteed manifold before it is written, so what the slicer loads is what the
+    # pipeline built. The rebuild left volume and envelope unchanged (18.62 cm3, same bbox).
+    import manifold3d
+    mm = manifold3d.Manifold(mesh=manifold3d.Mesh(
+        vert_properties=m.vertices.astype(np.float32),
+        tri_verts=m.faces.astype(np.uint32)))
+    om = mm.to_mesh()
+    m = trimesh.Trimesh(vertices=np.asarray(om.vert_properties, np.float64),
+                        faces=np.asarray(om.tri_verts, np.int64), process=True)
+
     rho = MATERIALS["cf_pa12"]["rho"]
     print(f"\nTHE SOLID")
     print(f"  {len(m.vertices)} vertices, {len(m.faces)} faces")

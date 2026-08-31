@@ -19,8 +19,7 @@ away with it on.
 — the hand posed into every keypress, the gauntlet drawn at the radius the physics chose for each
 member, the strap, and the optimiser converging.
 
-**Want to make one? → [BUILD.md](BUILD.md) (plain-language guide + glossary) · [BOM.md](BOM.md)
-(parts list).** To just print the structure, grab `gauntlet.stl` from
+**Want to make one? → [BUILD.md](BUILD.md) (plain-language guide + glossary) · [BOM.md](BOM.md) (parts list) · [docs/structural_fem.md](docs/structural_fem.md) (FEM structural analysis & fracture mechanics).** To just print the structure, grab `gauntlet.stl` from
 [Releases](https://github.com/GlassOnTin/exokey/releases) — no Python needed. Read BUILD.md
 first: the structure prints today, but there is no firmware or proven electronics yet.
 

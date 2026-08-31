@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+import trimesh
 
 from opt.problem import hands
 from manufacture.carrier import Carrier, carrier_from_bracket, carrier_from_kit
@@ -126,3 +127,66 @@ def test_grow_carries_the_payload(h50, carrier):
     assert np.isfinite(hist[-1][1]), "grow did not converge with the carrier payload"
     assert hist[-1][1] <= float(DEFLECTION_MAX), (
         f"carrier grow fails the deflection gate: {hist[-1][1]*1e6:.0f} um")
+
+
+def test_carrier_gauntlet_chassis_clears_hand_skin(h50):
+    """The biomorphic carrier gauntlet chassis must float clear of the hand skin surface
+    everywhere with >= 2.0 mm anatomical tissue standoff (VISION.md §5 gate)."""
+    from manufacture.svalboard import build_all_svalboard_units
+    from manufacture.carrier_gauntlet import build_organic_carrier_gauntlet
+    from structure.lattice import skin
+    from scipy.spatial import cKDTree
+
+    q = np.zeros(h50.model.nq)
+    V_skin, _F_skin, _L_skin = skin(h50, q, labels=True)
+    tree_skin = cKDTree(np.asarray(V_skin))
+
+    units = build_all_svalboard_units(h50, q)
+    gauntlet = build_organic_carrier_gauntlet(h50, q, units)
+    chassis = gauntlet["chassis"]
+
+    d_chassis, _ = tree_skin.query(chassis.vertices)
+    min_standoff = float(np.min(d_chassis))
+    assert min_standoff >= 0.0020, (
+        f"Carrier gauntlet chassis clips into hand skin: min standoff {min_standoff*1000:.2f} mm < 2.00 mm gate"
+    )
+
+
+def test_svalboard_button_plates_and_cradles_clear_hand_and_each_other(h50):
+    """Svalboard 5-way button plates and cradles must not intersect hand skin at rest,
+    and adjacent key clusters must have >= 3.0 mm mutual clearance."""
+    from manufacture.svalboard import build_all_svalboard_units
+    from structure.lattice import skin
+    from scipy.spatial import cKDTree
+
+    q = np.zeros(h50.model.nq)
+    V_skin, _F_skin, _L_skin = skin(h50, q, labels=True)
+    tree_skin = cKDTree(np.asarray(V_skin))
+
+    units = build_all_svalboard_units(h50, q)
+    fingers = ["thumb", "index", "middle", "ring", "little"]
+
+    # 1. Check positive clearance to hand skin at rest
+    for f in fingers:
+        u = units[f]
+        d_cradle, _ = tree_skin.query(u["cradle"].vertices)
+        assert np.min(d_cradle) > 0.0001, f"{f} cradle intersects hand skin"
+        for pname, pmesh in u["paddles"].items():
+            d_p, _ = tree_skin.query(pmesh.vertices)
+            assert np.min(d_p) > 0.0001, f"{f} [{pname}] paddle intersects hand skin"
+
+    # 2. Check mutual clearance between adjacent finger key clusters
+    for i in range(len(fingers)):
+        f1 = fingers[i]
+        u1 = units[f1]
+        m1 = trimesh.util.concatenate([u1["pod"], u1["cradle"]] + list(u1["paddles"].values()))
+        tree1 = cKDTree(m1.vertices)
+        for j in range(i + 1, len(fingers)):
+            f2 = fingers[j]
+            u2 = units[f2]
+            m2 = trimesh.util.concatenate([u2["pod"], u2["cradle"]] + list(u2["paddles"].values()))
+            d_inter, _ = tree1.query(m2.vertices)
+            min_inter = float(np.min(d_inter))
+            assert min_inter >= 0.0030, (
+                f"Svalboard clusters [{f1}] and [{f2}] collide: clearance {min_inter*1000:.2f} mm < 3.00 mm"
+            )

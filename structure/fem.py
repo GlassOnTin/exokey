@@ -76,6 +76,35 @@ def _element_k(L, E, G, A, Iy, Iz=None, J=None):
     """
     Iz = Iy if Iz is None else Iz
     J = 2.0 * Iy if J is None else J
+    A_arr = np.asarray(A)
+    if A_arr.ndim > 0:
+        n = len(A_arr)
+        L_arr = np.asarray(L)
+        k = np.zeros((n, 12, 12))
+        k[:, 0, 0] = k[:, 6, 6] = E * A_arr / L_arr
+        k[:, 0, 6] = k[:, 6, 0] = -E * A_arr / L_arr
+        k[:, 3, 3] = k[:, 9, 9] = G * J / L_arr
+        k[:, 3, 9] = k[:, 9, 3] = -G * J / L_arr
+
+        a = 12 * E * Iz / (L_arr ** 3)
+        b = 6 * E * Iz / (L_arr ** 2)
+        c = 4 * E * Iz / L_arr
+        d = 2 * E * Iz / L_arr
+        for (i, j, v) in ((1, 1, a), (1, 5, b), (1, 7, -a), (1, 11, b),
+                          (5, 5, c), (5, 7, -b), (5, 11, d),
+                          (7, 7, a), (7, 11, -b), (11, 11, c)):
+            k[:, i, j] = k[:, j, i] = v
+
+        a = 12 * E * Iy / (L_arr ** 3)
+        b = 6 * E * Iy / (L_arr ** 2)
+        c = 4 * E * Iy / L_arr
+        d = 2 * E * Iy / L_arr
+        for (i, j, v) in ((2, 2, a), (2, 4, -b), (2, 8, -a), (2, 10, -b),
+                          (4, 4, c), (4, 8, b), (4, 10, d),
+                          (8, 8, a), (8, 10, b), (10, 10, c)):
+            k[:, i, j] = k[:, j, i] = v
+        return k
+
     k = np.zeros((12, 12))
     k[0, 0] = k[6, 6] = E * A / L
     k[0, 6] = k[6, 0] = -E * A / L
@@ -193,7 +222,10 @@ class Frame:
             T = np.zeros((12, 12))
             for b in range(4):
                 T[3 * b:3 * b + 3, 3 * b:3 * b + 3] = R
-            kl = _element_k(L, E, G, A, I, J)
+            A_e = float(A[be]) if hasattr(A, "__len__") else float(A)
+            I_e = float(I[be]) if hasattr(I, "__len__") else float(I)
+            J_e = float(J[be]) if (J is not None and hasattr(J, "__len__")) else (None if J is None else float(J))
+            kl = _element_k(L, E, G, A_e, I_e, J=J_e)
             kg = T.T @ kl @ T
             kloc.append(kl)
             Ts.append(T)
@@ -216,8 +248,9 @@ class Frame:
         self.shells = [tuple(s_) for s_ in shells]
         self.shell_t = shell_t
         self.sk, self.sA, self.sdofs = [], [], []
-        for (i, j, k) in self.shells:
-            out = _cst_k(self.nodes[i], self.nodes[j], self.nodes[k], E, nu, shell_t)
+        for s_idx, (i, j, k) in enumerate(self.shells):
+            t_elem = shell_t[s_idx] if hasattr(shell_t, "__len__") else shell_t
+            out = _cst_k(self.nodes[i], self.nodes[j], self.nodes[k], E, nu, t_elem)
             if out is None:
                 self.sk.append(np.zeros((9, 9)))
                 self.sA.append(0.0)
@@ -368,3 +401,275 @@ class Frame:
     def mass(self, A, rho, live=None):
         L = self.L if live is None else self.L[np.asarray(live, int)]
         return float(A * rho * L.sum())
+
+
+# =============================================================================
+# MODULAR 3D SPACE-FRAME FEM SOLVER FOR EXOKEY SPINE & OUTRIGGER ASSEMBLIES
+# =============================================================================
+
+class SpaceFrameFEM:
+    """3D Space Frame Finite Element Solver."""
+    
+    def __init__(self):
+        self.nodes = []
+        self.elements = []
+        self.fixed_dofs = set()
+        
+    def add_node(self, coord: np.ndarray) -> int:
+        idx = len(self.nodes)
+        self.nodes.append(np.asarray(coord, dtype=np.float64))
+        return idx
+        
+    def add_element(self, n0_idx: int, n1_idx: int,
+                    E: float = 140.0e9, G: float = 5.0e9,
+                    r_od: float = 0.0022, r_id: float = 0.0013) -> int:
+        idx = len(self.elements)
+        self.elements.append({
+            "n0": n0_idx,
+            "n1": n1_idx,
+            "E": float(E),
+            "G": float(G),
+            "r_od": float(r_od),
+            "r_id": float(r_id)
+        })
+        return idx
+        
+    def fix_node(self, node_idx: int):
+        for dof in range(6):
+            self.fixed_dofs.add(node_idx * 6 + dof)
+            
+    def _element_stiffness(self, elem: dict) -> tuple[np.ndarray, np.ndarray, float]:
+        p0 = self.nodes[elem["n0"]]
+        p1 = self.nodes[elem["n1"]]
+        v = p1 - p0
+        L = float(np.linalg.norm(v))
+        if L < 1e-6:
+            raise ValueError(f"Element length {L} m is too short between node {elem['n0']} and {elem['n1']}")
+            
+        E = elem["E"]
+        G = elem["G"]
+        r_od = elem["r_od"]
+        r_id = elem["r_id"]
+        
+        A = np.pi * (r_od**2 - r_id**2)
+        Iy = np.pi * (r_od**4 - r_id**4) / 4.0
+        Iz = Iy
+        J = Iy + Iz
+        
+        k = np.zeros((12, 12))
+        
+        k[0, 0] = k[6, 6] = E * A / L
+        k[0, 6] = k[6, 0] = -E * A / L
+        
+        k[3, 3] = k[9, 9] = G * J / L
+        k[3, 9] = k[9, 3] = -G * J / L
+        
+        k[1, 1] = k[7, 7] = 12 * E * Iz / (L**3)
+        k[1, 7] = k[7, 1] = -12 * E * Iz / (L**3)
+        k[1, 5] = k[5, 1] = k[1, 11] = k[11, 1] = 6 * E * Iz / (L**2)
+        k[5, 7] = k[7, 5] = k[7, 11] = k[11, 7] = -6 * E * Iz / (L**2)
+        k[5, 5] = k[11, 11] = 4 * E * Iz / L
+        k[5, 11] = k[11, 5] = 2 * E * Iz / L
+        
+        k[2, 2] = k[8, 8] = 12 * E * Iy / (L**3)
+        k[2, 8] = k[8, 2] = -12 * E * Iy / (L**3)
+        k[2, 4] = k[4, 2] = k[2, 10] = k[10, 2] = -6 * E * Iy / (L**2)
+        k[4, 8] = k[8, 4] = k[8, 10] = k[10, 8] = 6 * E * Iy / (L**2)
+        k[4, 4] = k[10, 10] = 4 * E * Iy / L
+        k[4, 10] = k[10, 4] = 2 * E * Iy / L
+        
+        u_x = v / L
+        ref = np.array([0.0, 0.0, 1.0]) if abs(u_x[2]) < 0.90 else np.array([0.0, 1.0, 0.0])
+        u_y = np.cross(ref, u_x)
+        u_y /= np.linalg.norm(u_y)
+        u_z = np.cross(u_x, u_y)
+        
+        R = np.vstack([u_x, u_y, u_z])
+        T = np.zeros((12, 12))
+        for b in range(4):
+            T[b*3:(b+1)*3, b*3:(b+1)*3] = R
+            
+        K_elem_global = T.T @ k @ T
+        return K_elem_global, T, L
+        
+    def solve(self, nodal_forces: dict[int, np.ndarray]) -> dict:
+        N = len(self.nodes)
+        total_dofs = 6 * N
+        K_global = np.zeros((total_dofs, total_dofs))
+        
+        elem_data = []
+        for elem in self.elements:
+            K_elem, T_elem, L = self._element_stiffness(elem)
+            elem_data.append((K_elem, T_elem, L))
+            
+            n0 = elem["n0"]
+            n1 = elem["n1"]
+            dofs = np.array([
+                n0*6+0, n0*6+1, n0*6+2, n0*6+3, n0*6+4, n0*6+5,
+                n1*6+0, n1*6+1, n1*6+2, n1*6+3, n1*6+4, n1*6+5
+            ])
+            for i in range(12):
+                for j in range(12):
+                    K_global[dofs[i], dofs[j]] += K_elem[i, j]
+                    
+        F_global = np.zeros(total_dofs)
+        for n_idx, f_vec in nodal_forces.items():
+            F_global[n_idx*6 : (n_idx+1)*6] += f_vec
+            
+        all_dofs = np.arange(total_dofs)
+        free_dofs = np.array([d for d in all_dofs if d not in self.fixed_dofs])
+        
+        if len(free_dofs) == 0:
+            return {"displacements": np.zeros((N, 6)), "max_deflection_um": 0.0, "max_stress_MPa": 0.0}
+            
+        K_ff = K_global[np.ix_(free_dofs, free_dofs)]
+        F_f = F_global[free_dofs]
+        
+        u_f = np.linalg.solve(K_ff, F_f)
+        
+        u_full = np.zeros(total_dofs)
+        u_full[free_dofs] = u_f
+        displacements = u_full.reshape((N, 6))
+        
+        elem_stresses = []
+        for e_idx, elem in enumerate(self.elements):
+            K_elem, T_elem, L = elem_data[e_idx]
+            n0 = elem["n0"]
+            n1 = elem["n1"]
+            dofs = np.array([
+                n0*6+0, n0*6+1, n0*6+2, n0*6+3, n0*6+4, n0*6+5,
+                n1*6+0, n1*6+1, n1*6+2, n1*6+3, n1*6+4, n1*6+5
+            ])
+            u_elem_global = u_full[dofs]
+            u_elem_local = T_elem @ u_elem_global
+            
+            E = elem["E"]
+            r_od = elem["r_od"]
+            r_id = elem["r_id"]
+            A = np.pi * (r_od**2 - r_id**2)
+            Iy = np.pi * (r_od**4 - r_id**4) / 4.0
+            Iz = Iy
+            
+            delta_L = u_elem_local[6] - u_elem_local[0]
+            N_force = E * A * delta_L / L
+            
+            theta_y0, theta_y1 = u_elem_local[4], u_elem_local[10]
+            theta_z0, theta_z1 = u_elem_local[5], u_elem_local[11]
+            w_y0, w_y1 = u_elem_local[1], u_elem_local[7]
+            w_z0, w_z1 = u_elem_local[2], u_elem_local[8]
+            
+            M_z_max = max(abs(E * Iz * (4*theta_z0 + 2*theta_z1 - 6*(w_y1 - w_y0)/L) / L),
+                          abs(E * Iz * (2*theta_z0 + 4*theta_z1 - 6*(w_y1 - w_y0)/L) / L))
+            M_y_max = max(abs(E * Iy * (4*theta_y0 + 2*theta_y1 + 6*(w_z1 - w_z0)/L) / L),
+                          abs(E * Iy * (2*theta_y0 + 4*theta_y1 + 6*(w_z1 - w_z0)/L) / L))
+            M_bend_max = np.sqrt(M_y_max**2 + M_z_max**2)
+            
+            sigma_axial = abs(N_force) / max(A, 1e-12)
+            sigma_bending = (M_bend_max * r_od) / max(Iy, 1e-12)
+            sigma_total = sigma_axial + sigma_bending
+            elem_stresses.append(sigma_total)
+            
+        trans_displacements = np.linalg.norm(displacements[:, :3], axis=1)
+        max_deflection_um = float(np.max(trans_displacements)) * 1.0e6
+        max_stress_MPa = float(np.max(elem_stresses)) / 1.0e6 if len(elem_stresses) else 0.0
+        
+        return {
+            "displacements": displacements,
+            "trans_displacements_m": trans_displacements,
+            "elem_stresses_Pa": elem_stresses,
+            "max_deflection_um": max_deflection_um,
+            "max_stress_MPa": max_stress_MPa
+        }
+
+
+def run_exokey_fem_analysis(p_root: np.ndarray,
+                            mcp_nodes: dict[str, np.ndarray],
+                            digit_chains: dict[str, list[np.ndarray]],
+                            typing_force_N: float = 0.196) -> dict:
+    """Run full 3D Space Frame Finite Element Analysis with Thumb Strut attached to Index Knuckle."""
+    fem = SpaceFrameFEM()
+    node_map = {}
+    
+    # 1. Root Node (clamped at Metacarpal Saddle Hub)
+    n_root = fem.add_node(p_root)
+    node_map["root"] = n_root
+    fem.fix_node(n_root)
+    
+    # 2. MCP Knuckle Nodes
+    for f, p_mcp in mcp_nodes.items():
+        node_map[f"mcp_{f}"] = fem.add_node(p_mcp)
+        
+    # 3. Primary Central Spine: Saddle Root -> Middle Knuckle (MCP3) - CF ⌀ 8.0mm OD / ⌀ 6.0mm ID (E = 180 GPa)
+    fem.add_element(node_map["root"], node_map["mcp_middle"],
+                    E=180e9, G=6e9, r_od=0.0040, r_id=0.0030)
+                    
+    # 4. Transverse Knuckle Arch across Fingers: Little <-> Ring <-> Middle <-> Index (CF ⌀ 6.0mm OD / ⌀ 4.4mm ID)
+    arch_seq = ["little", "ring", "middle", "index"]
+    for i in range(len(arch_seq) - 1):
+        fA, fB = arch_seq[i], arch_seq[i+1]
+        fem.add_element(node_map[f"mcp_{fA}"], node_map[f"mcp_{fB}"],
+                        E=180e9, G=6e9, r_od=0.0030, r_id=0.0022)
+                        
+    # 5. DIRECT THUMB STRUT ATTACHED TO INDEX KNUCKLE JOINT! (Index MCP -> Web Arch -> Thumb MCP)
+    p_web = 0.5 * (mcp_nodes["index"] + mcp_nodes["thumb"]) + 0.008 * np.array([0.0, 0.0, 1.0]) + 0.006 * np.array([0.0, 1.0, 0.0])
+    n_web = fem.add_node(p_web)
+    fem.add_element(node_map["mcp_index"], n_web,
+                    E=180e9, G=6e9, r_od=0.0030, r_id=0.0022)
+    fem.add_element(n_web, node_map["mcp_thumb"],
+                    E=180e9, G=6e9, r_od=0.0030, r_id=0.0022)
+                        
+    # 6. Conformal Phalanx Chains - CF ⌀ 5.0mm OD / ⌀ 3.4mm ID
+    pod_node_indices = {}
+    for f, chain in digit_chains.items():
+        prev_node = node_map[f"mcp_{f}"]
+        for seg_idx, pt in enumerate(chain[1:]):
+            n_curr = fem.add_node(pt)
+            node_map[f"{f}_node_{seg_idx+1}"] = n_curr
+            fem.add_element(prev_node, n_curr,
+                            E=180e9, G=6e9, r_od=0.0025, r_id=0.0017)
+            prev_node = n_curr
+        pod_node_indices[f] = prev_node
+        
+    # 7. Evaluate Load Cases
+    # Case A: Individual typing on each digit (0.196 N / 20 gf plunge)
+    single_results = {}
+    for f, pod_idx in pod_node_indices.items():
+        forces = {pod_idx: np.array([0.0, 0.0, -typing_force_N, 0.0, 0.0, 0.0])}
+        res = fem.solve(forces)
+        tip_disp_um = float(res["trans_displacements_m"][pod_idx]) * 1.0e6
+        single_results[f] = {
+            "tip_deflection_um": tip_disp_um,
+            "max_stress_MPa": res["max_stress_MPa"],
+            "safety_factor": 1200.0 / max(res["max_stress_MPa"], 1e-3)
+        }
+        
+    # Case B: Simultaneous 5-finger chord typing (1.0 N total load)
+    chord_forces = {}
+    for f, pod_idx in pod_node_indices.items():
+        chord_forces[pod_idx] = np.array([0.0, 0.0, -typing_force_N, 0.0, 0.0, 0.0])
+    res_chord = fem.solve(chord_forces)
+    
+    # Case C: 2.0 N accidental snag impact on little finger
+    snag_forces = {pod_node_indices["little"]: np.array([0.0, 0.0, -2.0, 0.0, 0.0, 0.0])}
+    res_snag = fem.solve(snag_forces)
+    
+    worst_tip_deflection_um = max(s["tip_deflection_um"] for s in single_results.values())
+    worst_digit = max(single_results.keys(), key=lambda k: single_results[k]["tip_deflection_um"])
+    
+    return {
+        "single_finger_results": single_results,
+        "worst_single_deflection_um": worst_tip_deflection_um,
+        "worst_single_digit": worst_digit,
+        "chord_typing": {
+            "max_deflection_um": res_chord["max_deflection_um"],
+            "max_stress_MPa": res_chord["max_stress_MPa"],
+            "safety_factor": 1200.0 / max(res_chord["max_stress_MPa"], 1e-3)
+        },
+        "snag_impact": {
+            "max_deflection_um": res_snag["max_deflection_um"],
+            "max_stress_MPa": res_snag["max_stress_MPa"],
+            "safety_factor": 1200.0 / max(res_snag["max_stress_MPa"], 1e-3)
+        },
+        "passes_deflection_gate": worst_tip_deflection_um <= 150.0,
+        "passes_stress_gate": res_chord["max_stress_MPa"] <= 120.0
+    }
