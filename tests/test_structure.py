@@ -862,7 +862,7 @@ def test_the_pruner_keeps_every_down_strut_the_domain_can_offer():
                    for f in FINGERS})
     _o, e_d, _r, _oo = hand_axes(h, q)
 
-    nodes, bars, btn, _l, ak, an, _t, sn, _deck = ground(h, q, pitch=0.010)
+    nodes, bars, btn, _l, ak, an, _t, sn, _deck, _deck_bars = ground(h, q, pitch=0.010)
 
     # THE CLASSIFICATION IS EXHAUSTIVE: steep (holds things up) | bridge (prints, holds nothing) |
     # sags (needs a prop). No fourth category, and "buildable" is exactly the first two.
@@ -936,7 +936,7 @@ def test_the_prune_carves_a_truss_not_a_membrane():
     grow_g = ghist[-1][2] * 1000
 
     _o, e_d, _r, _oo = hand_axes(h, q)
-    nodes, bars, btn, _l, ak, an, _t, sn, _deck = ground(h, q, pitch=0.008, reach=2.2)
+    nodes, bars, btn, _l, ak, an, _t, sn, _deck, _deck_bars = ground(h, q, pitch=0.008, reach=2.2)
     cases = load_cases(h, q, btn, wired=wired)
     live, r, m, w = size_and_prune(nodes, bars, btn, cases, ak, an, sn, float(STRAP_K),
                                    gate=float(DEFLECTION_MAX), r_print=float(NOZZLE_R), build_dir=e_d)
@@ -994,7 +994,7 @@ def test_the_pruner_says_why_it_stopped():
     q = h.compose({f: posture(h, f, tp_of(x, f), tm_of(x, f), float(x.get(f"ab_{f}", 0.0)))
                    for f in FINGERS})
     _o, e_d, _r, _oo = hand_axes(h, q)
-    nodes, bars, btn, _l, ak, an, _t, sn, _deck = ground(h, q, pitch=0.010)
+    nodes, bars, btn, _l, ak, an, _t, sn, _deck, _deck_bars = ground(h, q, pitch=0.010)
     cases = load_cases(h, q, btn, wired=used_actions(evaluate(x, H)["action_map"]))[:2]
 
     stop = {}

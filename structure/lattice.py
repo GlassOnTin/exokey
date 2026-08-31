@@ -505,31 +505,43 @@ def ground(h, q, hug=0.004, layer=None, pitch=0.004, reach=2.2, press_N=0.196, b
     remap[np.flatnonzero(ok)] = np.arange(ok.sum())
     n_in = int(remap[:n_in].max()) + 1 if (remap[:n_in] >= 0).any() else 0
 
-    # THE BUTTONS. One per digit, on the back of its well, loaded along the direction that digit
-    # actually presses.
+    # THE BUTTONS. One per digit, loaded along the direction that digit actually presses.
     #
     # ⚠ THE OLD SOLVER LOADED EVERY BUTTON ALONG WORLD -Z. World Z is not a direction any finger
     # pushes -- the five digits press five different ways, and the thumb is nearly orthogonal to
     # the fingers. A load applied in the wrong direction grows the wrong structure.
+    #
+    # ⚠ WITH A CARRIER THERE IS NOTHING TO PRESS AT THE FINGERTIP. The kit's keys are rigid
+    # towers bolted to the deck; the finger pushes the KEY, the tower carries the reaction to its
+    # bolt, and the bolt is where the load enters OUR structure. A fingertip load node would be a
+    # force applied to thin air -- and it is what made the first carrier grow print a lattice to
+    # the fingertips while the deck hung off one loaded column (the 2026-08-30 export: two bodies,
+    # deck in nine components). So with a carrier the buttons ARE deck bolt nodes, and no
+    # fingertip node enters the domain at all.
     btn, loads = {}, {}
     extra = []
-    for f in FINGERS:
-        dist, prox, r = well_channel(h, q, f)
-        click = action_dirs(h, q, f)["click"]
-        p = 0.5 * (np.asarray(dist) + np.asarray(prox)) + np.asarray(click) * r
-        extra.append(p)
-        btn[f] = len(nodes) + len(extra) - 1
-        loads[btn[f]] = np.asarray(click) * press_N
-
-    # THE CARRIER DECK (the reframe's payload). Its mount-plane nodes join the design space so
-    # struts can reach them; the payload mass then loads them (grow() applies carrier.mass_case).
-    # The deck is the load path's PROXIMAL end -- the kit hangs off it and it must be held by the
-    # grown shell, so its tie-in nodes are reachable candidates like any other.
     deck = []
     if carrier is not None:
         for row in np.asarray(carrier.deck, float):
             extra.append(row)
             deck.append(len(nodes) + len(extra) - 1)
+        kdn = carrier.keywell_deck_nodes()          # {finger: index into deck}
+        for f in FINGERS:
+            btn[f] = deck[kdn[f]]
+            loads[btn[f]] = np.asarray(carrier.keywell_dir[f], float) * press_N
+    else:
+        for f in FINGERS:
+            dist, prox, r = well_channel(h, q, f)
+            click = action_dirs(h, q, f)["click"]
+            p = 0.5 * (np.asarray(dist) + np.asarray(prox)) + np.asarray(click) * r
+            extra.append(p)
+            btn[f] = len(nodes) + len(extra) - 1
+            loads[btn[f]] = np.asarray(click) * press_N
+
+    # THE CARRIER DECK (the reframe's payload). Its mount-plane nodes join the design space so
+    # struts can reach them; the payload mass then loads them (grow() applies carrier.mass_case).
+    # The deck is the load path's PROXIMAL end -- the kit hangs off it and it must be held by the
+    # grown shell, so its tie-in nodes are reachable candidates like any other.
     nodes = np.vstack([nodes, np.array(extra)]) if extra else nodes
 
     # CANDIDATE BARS: every pair close enough to be a strut...
@@ -551,8 +563,9 @@ def ground(h, q, hug=0.004, layer=None, pitch=0.004, reach=2.2, press_N=0.196, b
     tree = cKDTree(nodes)
     pairs = np.array(sorted(tree.query_pairs(r=reach * pitch)), dtype=int)
     # ...plus the buttons and the carrier deck, which must be able to reach whatever is near
-    # them. A deck node the struts cannot reach is a payload hanging off nothing.
-    for i in list(btn.values()) + list(deck):
+    # them. A deck node the struts cannot reach is a payload hanging off nothing. With a carrier
+    # the buttons ARE deck nodes, so dedup -- a bolt must not get its ball-point pairs twice.
+    for i in sorted(set(btn.values()) | set(deck)):
         for j in tree.query_ball_point(nodes[i], 1.6 * (hug + layer + pitch)):
             if j < len(nodes) - len(extra):
                 pairs = np.vstack([pairs, [i, j]])
@@ -680,6 +693,43 @@ def ground(h, q, hug=0.004, layer=None, pitch=0.004, reach=2.2, press_N=0.196, b
 
     bars = [tuple(p) for p in pairs[keep_bar]]
 
+    # ⚠ THE DECK IS A RIGID PLATE, NOT A CLOUD OF INDEPENDENT NODES. The kit bolts to one stiff
+    # plate, so its deck nodes must move together -- and a corner the struts cannot reach (the
+    # donning corridors sever the distal corners over the knuckles) is then held by the plate, not
+    # left floating. Without these ties, two of nine deck nodes came back disconnected at full
+    # resolution and the whole grow refused to start. These bars ARE the plate: they are added
+    # AFTER the skin/corridor checks (the plate sits above the hand, it is not a strut threading
+    # the fingers) and returned as `deck_bars` so grow() keeps them live forever -- ESO may delete
+    # the grown shell, never the kit's own mounting surface.
+    deck_bars = []
+    if len(deck) > 1:
+        # ⚠ TRIANGULATE THE PLATE, DO NOT JUST LINK IT. A pin-jointed grid of nearest-neighbour
+        # bars is a MECHANISM: a rectangle of four pin joints shears into a parallelogram with
+        # zero strain energy, so the plate has an in-plane soft mode. When the keypress entered
+        # at the FINGERTIP that mode was barely excited; now the load enters AT THE PLATE, and
+        # CHOLMOD reports the frame nearly singular (rcond 2e-13) on the very first solve. A
+        # rigid bolt-down plate is a triangulated truss -- Delaunay in the plate's own plane
+        # (the deck is planar by construction, so the projection is exact) -- which has no
+        # shear mechanism and is the stiffest way to tie the same nodes. These bars are the
+        # plate; they are protected from ESO below exactly as the nearest-2 ties were.
+        from scipy.spatial import Delaunay as _Delaunay
+        _base = len(bars)
+        _seen = set()
+        _dp = nodes[np.array(deck)]
+        _uv = np.stack([(_dp - _dp[0]) @ _e_r, (_dp - _dp[0]) @ _e_d], axis=1)
+        if len(deck) >= 3:
+            _simp = _Delaunay(_uv).simplices
+            for _s in _simp:
+                for _k in range(3):
+                    _a, _b = sorted((deck[int(_s[_k])], deck[int(_s[(_k + 1) % 3])]))
+                    if _a != _b and (_a, _b) not in _seen:
+                        _seen.add((_a, _b))
+                        bars.append((_a, _b))
+                        deck_bars.append(_base + len(deck_bars))
+        else:                                   # two nodes: one tie bar, nothing to triangulate
+            bars.append((deck[0], deck[1]))
+            deck_bars.append(_base)
+
     # ⚠ MANUFACTURABILITY AS A HARD CONSTRAINT ON THE DOMAIN, NOT A PENALTY ON THE OBJECTIVE.
     #
     # THE USER: "the point is to make a structure that can self support as FDM printer layers
@@ -748,7 +798,7 @@ def ground(h, q, hug=0.004, layer=None, pitch=0.004, reach=2.2, press_N=0.196, b
         anchor_n[i] = v / (np.linalg.norm(v) + 1e-12)
     # WHICH anchor nodes the strap can pull on. Not all of them: a strap is a BAND.
     strap_n = under_strap(h, q, nodes, sorted(anchor_k))
-    return nodes, bars, btn, loads, anchor_k, anchor_n, tris, strap_n, deck
+    return nodes, bars, btn, loads, anchor_k, anchor_n, tris, strap_n, deck, deck_bars
 
 
 def _sheet_triangles(nodes, n_in, seeds, snorm, pitch, skin_tree, hug):
@@ -864,7 +914,7 @@ def load_cases(h, q, buttons, press_N=0.196, wired=None):
 
 def solve(nodes, bars, live, buttons, cases, anchor_k, anchor_n, r=None, mat="cf_pa12",
           strap_k=None, iters=8, shells=(), live_s=(), shell_t=None, strap_n=None,
-          rank_only=False):
+          rank_only=False, deck=()):
     """(worst button deflection over all cases, {bar: strain energy}, mass, strap tension N).
 
     ⚠ THE ANCHOR IS BILINEAR, AND GETTING THAT WRONG IS WHAT MAKES A GAUNTLET LOOK GOOD ON PAPER.
@@ -899,7 +949,15 @@ def solve(nodes, bars, live, buttons, cases, anchor_k, anchor_n, r=None, mat="cf
     ls = [shells[e] for e in live_s]
     shell_t = float(SHELL_T) if shell_t is None else shell_t
     fr = Frame(nodes, lb, p["E"], p["E"] / 2.6, A, I, J, shells=ls, shell_t=shell_t)
-    anch = [i for i in anchor_k if i in fr.idx]
+    # ⚠ A DECK NODE IS A BOLTED JOINT, NOT A TISSUE SPRING. The carrier's mount plate stands off
+    # the dorsum on grown columns; flesh touches nothing there. If a deck node kept a tissue
+    # spring, the bilinear active set would misread it on every keypress -- a press at a bolt
+    # 120 mm from the wrist rotates the patch and the deck node's own displacement decides its
+    # lift flag -- and the plate would be restrained by air. ground() does not land anchors on
+    # deck nodes; this is the belt to that braces, and it is what makes the deck's stiffness
+    # carried ONLY by the grown shell, which is the thing the grow is for.
+    _deck_set = set(int(i) for i in deck)
+    anch = [i for i in anchor_k if i in fr.idx and i not in _deck_set]
     if not anch:
         return float("inf"), {}, {}, 0.0, 0.0, {}
     # ⚠ THE STRAP PULLS ONLY WHERE A BAND TOUCHES. Everywhere else, a node lifting off the hand is
@@ -1004,7 +1062,7 @@ def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
     The gate is the WORST of the load cases, not their sum: a key that is mushy when you press it
     is mushy, however crisp the other fourteen are.
     """
-    nodes, bars, btn, _loads, ak, an, tris, strap_n, deck = ground(
+    nodes, bars, btn, _loads, ak, an, tris, strap_n, deck, deck_bars = ground(
         h, q, hug=hug, pitch=pitch, press_N=press_N, curls=curls, reach=reach, carrier=carrier)
     shells = tris if plates else []
     cases = load_cases(h, q, btn, press_N=press_N, wired=wired)
@@ -1015,7 +1073,10 @@ def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
     # is a connectivity terminal too (connected(deck=...)).
     _mass_case = None
     if carrier is not None and deck:
-        _mass_case = [("index", "payload_mass", carrier.mass_case())]
+        # mass_case() indexes the DECK's own node list (0..n-1); the frame wants global node
+        # indices, so map through `deck`.
+        _mc = {deck[i]: f for i, f in carrier.mass_case(nodes[deck]).items()}
+        _mass_case = [("index", "payload_mass", _mc)]
     # HANDLING IS ALWAYS IN THE RANKING (handling_N=0 to opt out): every grow path -- the GA's
     # coarse cost(), final.py's fine regrow -- must keep the bracing a grabbed cup leans on.
     _hc = handling_cases(h, q, btn, N=handling_N) if (handling_N is None or handling_N > 0) else []
@@ -1029,7 +1090,7 @@ def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
     if not reachable:
         raise RuntimeError("a button has no load path to the anchor: the domain is disconnected")
     w, se, ss, mass, tens, pc = solve(nodes, bars, live, btn, cases, ak, an, mat=mat, r=r,
-                                      shells=shells, live_s=live_s, strap_n=strap_n)
+                                      shells=shells, live_s=live_s, strap_n=strap_n, deck=deck)
     hist = [(len(live), w, mass, tens, len(live_s))]
     if on_step:
         on_step(0, live, w, mass, tens)
@@ -1049,9 +1110,14 @@ def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
         if impact_cases is not None:
             _wi, sei, *_rest = solve(nodes, bars, live, btn, impact_cases, ak, an, mat=mat, r=r,
                                      shells=shells, live_s=live_s, strap_n=strap_n,
-                                     rank_only=True)
+                                     rank_only=True, deck=deck)
             rank_se = {e: se.get(e, 0.0) + sei.get(e, 0.0) for e in live}
-        pool = ([("b", e, rank_se.get(e, 0.0)) for e in live]
+        # ⚠ THE DECK PLATE IS NEVER IN THE POOL. ESO deletes the lowest-energy members, but the
+        # deck bars ARE the kit's mounting plate -- deleting one would let a corner of the plate
+        # hinge away from the bolt-down surface. They are protected, like the strap's grip is
+        # repaired: the optimiser grows the SHELL under the plate, never the plate itself.
+        _deck_set = set(deck_bars)
+        pool = ([("b", e, rank_se.get(e, 0.0)) for e in live if e not in _deck_set]
                 + [("s", e, ss.get(e, 0.0)) for e in live_s])
         pool.sort(key=lambda t: t[2])
         drop = set((k, e) for k, e, _v in pool[:max(1, int(cut * len(pool)))])
@@ -1059,7 +1125,7 @@ def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
         trial_s = [e for e in live_s if ("s", e) not in drop]
         w2, se2, ss2, mass2, tens2, pc2 = solve(nodes, bars, trial, btn, cases, ak, an, mat=mat,
                                                 r=r, shells=shells, live_s=trial_s,
-                                                strap_n=strap_n)
+                                                strap_n=strap_n, deck=deck)
 
         # ⚠ AND NOW LET THE SURVIVORS DRIFT, EVERY STEP -- not once at the end.
         # The user: "Perhaps we'd find some better solutions allowing the elements to drift
@@ -1075,7 +1141,8 @@ def grow(h, q, hug=0.004, pitch=0.004, rate=0.12, gate=0.5e-3, mat="cf_pa12",
                         np.pi * rr ** 4 / 4, np.pi * rr ** 4 / 2,
                         spring={i: k for i, k in ak.items()})
             U2 = fr2.solve([c[2] for c in cases])
-            moved = relax_nodes(fr2, U2, nodes, bars, trial, btn, ak, Vs, Ns, hug=hug)
+            moved = relax_nodes(fr2, U2, nodes, bars, trial, btn, ak, Vs, Ns, hug=hug,
+                                deck=deck)
             w3, se3, ss3, mass3, tens3, pc3 = solve(moved, bars, trial, btn, cases, ak, an,
                                                     mat=mat, r=r, shells=shells,
                                                     live_s=trial_s, strap_n=strap_n)
@@ -1320,7 +1387,7 @@ def cost(h, q, wired=None, press_N=0.196, pitch=0.008, gate=0.5e-3, mat="cf_pa12
 
 
 def relax_nodes(fr, U, nodes, bars, live, buttons, anchor_k, skin_V, skin_N,
-                hug=0.004, layer=None, step=0.35, iters=1):
+                hug=0.004, layer=None, step=0.35, iters=1, deck=()):
     """LET THE NODES DRIFT, AND LET THE PHYSICS SAY WHERE. Form-finding, not smoothing.
 
     THE USER: "Its becoming fairly minimalist in appearance, but still somewhat jaggedy. Is there a
@@ -1393,7 +1460,11 @@ def relax_nodes(fr, U, nodes, bars, live, buttons, anchor_k, skin_V, skin_N,
     # SURFACE clear of the flesh (impact_opt sets hug_i = standoff + rod radius), moving the strut off
     # the finger instead of deleting it. Scalar broadcasts to every node (the default, unchanged).
     hug = np.full(len(X), float(hug)) if np.ndim(hug) == 0 else np.asarray(hug, float)
-    held = set(buttons.values()) | set(anchor_k)
+    # ⚠ THE DECK DOES NOT DRIFT. The carrier's plate is the kit's bolt-down surface -- bracket
+    # geometry, not the optimiser's to move -- and it stands OFF the skin, so the band clamp below
+    # would snap every non-bolt deck node down into the `hug..hug+layer` shell and fold the plate
+    # into the dorsum. The buttons (the deck's bolt nodes) are already held; hold the whole plate.
+    held = set(buttons.values()) | set(anchor_k) | {int(i) for i in deck}
     lb = [bars[e] for e in live]
     tree = cKDTree(skin_V)
 
@@ -1421,12 +1492,19 @@ def relax_nodes(fr, U, nodes, bars, live, buttons, anchor_k, skin_V, skin_N,
             X[i] += step * (R[i] / deg[i]) * (0.5 * layer)
 
         # ...and back into the band. The skin is not negotiable and neither is the lever arm.
+        # ⚠ HELD NODES ARE NOT CLAMPED EITHER. The clamp exists to stop a DRIFTED node leaving
+        # the shell's band; a held node never drifted. The carrier's deck nodes stand 20-39 mm
+        # off the dorsum -- clamping them to `hug..hug+layer` folds the mount plate into the
+        # skin, and the FEM then solves a geometry the export does not print (the deck the
+        # optimiser saw was not the deck saved to the npz). Buttons and anchors are in-band by
+        # construction, so skipping held nodes changes nothing for them.
         d, k = tree.query(X)
         out = X - skin_V[k]
         nrm = np.linalg.norm(out, axis=1, keepdims=True)
         out = np.where(nrm > 1e-12, out / np.maximum(nrm, 1e-12), skin_N[k])
         lo, hi = hug, hug + layer
-        bad = (d < lo) | (d > hi)
+        bad = ((d < lo) | (d > hi))
+        bad[np.fromiter((i in held for i in range(len(X))), bool, len(X))] = False
         if bad.any():
             X[bad] = skin_V[k[bad]] + out[bad] * np.clip(d[bad], lo[bad], hi[bad])[:, None]
     return X

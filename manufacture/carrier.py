@@ -68,16 +68,43 @@ class Carrier:
     press_N: float
     mass: float
     com: np.ndarray
+    bolts: dict = None          # {finger: index into deck} -- each key's own bolt node
 
-    def mass_case(self, g: float = 9.81) -> dict:
-        """The payload weight as a {node: force} load, applied at the deck's CoM node.
+    def mass_case(self, deck_nodes, g: float = 9.81) -> dict:
+        """The payload weight as a {node: force} load, spread over the deck's bolt pattern.
 
         World -Z: a worn device's mass pulls toward the ground, and because the deck is
-        cantilevered off the wrist anchor this loads the anchor in bending. grow() folds
-        this into the ESO ranking like gravity_cases — it nudges growth toward load paths
-        that also carry the kit's own weight; it is not the deflection gate."""
-        i = self.deck_tie[0] if self.deck_tie else 0
-        return {i: np.array([0.0, 0.0, -self.mass * float(g)])}
+        cantilevered off the wrist anchor this loads the anchor in bending. The weight is
+        shared across the deck nodes nearest the CoM (the kit bolts down over its footprint,
+        so the reaction distributes there) rather than dumped on one node -- otherwise only
+        the column under that node carries mass and ESO deletes the rest, leaving the plate
+        floating. grow() folds this into the ESO ranking like gravity_cases."""
+        nodes = np.asarray(deck_nodes, float)
+        w = self.mass * float(g) / len(nodes)
+        return {int(i): np.array([0.0, 0.0, -w]) for i in range(len(nodes))}
+
+    def keywell_deck_nodes(self) -> dict:
+        """{finger: index into `deck`} -- the bolt point each key's tower bracket lands on.
+
+        The kit's keys are rigid towers bolted to the deck, so a keypress reaction enters
+        OUR structure at that key's OWN bolt node, not at the fingertip (nothing prints at
+        the fingertip -- the kit's tower reaches up to the finger). This is the load path
+        the carrier model must use: key -> tower (kit, rigid) -> deck bolt -> deck -> grown
+        shell -> anchor. The tower's own compliance is the kit's contribution to the
+        mushiness budget and is NOT modelled here; the deck must be stiff at the bolt.
+
+        ⚠ ONE BOLT PER KEY. Taking the nearest GRID node instead double-books: five keywells
+        projected onto a 3x3 grid collapse onto three nodes (measured 2026-08-31), and two
+        keys sharing a bolt means one keypress load overwrites the other's -- the grow then
+        designs against four keypresses, not five. _carrier() therefore adds each keywell's
+        plane projection as a dedicated deck node, and `bolts` records it."""
+        if self.bolts is not None:
+            return dict(self.bolts)
+        out = {}
+        for f, p in self.keywells.items():
+            d = np.linalg.norm(self.deck - np.asarray(p, float), axis=1)
+            out[f] = int(np.argmin(d))
+        return out
 
 
 def _dorsal_deck(h, q, standoff: float, n_across: int = 3, n_along: int = 3):
@@ -117,10 +144,39 @@ def _carrier(h, q, standoff: float, tower: float, mass: float,
         keywells[f] = 0.5 * (np.asarray(dist) + np.asarray(prox)) + np.asarray(click) * r
         keywell_dir[f] = np.asarray(click, float)
 
+    # THE BOLTS: one dedicated deck node per key. The kit's tower base bolts to the plate
+    # somewhere under its key; the bolt is where the keypress enters OUR structure. Taking the
+    # nearest GRID node instead double-books -- five keywells onto a 3x3 grid collapse onto
+    # three nodes (measured 2026-08-31) and one keypress load overwrites another's, so the
+    # grow designs against four keypresses, not five. Project each keywell onto the deck plane
+    # along its normal (the plane stays planar) and clamp into the footprint: the plate spans
+    # the metacarpals, and a bolt past the distal edge would be a tower base over the fingers
+    # themselves, which is where the plate cannot go. The clamp lands the bolts on the distal
+    # edge, radially distinct -- the tower rises from the plate's edge toward the fingertip.
+    hgt = float(np.max((deck - o) @ e_o))
+    bolts = {}
+    rows = []
+    for f in FINGERS:
+        p = np.asarray(keywells[f], float)
+        rd = float(np.clip((p - o) @ e_r, r_lo, r_hi))
+        dd = float(np.clip((p - o) @ e_d, d_lo, d_hi))
+        b = o + rd * e_r + dd * e_d + hgt * e_o
+        # a bolt that lands on an existing deck node IS that node -- adding a duplicate would
+        # make a zero-length tie bar, and a zero-length bar is a singular stiffness matrix
+        # (measured: the index keywell projects exactly onto the distal-radial grid corner).
+        hit = np.flatnonzero(np.linalg.norm(deck - b, axis=1) < 1e-9)
+        if len(hit):
+            bolts[f] = int(hit[0])
+        else:
+            rows.append(b)
+            bolts[f] = len(deck) + len(rows) - 1
+    if rows:
+        deck = np.vstack([deck, np.array(rows)])
+
     # centre of mass: a fraction along/across the deck footprint, lifted to the deck plane.
     com = (o + (d_lo + com_d * (d_hi - d_lo)) * e_d
               + (r_lo + com_r * (r_hi - r_lo)) * e_r
-              + (float(np.max((deck - o) @ e_o))) * e_o)
+              + hgt * e_o)
 
     # the deck nodes nearest the wrist anchor are the tie-in — the load path's proximal end.
     # Tie the proximal row (smallest distal coordinate) so the deck is held, not floating.
@@ -130,7 +186,7 @@ def _carrier(h, q, standoff: float, tower: float, mass: float,
 
     return Carrier(deck=deck, deck_tie=deck_tie, keywells=keywells,
                    keywell_dir=keywell_dir, press_N=float(press_N),
-                   mass=float(mass), com=np.asarray(com, float))
+                   mass=float(mass), com=np.asarray(com, float), bolts=bolts)
 
 
 def carrier_from_bracket(h, q, press_N: float | None = None) -> Carrier:

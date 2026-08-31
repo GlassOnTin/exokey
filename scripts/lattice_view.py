@@ -170,7 +170,7 @@ def main():
     x = fd["x"]
     q = h.compose({f: posture(h, f, tp_of(x, f), tm_of(x, f), float(x.get(f"ab_{f}", 0.0)))
                    for f in FINGERS})
-    _n, _b, _btn, _l, anchor_k, anchor_n, _t, strap_n, _deck = ground(h, q)
+    _n, _b, _btn, _l, anchor_k, anchor_n, _t, strap_n, _deck, _deck_bars = ground(h, q)
     cases = load_cases(h, q, btn, wired=used_actions(fd["action_map"]))
     w, se, _ss, mass, tension, per_case = solve(nodes, bars, live, btn, cases, anchor_k, anchor_n,
                                                strap_n=strap_n)

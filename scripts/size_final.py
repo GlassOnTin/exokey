@@ -42,7 +42,7 @@ def main():
     q = ref.compose({f: posture(ref, f, tp_of(x, f), tm_of(x, f), float(x.get(f"ab_{f}", 0.0)))
                      for f in FINGERS})
 
-    nodes, bars, btn, _l, ak, an, _t, strap_n, _deck = ground(ref, q)      # FULL resolution
+    nodes, bars, btn, _l, ak, an, _t, strap_n, _deck, _deck_bars = ground(ref, q)      # FULL resolution
     cases = load_cases(ref, q, btn, wired=wired)
     print(f"{len(bars)} candidate struts, {len(cases)} load cases, "
           f"gate {float(DEFLECTION_MAX)*1e6:.0f} um\n")

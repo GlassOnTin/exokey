@@ -68,7 +68,7 @@ def main():
     pitch = 0.004                                 # the grow's lattice pitch (ground default)
     R = float(SKIN_R)
 
-    _n, _b, _bt, _l, ak, an, _t, sn, _deck = ground(ref, q, hug=0.004, pitch=pitch, press_N=0.196)
+    _n, _b, _bt, _l, ak, an, _t, sn, _deck, _deck_bars = ground(ref, q, hug=0.004, pitch=pitch, press_N=0.196)
     cases = load_cases(ref, q, btn, press_N=0.196, wired=wired)
 
     from structure.lattice import cleanup

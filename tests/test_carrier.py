@@ -77,12 +77,34 @@ def test_keywells_at_the_fingertips(carrier, h50):
 
 
 def test_mass_case_pulls_down_in_world_z(carrier):
-    """A worn device's mass pulls toward the ground: world -Z, magnitude m*g."""
-    case = carrier.mass_case()
-    assert len(case) == 1
-    f = next(iter(case.values()))
-    assert f[0] == 0.0 and f[1] == 0.0
-    assert f[2] == pytest.approx(-carrier.mass * 9.81)
+    """A worn device's mass pulls toward the ground: world -Z, total m*g, spread over the
+    deck's bolt pattern (dumping it on one node loads one column and lets ESO delete the
+    rest of the plate's support -- the 2026-08-30 floating-deck bug)."""
+    case = carrier.mass_case(carrier.deck)
+    assert len(case) == len(carrier.deck)
+    assert all(f[0] == 0.0 and f[1] == 0.0 for f in case.values())
+    assert sum(f[2] for f in case.values()) == pytest.approx(-carrier.mass * 9.81)
+
+
+def test_carrier_buttons_are_the_deck_bolts(h50, carrier):
+    """THE LOAD PATH. The kit's keys are rigid towers bolted to the deck, so the keypress
+    enters OUR structure at the deck bolt node -- not at a free fingertip node (nothing
+    prints at the fingertip). ground() with a carrier must therefore make the buttons deck
+    nodes, load them along the keywell direction, and leave no fingertip node in the domain.
+    The deck is a bolted joint standing off the dorsum: it must carry no tissue spring."""
+    from structure.lattice import ground
+    q = np.zeros(h50.model.nq)
+    nodes, bars, btn, loads, ak, an, tris, strap_n, deck, deck_bars = ground(
+        h50, q, pitch=0.006, carrier=carrier)
+    kdn = carrier.keywell_deck_nodes()
+    assert set(btn.values()) <= set(deck), "a button is not a deck bolt"
+    for f in FINGERS:
+        assert btn[f] == deck[kdn[f]]
+        assert np.allclose(loads[btn[f]],
+                           np.asarray(carrier.keywell_dir[f]) * carrier.press_N, atol=1e-12)
+    assert not (set(deck) & set(ak)), "a tissue spring landed on the mount plate"
+    # the plate is a connected grid: every deck node ties to the bolt component
+    assert len(deck_bars) >= len(deck) - 1
 
 
 def test_kit_path_refuses_until_measured(h50):
