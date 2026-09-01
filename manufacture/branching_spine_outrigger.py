@@ -20,7 +20,7 @@ import numpy as np
 import trimesh
 
 from hand.myohand import MyoHand
-from manufacture.dogbone_clamps import build_oriented_joint_clamp, build_oriented_2way_dogbone_clamp
+from manufacture.dogbone_clamps import build_symmetric_nway_clamp, build_oriented_2way_dogbone_clamp
 
 
 def _align_rot(u_vec: np.ndarray) -> np.ndarray:
@@ -84,7 +84,7 @@ def build_conformal_spine_tree_geometry(p_root: np.ndarray,
                                         r_arch_od: float = 0.0030,
                                         r_branch_od: float = 0.0025) -> dict[str, trimesh.Trimesh]:
     """Generate 3D CAD meshes featuring Metacarpal-Plane Aligned CNC Clamps & Standoff Carbon Rods."""
-    from manufacture.dogbone_clamps import build_oriented_joint_clamp, build_oriented_2way_dogbone_clamp
+    from manufacture.dogbone_clamps import build_symmetric_nway_clamp, build_oriented_2way_dogbone_clamp
     
     cf_tubes = []
     clamps = []
@@ -101,57 +101,75 @@ def build_conformal_spine_tree_geometry(p_root: np.ndarray,
     e_dorsal = e_dorsal / (np.linalg.norm(e_dorsal) + 1e-12)
     
     # -------------------------------------------------------------------------
-    # 1. KNUCKLE CLAMP HUBS (Tangentially Oriented to Dorsal Surface)
+    # 1. KNUCKLE CLAMP HUBS (Strictly Symmetrical Equal-Angle Clamps: 120° / 90°)
     # -------------------------------------------------------------------------
-    # 4-Way Middle Knuckle Hub (MCP3): Central Spine + Ring Arch + Index Arch + Middle Phalanx Boom
-    clamp_mid, mid_balls = build_oriented_joint_clamp(
+    # 4-Way Middle Knuckle Hub (MCP3): Strict 90° Cross (Arms at 0°, 90°, 180°, 270°)
+    u_mid_phx = digit_chains["middle"][1] - p_mcp_mid
+    clamp_mid, mid_balls = build_symmetric_nway_clamp(
         p_center=p_mcp_mid,
-        connected_pts=[p_root, p_mcp_rng, p_mcp_idx, digit_chains["middle"][1]],
+        u_ref_world=u_mid_phx,
         n_surface=e_dorsal,
-        width=0.0070, arm_radius=0.0080
+        num_branches=4,
+        arm_radius=0.0075,
+        width=0.0070
     )
     clamps.append(clamp_mid)
-    p_ball_mid_spine, p_ball_mid_rng, p_ball_mid_idx, p_ball_mid_phx = mid_balls
+    # Ball 0 = 0° (Middle Phalanx Boom), Ball 1 = 90° (Ring Arch), Ball 2 = 180° (Spine), Ball 3 = 270° (Index Arch)
+    p_ball_mid_phx, p_ball_mid_rng, p_ball_mid_spine, p_ball_mid_idx = mid_balls
     
-    # 3-Way Ring Knuckle Hub (MCP4): Middle Arch + Little Arch + Ring Phalanx Boom
-    clamp_rng, rng_balls = build_oriented_joint_clamp(
+    # 3-Way Ring Knuckle Hub (MCP4): Strict 120° Tri-Lobe (Arms at 0°, 120°, 240°)
+    u_rng_phx = digit_chains["ring"][1] - p_mcp_rng
+    clamp_rng, rng_balls = build_symmetric_nway_clamp(
         p_center=p_mcp_rng,
-        connected_pts=[p_mcp_mid, p_mcp_lit, digit_chains["ring"][1]],
+        u_ref_world=u_rng_phx,
         n_surface=e_dorsal,
-        width=0.0070, arm_radius=0.0080
+        num_branches=3,
+        arm_radius=0.0075,
+        width=0.0070
     )
     clamps.append(clamp_rng)
-    p_ball_rng_mid, p_ball_rng_lit, p_ball_rng_phx = rng_balls
+    # Ball 0 = 0° (Ring Phalanx Boom), Ball 1 = 120° (Middle Arch), Ball 2 = 240° (Little Arch)
+    p_ball_rng_phx, p_ball_rng_mid, p_ball_rng_lit = rng_balls
     
-    # 3-Way Index Knuckle Hub (MCP2): Middle Arch + Thumb Web Arch + Index Phalanx Boom
-    clamp_idx, idx_balls = build_oriented_joint_clamp(
+    # 3-Way Index Knuckle Hub (MCP2): Strict 120° Tri-Lobe (Arms at 0°, 120°, 240°)
+    u_idx_phx = digit_chains["index"][1] - p_mcp_idx
+    clamp_idx, idx_balls = build_symmetric_nway_clamp(
         p_center=p_mcp_idx,
-        connected_pts=[p_mcp_mid, p_mcp_th, digit_chains["index"][1]],
+        u_ref_world=u_idx_phx,
         n_surface=e_dorsal,
-        width=0.0070, arm_radius=0.0080
+        num_branches=3,
+        arm_radius=0.0075,
+        width=0.0070
     )
     clamps.append(clamp_idx)
-    p_ball_idx_mid, p_ball_idx_th, p_ball_idx_phx = idx_balls
+    # Ball 0 = 0° (Index Phalanx Boom), Ball 1 = 120° (Thumb Web Arch), Ball 2 = 240° (Middle Arch)
+    p_ball_idx_phx, p_ball_idx_th, p_ball_idx_mid = idx_balls
     
-    # 2-Way Little Knuckle Hub (MCP5): Ring Arch + Little Phalanx Boom
-    clamp_lit, lit_balls = build_oriented_joint_clamp(
+    # 2-Way Little Knuckle Hub (MCP5): 180° Symmetrical Dogbone
+    u_lit_phx = digit_chains["little"][1] - p_mcp_lit
+    clamp_lit, lit_balls = build_symmetric_nway_clamp(
         p_center=p_mcp_lit,
-        connected_pts=[p_mcp_rng, digit_chains["little"][1]],
+        u_ref_world=u_lit_phx,
         n_surface=e_dorsal,
-        width=0.0070, arm_radius=0.0075
+        num_branches=2,
+        arm_radius=0.0075,
+        width=0.0070
     )
     clamps.append(clamp_lit)
-    p_ball_lit_rng, p_ball_lit_phx = lit_balls
+    p_ball_lit_phx, p_ball_lit_rng = lit_balls
     
-    # 2-Way Thumb Knuckle Hub (MCP1): Web Arch + Thumb Phalanx Boom
-    clamp_th, th_balls = build_oriented_joint_clamp(
+    # 2-Way Thumb Knuckle Hub (MCP1): 180° Symmetrical Dogbone
+    u_th_phx = digit_chains["thumb"][1] - p_mcp_th
+    clamp_th, th_balls = build_symmetric_nway_clamp(
         p_center=p_mcp_th,
-        connected_pts=[p_mcp_idx, digit_chains["thumb"][1]],
+        u_ref_world=u_th_phx,
         n_surface=e_dorsal,
-        width=0.0070, arm_radius=0.0075
+        num_branches=2,
+        arm_radius=0.0075,
+        width=0.0070
     )
     clamps.append(clamp_th)
-    p_ball_th_idx, p_ball_th_phx = th_balls
+    p_ball_th_phx, p_ball_th_idx = th_balls
     
     # -------------------------------------------------------------------------
     # 2. MAIN CARBON FIBER SPINES & TRANSVERSE ARCHES (Connecting Ball-to-Ball)

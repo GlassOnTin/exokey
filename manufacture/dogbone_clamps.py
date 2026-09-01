@@ -1,15 +1,11 @@
 """PARAMETRIC 3D CAD GEOMETRY & STL GENERATOR FOR SYMMETRICAL CNC CLAMP PLATES.
 
 Generates exact physical meshes for:
-- 2-Way Symmetrical Dogbone Clamps (Phalanx links, Thumb bridge)
-- 3-Way Symmetrical Tri-Lobe Clamps (Ring MCP4, Index MCP2 Knuckles)
-- 4-Way Symmetrical Quad-Cross Clamps (Middle MCP3 Central Hub)
+- 2-Way Symmetrical Dogbone Clamps (Phalanx links, Thumb bridge) - 180°
+- 3-Way Symmetrical Tri-Lobe Clamps (Ring MCP4, Index MCP2 Knuckles) - 120°
+- 4-Way Symmetrical Quad-Cross Clamps (Middle MCP3 Central Hub) - 90°
 
-Each assembly consists of:
-1. Top Clamp Plate (Clearance through-hole for M2.5 socket cap screw)
-2. Bottom Clamp Plate (Threaded M2.5 / tap-hole base)
-3. Precision ⌀ 4.8 mm Ball Pockets (Hemispherical / 90° conical seats)
-4. Center M2.5 Clamping Fastener Hardware
+Strictly enforces equal angular spacing (360° / N) matching CNC G-code machining toolpaths.
 """
 from __future__ import annotations
 
@@ -109,44 +105,54 @@ def build_nway_clamp_assembly(arm_vectors: list[np.ndarray],
     return trimesh.util.concatenate(parts)
 
 
-def build_oriented_joint_clamp(p_center: np.ndarray,
-                               connected_pts: list[np.ndarray],
+def build_symmetric_nway_clamp(p_center: np.ndarray,
+                               u_ref_world: np.ndarray,
                                n_surface: np.ndarray,
+                               num_branches: int = 3,
+                               arm_radius: float = 0.0075,
                                width: float = 0.0070,
                                plate_thick: float = 0.0020,
                                gap: float = 0.0006,
-                               ball_dia: float = 0.0048,
-                               arm_radius: float = 0.0075) -> tuple[trimesh.Trimesh, list[np.ndarray]]:
-    """Construct and position an N-way clamp assembly oriented tangentially to the dorsal skin surface."""
+                               ball_dia: float = 0.0048) -> tuple[trimesh.Trimesh, list[np.ndarray]]:
+    """Build and position an N-way clamp with STRICT EQUAL ANGULAR SPACING (360 / N deg)."""
     n_unit = n_surface / (np.linalg.norm(n_surface) + 1e-12)
     
-    ref = np.array([0.0, 1.0, 0.0])
-    if abs(float(np.dot(n_unit, ref))) > 0.90:
-        ref = np.array([1.0, 0.0, 0.0])
-    u_tan_x = np.cross(ref, n_unit)
-    u_tan_x /= np.linalg.norm(u_tan_x)
-    u_tan_y = np.cross(n_unit, u_tan_x)
+    # Project u_ref_world onto the dorsal tangent plane
+    u_ref_tan = u_ref_world - np.dot(u_ref_world, n_unit) * n_unit
+    L_ref = np.linalg.norm(u_ref_tan)
+    if L_ref < 1e-6:
+        ref = np.array([0.0, 1.0, 0.0])
+        if abs(float(np.dot(n_unit, ref))) > 0.90:
+            ref = np.array([1.0, 0.0, 0.0])
+        u_ref_tan = np.cross(ref, n_unit)
+        u_ref_tan /= np.linalg.norm(u_ref_tan)
+    else:
+        u_ref_tan /= L_ref
+        
+    u_tan_lat = np.cross(n_unit, u_ref_tan)
+    u_tan_lat /= np.linalg.norm(u_tan_lat)
     
+    # Strictly equal angular spacing: 360 / N degrees
     local_arm_vecs = []
     ball_pts_world = []
-    for pt in connected_pts:
-        v_world = pt - p_center
-        v_tan = v_world - np.dot(v_world, n_unit) * n_unit
-        L = np.linalg.norm(v_tan)
-        if L < 1e-6:
-            continue
-        u_tan = v_tan / L
+    
+    for k in range(num_branches):
+        ang_deg = k * (360.0 / num_branches)
+        rad = math.radians(ang_deg)
         
-        lx = float(np.dot(u_tan, u_tan_x)) * arm_radius
-        ly = float(np.dot(u_tan, u_tan_y)) * arm_radius
+        lx = arm_radius * math.cos(rad)
+        ly = arm_radius * math.sin(rad)
         local_arm_vecs.append(np.array([lx, ly, 0.0]))
         
-        p_ball_world = p_center + arm_radius * u_tan
+        u_k = math.cos(rad) * u_ref_tan + math.sin(rad) * u_tan_lat
+        p_ball_world = p_center + arm_radius * u_k
         ball_pts_world.append(p_ball_world)
         
+    # Build local 2-piece CNC clamp mesh
     clamp_mesh = build_nway_clamp_assembly(local_arm_vecs, width=width, plate_thick=plate_thick, gap=gap, ball_dia=ball_dia)
     
-    R_basis = np.column_stack([u_tan_x, u_tan_y, n_unit])
+    # Transform from local tangent basis to 3D world space
+    R_basis = np.column_stack([u_ref_tan, u_tan_lat, n_unit])
     T = np.eye(4)
     T[:3, :3] = R_basis
     T[:3, 3] = p_center
@@ -169,7 +175,6 @@ def build_oriented_2way_dogbone_clamp(p_ball_a: np.ndarray,
         return trimesh.creation.uv_sphere(radius=ball_dia / 2.0)
     u_long = v / L
     
-    # Lateral axis perpendicular to link length and local dorsal normal
     u_lat = np.cross(n_surface_hint, u_long)
     lat_len = np.linalg.norm(u_lat)
     if lat_len < 1e-4:
@@ -181,7 +186,6 @@ def build_oriented_2way_dogbone_clamp(p_ball_a: np.ndarray,
     else:
         u_lat /= lat_len
         
-    # Dorsal normal for this specific phalanx segment
     u_norm = np.cross(u_long, u_lat)
     u_norm /= np.linalg.norm(u_norm)
     
