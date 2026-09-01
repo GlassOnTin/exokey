@@ -37,13 +37,10 @@ def build_single_clamp_plate(arm_vectors: list[np.ndarray],
                              is_top: bool = True,
                              width: float = 0.0070,
                              plate_thick: float = 0.0020,
-                             ball_dia: float = 0.0048,
-                             pocket_depth: float = 0.0011,
-                             screw_hole_dia: float = 0.0027) -> trimesh.Trimesh:
+                             ball_dia: float = 0.0048) -> trimesh.Trimesh:
     """Build a single top or bottom CNC aluminum clamp plate with lobes and pockets."""
     r_hub = width * 0.70
     r_lobe = width * 0.50
-    r_ball = ball_dia / 2.0
     
     parts = []
     # 1. Central Hub Cylinder
@@ -97,7 +94,7 @@ def build_nway_clamp_assembly(arm_vectors: list[np.ndarray],
     p_bot.apply_translation([0.0, 0.0, z_bot])
     parts.append(p_bot)
     
-    # Center M2.5 screw
+    # Center M2.5 screw head
     screw_head = trimesh.creation.cylinder(radius=0.0022, height=0.0018, sections=16)
     screw_head.apply_translation([0.0, 0.0, z_top + 0.5 * plate_thick + 0.0009])
     parts.append(screw_head)
@@ -123,11 +120,6 @@ def build_oriented_joint_clamp(p_center: np.ndarray,
     """Construct and position an N-way clamp assembly oriented tangentially to the dorsal skin surface."""
     n_unit = n_surface / (np.linalg.norm(n_surface) + 1e-12)
     
-    # Project connected points into the tangent plane centered at p_center
-    arm_dirs_local = []
-    ball_pts_world = []
-    
-    # Create an orthonormal tangent basis: (u_tan_x, u_tan_y, n_unit)
     ref = np.array([0.0, 1.0, 0.0])
     if abs(float(np.dot(n_unit, ref))) > 0.90:
         ref = np.array([1.0, 0.0, 0.0])
@@ -136,28 +128,24 @@ def build_oriented_joint_clamp(p_center: np.ndarray,
     u_tan_y = np.cross(n_unit, u_tan_x)
     
     local_arm_vecs = []
+    ball_pts_world = []
     for pt in connected_pts:
         v_world = pt - p_center
-        # Project onto tangent plane
         v_tan = v_world - np.dot(v_world, n_unit) * n_unit
         L = np.linalg.norm(v_tan)
         if L < 1e-6:
             continue
         u_tan = v_tan / L
         
-        # Coordinates in tangent basis
         lx = float(np.dot(u_tan, u_tan_x)) * arm_radius
         ly = float(np.dot(u_tan, u_tan_y)) * arm_radius
         local_arm_vecs.append(np.array([lx, ly, 0.0]))
         
-        # Actual 3D ball center in world space
         p_ball_world = p_center + arm_radius * u_tan
         ball_pts_world.append(p_ball_world)
         
-    # Build the local assembly
     clamp_mesh = build_nway_clamp_assembly(local_arm_vecs, width=width, plate_thick=plate_thick, gap=gap, ball_dia=ball_dia)
     
-    # Transform from local tangent frame to world coordinates
     R_basis = np.column_stack([u_tan_x, u_tan_y, n_unit])
     T = np.eye(4)
     T[:3, :3] = R_basis
@@ -165,3 +153,53 @@ def build_oriented_joint_clamp(p_center: np.ndarray,
     clamp_mesh.apply_transform(T)
     
     return clamp_mesh, ball_pts_world
+
+
+def build_oriented_2way_dogbone_clamp(p_ball_a: np.ndarray,
+                                      p_ball_b: np.ndarray,
+                                      n_surface_hint: np.ndarray,
+                                      width: float = 0.0070,
+                                      plate_thick: float = 0.0020,
+                                      gap: float = 0.0006,
+                                      ball_dia: float = 0.0048) -> trimesh.Trimesh:
+    """Build a 2-way symmetrical dogbone clamp directly aligned with the finger link axis."""
+    v = p_ball_b - p_ball_a
+    L = float(np.linalg.norm(v))
+    if L < 1e-4:
+        return trimesh.creation.uv_sphere(radius=ball_dia / 2.0)
+    u_long = v / L
+    
+    # Lateral axis perpendicular to link length and local dorsal normal
+    u_lat = np.cross(n_surface_hint, u_long)
+    lat_len = np.linalg.norm(u_lat)
+    if lat_len < 1e-4:
+        ref = np.array([0.0, 1.0, 0.0])
+        if abs(float(np.dot(u_long, ref))) > 0.90:
+            ref = np.array([1.0, 0.0, 0.0])
+        u_lat = np.cross(ref, u_long)
+        u_lat /= np.linalg.norm(u_lat)
+    else:
+        u_lat /= lat_len
+        
+    # Dorsal normal for this specific phalanx segment
+    u_norm = np.cross(u_long, u_lat)
+    u_norm /= np.linalg.norm(u_norm)
+    
+    if np.dot(u_norm, n_surface_hint) < 0:
+        u_norm = -u_norm
+        u_lat = -u_lat
+        
+    p_mid = 0.5 * (p_ball_a + p_ball_b)
+    arm_vecs = [
+        np.array([-0.5 * L, 0.0, 0.0]),
+        np.array([0.5 * L, 0.0, 0.0])
+    ]
+    clamp_local = build_nway_clamp_assembly(arm_vecs, width=width, plate_thick=plate_thick, gap=gap, ball_dia=ball_dia)
+    
+    R = np.column_stack([u_long, u_lat, u_norm])
+    T = np.eye(4)
+    T[:3, :3] = R
+    T[:3, 3] = p_mid
+    clamp_local.apply_transform(T)
+    
+    return clamp_local

@@ -20,7 +20,7 @@ import numpy as np
 import trimesh
 
 from hand.myohand import MyoHand
-from manufacture.dogbone_clamps import build_oriented_joint_clamp
+from manufacture.dogbone_clamps import build_oriented_joint_clamp, build_oriented_2way_dogbone_clamp
 
 
 def _align_rot(u_vec: np.ndarray) -> np.ndarray:
@@ -84,7 +84,7 @@ def build_conformal_spine_tree_geometry(p_root: np.ndarray,
                                         r_arch_od: float = 0.0030,
                                         r_branch_od: float = 0.0025) -> dict[str, trimesh.Trimesh]:
     """Generate 3D CAD meshes featuring Metacarpal-Plane Aligned CNC Clamps & Standoff Carbon Rods."""
-    from manufacture.dogbone_clamps import build_oriented_joint_clamp
+    from manufacture.dogbone_clamps import build_oriented_joint_clamp, build_oriented_2way_dogbone_clamp
     
     cf_tubes = []
     clamps = []
@@ -219,18 +219,24 @@ def build_conformal_spine_tree_geometry(p_root: np.ndarray,
             clamps.append(s_link)
             
             # Form 2-way dogbone clamp at intermediate phalanx joints (PIP, DIP)
+            # Collinear with local finger link direction and hugging phalanx dorsal surface
             if i < len(chain) - 2:
                 p2 = chain[i+2]
-                clamp_pip, _ = build_oriented_joint_clamp(
-                    p_center=p1, connected_pts=[p0, p2], n_surface=e_dorsal,
-                    width=0.0070, arm_radius=0.0065
+                u_in = (p1 - p0) / np.linalg.norm(p1 - p0)
+                u_out = (p2 - p1) / np.linalg.norm(p2 - p1)
+                p_ball_a = p1 - 0.0075 * u_in
+                p_ball_b = p1 + 0.0075 * u_out
+                clamp_pip = build_oriented_2way_dogbone_clamp(
+                    p_ball_a, p_ball_b, n_surface_hint=e_dorsal, width=0.0070
                 )
                 clamps.append(clamp_pip)
             else:
-                # Terminal pod bracket ball clamp
-                clamp_pod, _ = build_oriented_joint_clamp(
-                    p_center=p1, connected_pts=[p0, p1 + 0.006 * (p1 - p0)], n_surface=e_dorsal,
-                    width=0.0065, arm_radius=0.0055
+                # Terminal pod bracket ball clamp at DIP -> Pod
+                u_in = (p1 - p0) / np.linalg.norm(p1 - p0)
+                p_ball_a = p1 - 0.0075 * u_in
+                p_ball_b = p1
+                clamp_pod = build_oriented_2way_dogbone_clamp(
+                    p_ball_a, p_ball_b, n_surface_hint=e_dorsal, width=0.0065
                 )
                 clamps.append(clamp_pod)
                 
