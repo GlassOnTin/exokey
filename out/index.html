@@ -1,71 +1,371 @@
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="color-scheme" content="light"><title>ExoKey — what is being served</title>
-<style>
- html,body{background:#fff}
- body{font:15px/1.7 -apple-system,Segoe UI,Roboto,sans-serif;max-width:44rem;margin:3rem auto;
-      padding:0 1.5rem;color:#1a1a1a;text-align:left}
- h1{font-size:1.15rem} a{color:#12639b} li{margin:.35rem 0} code{color:#666;font-size:.85em}
- .k{color:#666;font-size:.9em}
-</style>
-<h1>ExoKey</h1>
-<p class="k"><b>The bone.</b> 410 members → 1632 curved sub-beams · <b>7.54 g</b> beam / <b>12.7 g</b>
-   hollow tubes (0.8 mm wall) · every surface ≥ 1.5 mm · no spikes, no loose ends, one piece · 481 µm
-   at the wells against a 500 µm gate · 1021 pillars, 0 props. <b>Grown, not re-pruned</b> — the render
-   takes the topology the objective grew bottom-up; a top-down re-prune instead dead-ends in a heavy
-   uniform 34 g <b>membrane</b> — a local optimum it cannot escape (§8.15k).</p>
-<p class="k"><b>The sensor.</b> Each well is a contactless-Hall flexure — a magnet on a printed
-   <b>TPU dome</b> over a 3-axis Hall. The read-out is modelled (a keypress swings <b>~430 LSB</b>,
-   200× the noise); the <b>mount</b> that holds the magnet + Hall is built <b>entry-first</b> — the
-   finger's slide-in route is a hard constraint, so nothing crosses the path the finger comes in by —
-   and to the <b>measured pad</b>, so the fingertip actually <b>seats</b> in the cup (it used to float
-   above it). Four long fingers share one cluster; whole part <b>40.2 g</b>, one watertight solid.</p>
-<p class="k"><b>The strap.</b> The band is the convex hull of (skin ∪ device), so it rides
-   <b>over</b> the gauntlet it holds down; a <b>watch-lug</b> captures a pin in shear at each anchor
-   foot; one adjustable strap (21 mm range) fits the 5th–95th percentile population.</p>
-<p class="k"><b>The impact.</b> A 50 N knock, not the keypress, is what sizes the structure — it
-   breaks a deflection-only bone (348 MPa vs 70 MPa yield), and it wants a <b>broad, load-sharing</b>
-   skeleton, not the sparse one thickened. Grown with the knock in the loop, co-sized for the gate and
-   the stress, then <b>form-found</b> so its load paths straighten: <b>23.2 g</b>, <b>39% lighter</b>
-   than bolting it on (37.7 g, §8.15k).</p>
-<ul>
-  <li><a href="entry.html">entry.html</a> — <b>the finger-entry route</b>, all five digits (§8.15l).
-      For each finger the <b>channel it slides in by</b> — the swept fingertip — passing <b>clear of
-      the mount and the struts</b>. The cup is built to the <b>measured pad</b>, so the finger both
-      gets in <em>and</em> seats (a render caught it floating ~7&nbsp;mm above its cup; now it rests
-      on the floor, 0.4–0.8&nbsp;mm).</li>
-  <li><a href="harness.html">harness.html</a> — <b>the minimal-copper harness bus</b> (§8.15l qqq-2).
-      The sensors are I²C, so the wires need not run point-to-point: VDD/GND are shared and SDA/SCL are
-      a bus. The harness is the <b>exact minimum Steiner tree over the struts</b> (Dreyfus–Wagner) —
-      <b>275&nbsp;mm</b> against <b>490&nbsp;mm</b> of five independent runs, <b>−44% copper</b>. Toggle
-      the old routing in the legend to see the sharing. (Not quite TSP — the branching tree beats the
-      daisy-chain.)</li>
-  <li><a href="onstrap.html">onstrap.html</a> — <b>the gauntlet on the OUTSIDE of the strap</b>
-      (§8.15j, the current decision). Hand → soft strap (the only thing that touches the hand) →
-      gauntlet. The strap cushions, tethers, and spreads; no hard bit meets the hand, and the gate
-      still holds (481 µm).</li>
-  <li><a href="impact.html">impact.html</a> — <b>the impact-aware gauntlet</b> (§8.15k). Grown WITH a
-      50 N knock in the load set and co-sized for the gate AND the knock: a broad, redundant skeleton
-      (747 struts) that shares the blow, then <b>form-found</b> (relax_nodes) so the load paths
-      straighten — <b>39% lighter</b> than thickening the sparse keypress bone, and no longer jaggy.
-      Each strut at the radius the gate+impact sizing chose; bright = the knock's load path.</li>
-  <li><a href="strap.html">strap.html</a> — <b>the strap, over the gauntlet</b>. The band routed as
-      the convex hull of (skin ∪ device) so it bulges over the structure it pulls down; the gauntlet
-      as solid tubes, and the anchor feet the watch-lugs sit on.</li>
-  <li><a href="typing.html">typing.html</a> — <b>watch it type</b>. The hand posed into every wired
-      press: the character, the direction, the muscle effort, and whether the digit can actually
-      balance the key. Every pose derived from the pad <b>Jacobian</b>, not drawn. The gauntlet is
-      the real one, at the radius the physics chose for each member, with the wall <b>translucent so
-      you can see the marrow cavity</b> — and the sacrificial supports on a toggle.</li>
-</ul>
-<p class="k">Artefacts, newest first:
-   <code>bone.npz</code> (the answer — friendly, curved, hollow),
-   <code>gauntlet.stl</code> (the printable solid; <b>slice it with 2 perimeters and 0% infill</b> —
-   that is what makes the members hollow, and the printer was going to do it anyway),
-   <code>friendly.npz</code> (the ergonomic floor, solid rods),
-   <code>smooth.npz</code> (the spline study),
-   <code>printable.npz</code> (the nozzle floor — the thin one nobody could bear to wear),
-   <code>wire.npz</code> (the welded-wire build), <code>sized.npz</code>, <code>final.npz</code>,
-   <code>pareto.pkl</code>.</p>
-<p class="k">Superseded renders were deleted (all regenerable from <code>scripts/</code>).
-   Invalidated <em>results</em> were archived, not deleted — see <code>out_archive/</code>.</p>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>ExoKey — Wearable Musculoskeletal Keyboard</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --card-bg: #1a1f26;
+      --border: #2d3748;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-hover: #7dd3fc;
+      --tag-bg: #1e293b;
+      --tag-border: #334155;
+      --success: #34d399;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 2.5rem 1.5rem;
+      max-width: 52rem;
+      margin: 0 auto;
+    }
+    header {
+      margin-bottom: 2.5rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1.5rem;
+    }
+    h1 {
+      font-size: 1.85rem;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .badge {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.2rem 0.55rem;
+      border-radius: 9999px;
+      background: var(--tag-bg);
+      border: 1px solid var(--tag-border);
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 1.05rem;
+    }
+    h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #f8fafc;
+      margin: 2rem 0 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+    @media (min-width: 640px) {
+      .grid { grid-template-columns: 1fr 1fr; }
+      .grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+    .card-featured {
+      grid-column: 1 / -1;
+      border-color: #0284c7;
+      background: linear-gradient(180deg, #16202c 0%, #1a1f26 100%);
+    }
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 0.4rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .card-title a {
+      color: #fff;
+      text-decoration: none;
+    }
+    .card-title a:hover {
+      color: var(--accent);
+    }
+    .card-desc {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+    }
+    .card-metrics {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .metric {
+      font-size: 0.78rem;
+      background: var(--tag-bg);
+      border: 1px solid var(--tag-border);
+      padding: 0.2rem 0.5rem;
+      border-radius: 0.375rem;
+      color: #cbd5e1;
+      font-family: monospace;
+    }
+    .metric-pass {
+      color: var(--success);
+      border-color: #065f46;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #fff;
+      background: #0284c7;
+      border: none;
+      border-radius: 0.375rem;
+      padding: 0.5rem 0.85rem;
+      text-decoration: none;
+      transition: background 0.2s;
+      width: fit-content;
+    }
+    .btn:hover {
+      background: #0369a1;
+    }
+    .btn-secondary {
+      background: var(--tag-bg);
+      border: 1px solid var(--tag-border);
+      color: var(--text);
+    }
+    .btn-secondary:hover {
+      background: #334155;
+    }
+    ul.doc-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+    ul.doc-list li {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      padding: 0.85rem 1.1rem;
+      border-radius: 0.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    ul.doc-list li a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    ul.doc-list li a:hover {
+      text-decoration: underline;
+    }
+    .doc-meta {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+    footer {
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>ExoKey <span class="badge">Open Hardware</span></h1>
+    <p class="subtitle">A wearable, open-source musculoskeletal keyboard carrier supporting Svalboard 5-way keywells on an ultra-rigid carbon fiber dorsal tree.</p>
+  </header>
+
+  <main>
+    <h2>Interactive 3D Assembly Models</h2>
+    <div class="grid">
+      
+      <!-- Flagship Model -->
+      <div class="card card-featured">
+        <div>
+          <div class="card-title">
+            <a href="branching_spine_view.html">Central Dorsal Spine & Transverse Wishbone Tree</a>
+            <span class="badge" style="background:#065f46; border-color:#059669; color:#6ee7b7;">Primary Architecture</span>
+          </div>
+          <p class="card-desc">
+            The complete manufactured assembly: ⌀ 8.0 mm carbon spine, 4-way middle knuckle manifold, continuous transverse knuckle arch (Little &harr; Ring &harr; Middle &harr; Index), direct 1st-webspace thumb bridge, and 5-way Svalboard keywells.
+          </p>
+          <div class="card-metrics">
+            <span class="metric metric-pass">Collision: 0 Penetration (Daylight &ge; 1.1 mm)</span>
+            <span class="metric metric-pass">FEM Tip Deflection: &le; 163 &mu;m</span>
+            <span class="metric metric-pass">Safety Factor: &gt; 450&times;</span>
+            <span class="metric">Mass: ~32 g</span>
+          </div>
+        </div>
+        <a href="branching_spine_view.html" class="btn">Launch 3D WebGL Viewer &rarr;</a>
+      </div>
+
+      <!-- Ball Collet Outrigger -->
+      <div class="card">
+        <div>
+          <div class="card-title">
+            <a href="ball_collet_view.html">Modular Ball-Collet Outrigger</a>
+          </div>
+          <p class="card-desc">
+            Independent multi-axis locking spherical ball-collet hubs on straight carbon fiber links (⌀ 5.0 mm OD) tracking conformal phalanx chains (MCP &rarr; PIP &rarr; DIP &rarr; Pod).
+          </p>
+          <div class="card-metrics">
+            <span class="metric">&plusmn; 25&deg; Angular Cone</span>
+            <span class="metric">360&deg; Axial Roll</span>
+            <span class="metric metric-pass">Zero-Slip Clamp</span>
+          </div>
+        </div>
+        <a href="ball_collet_view.html" class="btn btn-secondary">Open 3D Model &rarr;</a>
+      </div>
+
+      <!-- Svalboard Chassis Carrier -->
+      <div class="card">
+        <div>
+          <div class="card-title">
+            <a href="carrier_view.html">Svalboard 5-Way Keywell Chassis</a>
+          </div>
+          <p class="card-desc">
+            Svalboard 5-way discrete directional switch units (Click, Forward, Back, Left, Right) positioned at natural resting fingertip pad coordinates.
+          </p>
+          <div class="card-metrics">
+            <span class="metric">25 Directional Inputs</span>
+            <span class="metric">20 gf Actuation</span>
+            <span class="metric metric-pass">Magnetic Tactile Snap</span>
+          </div>
+        </div>
+        <a href="carrier_view.html" class="btn btn-secondary">Open 3D Model &rarr;</a>
+      </div>
+
+    </div>
+
+    <h2>CNC Machining & G-Code</h2>
+    <ul class="doc-list">
+      <li>
+        <div>
+          <a href="cnc/dogbone_clamp_plates_complete.gcode" download>dogbone_clamp_plates_complete.gcode</a>
+          <div class="doc-meta">Complete 3-Op Master Job for Duet 2 CNC (Peck Drill + Ball Pockets + Profiling with 3D Tabs)</div>
+        </div>
+        <span class="badge">Duet 2 / RRF</span>
+      </li>
+      <li>
+        <div>
+          <a href="cnc/dogbone_op1_drilling.gcode" download>dogbone_op1_drilling.gcode</a>
+          <div class="doc-meta">Op 1: Center Clamping Holes Peck Drilling (Clearance & Tap Drill)</div>
+        </div>
+        <span class="badge">Op 1</span>
+      </li>
+      <li>
+        <div>
+          <a href="cnc/dogbone_op2_ball_pockets.gcode" download>dogbone_op2_ball_pockets.gcode</a>
+          <div class="doc-meta">Op 2: ⌀ 6.0 mm Spherical Ball Pockets (1.30 mm depth with dwell)</div>
+        </div>
+        <span class="badge">Op 2</span>
+      </li>
+      <li>
+        <div>
+          <a href="cnc/dogbone_op3_profiling.gcode" download>dogbone_op3_profiling.gcode</a>
+          <div class="doc-meta">Op 3: Perimeter Profile Milling with 3D Bridge Holding Tabs</div>
+        </div>
+        <span class="badge">Op 3</span>
+      </li>
+    </ul>
+
+    <h2>3D Printable CAD Files (STLs)</h2>
+    <ul class="doc-list">
+      <li>
+        <div>
+          <a href="gauntlet_carrier_svalboard_assembly.stl" download>gauntlet_carrier_svalboard_assembly.stl</a>
+          <div class="doc-meta">Full wearable gauntlet chassis + Svalboard keywell mounting towers (6.2 MB)</div>
+        </div>
+        <span class="badge">Assembly STL</span>
+      </li>
+      <li>
+        <div>
+          <a href="ball_collet_struts.stl" download>ball_collet_struts.stl</a>
+          <div class="doc-meta">Modular multi-link carbon tube split-collar joint clamps (528 KB)</div>
+        </div>
+        <span class="badge">Joints STL</span>
+      </li>
+      <li>
+        <div>
+          <a href="svalboard_keys.stl" download>svalboard_keys.stl</a>
+          <div class="doc-meta">Svalboard 5-way directional keywell clusters (33 KB)</div>
+        </div>
+        <span class="badge">Keys STL</span>
+      </li>
+    </ul>
+
+    <h2>Documentation & Engineering Papers</h2>
+    <ul class="doc-list">
+      <li>
+        <div>
+          <a href="https://github.com/GlassOnTin/exokey/blob/master/VISION.md">VISION.md</a>
+          <div class="doc-meta">Architectural thesis, enabling prior art disclosures, and musculoskeletal mechanics</div>
+        </div>
+        <span class="badge">Vision & IP</span>
+      </li>
+      <li>
+        <div>
+          <a href="https://github.com/GlassOnTin/exokey/blob/master/docs/structural_fem.md">docs/structural_fem.md</a>
+          <div class="doc-meta">3D Space-Frame FEM mathematical formulation, magnetic alignment dynamics, and load cases</div>
+        </div>
+        <span class="badge">FEM Paper</span>
+      </li>
+      <li>
+        <div>
+          <a href="https://github.com/GlassOnTin/exokey/blob/master/BUILD.md">BUILD.md</a>
+          <div class="doc-meta">Fabrication, 3D printing settings, and mechanical assembly instructions</div>
+        </div>
+        <span class="badge">Build Guide</span>
+      </li>
+      <li>
+        <div>
+          <a href="https://github.com/GlassOnTin/exokey/blob/master/BOM.md">BOM.md</a>
+          <div class="doc-meta">Bill of materials (carbon tubes, DIN 71803 ball studs, M2.5 hardware, Svalboard units)</div>
+        </div>
+        <span class="badge">Parts List</span>
+      </li>
+    </ul>
+  </main>
+
+  <footer>
+    <div>ExoKey &bull; Open Source Wearable Musculoskeletal Keyboard</div>
+    <div><a href="https://github.com/GlassOnTin/exokey">GitHub Repository</a></div>
+  </footer>
+
+</body>
+</html>
