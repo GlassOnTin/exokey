@@ -48,9 +48,14 @@ def main():
     tree_skin = cKDTree(np.asarray(V_skin))
 
     if len(V_skin):
+        # Fast visual subsampling for instantaneous browser load times (<1s)
+        F_vis = F_skin[::10]
+        u_idx, new_F = np.unique(F_vis, return_inverse=True)
+        V_vis = V_skin[u_idx]
+        F_vis = new_F.reshape(-1, 3)
         traces.append(go.Mesh3d(
-            x=V_skin[:, 0], y=V_skin[:, 1], z=V_skin[:, 2],
-            i=F_skin[:, 0], j=F_skin[:, 1], k=F_skin[:, 2],
+            x=V_vis[:, 0], y=V_vis[:, 1], z=V_vis[:, 2],
+            i=F_vis[:, 0], j=F_vis[:, 1], k=F_vis[:, 2],
             color="#e2b798",
             opacity=0.62,
             flatshading=False,
