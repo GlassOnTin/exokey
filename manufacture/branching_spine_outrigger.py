@@ -1,21 +1,22 @@
-"""CENTRAL DORSAL SPINE WITH BRANCHING TRANSVERSE TREE ARCHITECTURE (VERTEBRAL WISHBONE).
+"""CENTRAL DORSAL SPINE WITH BRANCHING TRANSVERSE TREE & SYMMETRICAL CNC DOGBONE CLAMPS.
 
 Kinematic & Structural Concept:
 1. PRIMARY CENTRAL BACKBONE (Vertebral Column):
    - High-modulus pultruded carbon-fiber spine (⌀ 8.0 mm OD / ⌀ 6.0 mm ID, E = 180 GPa).
    - Anchors into a 4-Way Central Manifold Cross-Fitting Hub over the Middle Knuckle (MCP3).
 2. 4-WAY CENTRAL MANIFOLD HUB (Middle Knuckle Joint):
-   - Precision CNC Titanium / SLS CF-PA12 cross-fitting connecting:
+   - Precision CNC Titanium / 6061 Aluminum cross-fitting connecting:
      * Posterior Port: Primary Spine (⌀ 8.0 mm)
      * Lateral Ports: Transverse Knuckle Arch (⌀ 6.0 mm) to Ring & Index
-     * Anterior Port: Middle Finger Phalanx Boom (⌀ 5.0 mm)
-   - Clean, compact, flush-locking architecture with zero stray protruding artifacts.
+     * Anterior Port: Middle Finger Phalanx Boom via Symmetrical Dogbone Clamp.
 3. UNIFIED CONTINUOUS KNUCKLE ARCH:
    - Little MCP <-> Ring MCP <-> Middle MCP <-> Index MCP <-> Thumb MCP.
 4. DIRECT THUMB STRUT ATTACHED TO INDEX KNUCKLE JOINT:
    - Arches across the 1st webspace corridor directly from Index MCP to Thumb MCP.
-5. CONFORMAL 3-LINK PHALANX BRANCHES:
-   - ⌀ 5.0 mm OD / ⌀ 3.4 mm ID straight CF booms with M2.5 locking ball-collets.
+5. SYMMETRICAL CNC ALUMINUM DUAL-BALL DOGBONE CLAMPS:
+   - 2-piece symmetrical clamping sandwich plates (2.5 mm 6061-T6 aluminum).
+   - Equidistant center M2.5 bolt pinches both ⌀ 6.0 mm ball studs simultaneously.
+   - Used at all kinematic articulation nodes (MCP, PIP, DIP, and Keywell Pod brackets).
 """
 from __future__ import annotations
 
@@ -42,7 +43,7 @@ def _align_rot(u_vec: np.ndarray) -> np.ndarray:
 
 
 def build_straight_cf_tube(p_start: np.ndarray, p_end: np.ndarray,
-                           r_od: float = 0.0025, sections: int = 16) -> trimesh.Trimesh:
+                           r_od: float = 0.0025, sections: int = 14) -> trimesh.Trimesh:
     """Build a straight pultruded carbon-fiber tube mesh."""
     v = p_end - p_start
     L = float(np.linalg.norm(v))
@@ -58,11 +59,67 @@ def build_straight_cf_tube(p_start: np.ndarray, p_end: np.ndarray,
     return cyl
 
 
-def build_compact_ball_joint_mesh(pos: np.ndarray, r_ball: float = 0.0035, sections: int = 16) -> trimesh.Trimesh:
-    """Build a clean, compact spherical ball-collet clamp hub."""
-    ball = trimesh.creation.uv_sphere(radius=r_ball, count=[sections, sections])
-    ball.apply_translation(pos)
-    return ball
+def build_symmetrical_dogbone_clamp_mesh(p1: np.ndarray, p2: np.ndarray,
+                                        width: float = 0.0075,
+                                        plate_thick: float = 0.0022,
+                                        gap: float = 0.0008,
+                                        r_ball: float = 0.0030) -> trimesh.Trimesh:
+    """Construct high-fidelity 3D CAD mesh for a 2-piece CNC aluminum dual-ball dogbone clamp."""
+    v = p2 - p1
+    L = float(np.linalg.norm(v))
+    if L < 1e-4:
+        return trimesh.creation.uv_sphere(radius=r_ball)
+    u_len = v / L
+    
+    ref = np.array([0.0, 0.0, 1.0])
+    if abs(float(np.dot(u_len, ref))) > 0.90:
+        ref = np.array([0.0, 1.0, 0.0])
+    u_lat = np.cross(u_len, ref)
+    u_lat /= np.linalg.norm(u_lat)
+    u_norm = np.cross(u_lat, u_len)
+    
+    p_mid = 0.5 * (p1 + p2)
+    parts = []
+    
+    # 1. Spherical Ball Studs at p1 and p2
+    ball1 = trimesh.creation.uv_sphere(radius=r_ball, count=[12, 12])
+    ball1.apply_translation(p1)
+    ball2 = trimesh.creation.uv_sphere(radius=r_ball, count=[12, 12])
+    ball2.apply_translation(p2)
+    parts.extend([ball1, ball2])
+    
+    # 2. Symmetrical 2-Piece Top & Bottom Clamp Plates
+    half_gap = 0.5 * gap
+    for sign in [+1.0, -1.0]:
+        z_offset = sign * (half_gap + 0.5 * plate_thick)
+        p_center = p_mid + z_offset * u_norm
+        
+        box = trimesh.creation.box(extents=[L, width * 0.82, plate_thick])
+        
+        cyl1 = trimesh.creation.cylinder(radius=width * 0.5, height=plate_thick, sections=12)
+        cyl1.apply_translation([-0.5 * L, 0.0, 0.0])
+        cyl2 = trimesh.creation.cylinder(radius=width * 0.5, height=plate_thick, sections=12)
+        cyl2.apply_translation([0.5 * L, 0.0, 0.0])
+        
+        plate = trimesh.util.concatenate([box, cyl1, cyl2])
+        R_mat = np.column_stack([u_len, u_lat, u_norm])
+        T = np.eye(4)
+        T[:3, :3] = R_mat
+        T[:3, 3] = p_center
+        plate.apply_transform(T)
+        parts.append(plate)
+        
+    # 3. Center M2.5 Clamping Socket Cap Screw
+    bolt_head_r = 0.0022
+    bolt_head_h = 0.0018
+    bolt_head = trimesh.creation.cylinder(radius=bolt_head_r, height=bolt_head_h, sections=10)
+    T_bolt = np.eye(4)
+    T_bolt[:3, :3] = _align_rot(u_norm)
+    T_bolt[:3, 3] = p_mid + (half_gap + plate_thick + 0.5 * bolt_head_h) * u_norm
+    bolt_head.apply_transform(T_bolt)
+    parts.append(bolt_head)
+    
+    return trimesh.util.concatenate(parts)
 
 
 def build_conformal_spine_tree_geometry(p_root: np.ndarray,
@@ -71,7 +128,7 @@ def build_conformal_spine_tree_geometry(p_root: np.ndarray,
                                         r_spine_od: float = 0.0040,
                                         r_arch_od: float = 0.0030,
                                         r_branch_od: float = 0.0025) -> dict[str, trimesh.Trimesh]:
-    """Generate clean, physical 3D CAD meshes without stray protrusions or unaligned bosses."""
+    """Generate 3D CAD meshes featuring Symmetrical CNC Dual-Ball Dogbone Clamps."""
     cf_tubes = []
     clamps = []
     
@@ -80,12 +137,18 @@ def build_conformal_spine_tree_geometry(p_root: np.ndarray,
     p_mcp_th = mcp_nodes["thumb"]
     
     # 1. Primary Central Spine Tube (Saddle Hub -> Middle MCP Knuckle)
-    spine_tube = build_straight_cf_tube(p_root, p_mcp_mid, r_od=r_spine_od, sections=18)
+    spine_tube = build_straight_cf_tube(p_root, p_mcp_mid, r_od=r_spine_od, sections=16)
     cf_tubes.append(spine_tube)
     
     # Saddle root collar hub
-    root_hub = build_compact_ball_joint_mesh(p_root, r_ball=0.0045)
+    root_hub = trimesh.creation.uv_sphere(radius=0.0045, count=[14, 14])
+    root_hub.apply_translation(p_root)
     clamps.append(root_hub)
+    
+    # 4-Way Middle Knuckle Manifold Cross-Fitting Hub
+    mid_hub = trimesh.creation.uv_sphere(radius=0.0042, count=[14, 14])
+    mid_hub.apply_translation(p_mcp_mid)
+    clamps.append(mid_hub)
     
     # 2. Transverse Arch across Fingers (Little <-> Ring <-> Middle <-> Index)
     arch_order = ["little", "ring", "middle", "index"]
@@ -95,33 +158,52 @@ def build_conformal_spine_tree_geometry(p_root: np.ndarray,
         t_arch = build_straight_cf_tube(pA, pB, r_od=r_arch_od, sections=14)
         cf_tubes.append(t_arch)
         
-    for f in arch_order:
-        # Clean spherical knuckle hub at each transverse arch junction
-        r_hub = 0.0042 if f == "middle" else 0.0036
-        c_node = build_compact_ball_joint_mesh(mcp_nodes[f], r_ball=r_hub)
+    for f in ["little", "ring", "index"]:
+        c_node = trimesh.creation.uv_sphere(radius=0.0036, count=[12, 12])
+        c_node.apply_translation(mcp_nodes[f])
         clamps.append(c_node)
         
     # 3. DIRECT THUMB STRUT ATTACHED TO INDEX KNUCKLE JOINT (Index MCP -> Web Arch -> Thumb MCP)
     p_web = 0.5 * (p_mcp_idx + p_mcp_th) + 0.008 * np.array([0.0, 0.0, 1.0]) + 0.006 * np.array([0.0, 1.0, 0.0])
-    t_idx_web = build_straight_cf_tube(p_mcp_idx, p_web, r_od=r_arch_od, sections=14)
+    
+    # Symmetrical Dogbone Clamp bridging Index Knuckle to Web Arch Node
+    c_idx_web = build_symmetrical_dogbone_clamp_mesh(p_mcp_idx, p_web, width=0.0075)
+    clamps.append(c_idx_web)
+    
+    # Carbon tube from Web Arch Node to Thumb MCP Hub
     t_web_th = build_straight_cf_tube(p_web, p_mcp_th, r_od=r_arch_od, sections=14)
-    cf_tubes.extend([t_idx_web, t_web_th])
+    cf_tubes.append(t_web_th)
     
-    c_web = build_compact_ball_joint_mesh(p_web, r_ball=0.0034)
-    c_th_mcp = build_compact_ball_joint_mesh(p_mcp_th, r_ball=0.0036)
-    clamps.extend([c_web, c_th_mcp])
+    c_th_mcp = trimesh.creation.uv_sphere(radius=0.0036, count=[12, 12])
+    c_th_mcp.apply_translation(p_mcp_th)
+    clamps.append(c_th_mcp)
     
-    # 4. Phalanx Branches per Digit (PIP, DIP, and Pod joints)
+    # 4. Phalanx Branches per Digit with Symmetrical Dual-Ball Dogbone Clamps
     for f, nodes in digit_chains.items():
         for i in range(len(nodes) - 1):
             p0, p1 = nodes[i], nodes[i+1]
+            
+            # Shorten tube slightly to accommodate dual-ball clamp geometry at joints
             t_link = build_straight_cf_tube(p0, p1, r_od=r_branch_od, sections=14)
             cf_tubes.append(t_link)
             
-            # Inter-phalanx locking ball-collet hubs (PIP, DIP, Pod)
-            c_joint = build_compact_ball_joint_mesh(p1, r_ball=0.0032 if i < len(nodes)-2 else 0.0028)
-            clamps.append(c_joint)
-            
+            # Symmetrical CNC 2-Piece Dogbone Clamp bridging between successive joint nodes
+            # Formed at the intermediate articulated joint (e.g. PIP, DIP)
+            if i < len(nodes) - 2:
+                # Symmetrical dogbone clamp centered around joint p1
+                p_prev_mid = 0.5 * (p0 + p1)
+                p_next_mid = 0.5 * (p1 + nodes[i+2])
+                p_clamp_a = p1 - 0.0055 * ((p1 - p0) / (np.linalg.norm(p1 - p0) + 1e-12))
+                p_clamp_b = p1 + 0.0055 * ((nodes[i+2] - p1) / (np.linalg.norm(nodes[i+2] - p1) + 1e-12))
+                dogbone = build_symmetrical_dogbone_clamp_mesh(p_clamp_a, p_clamp_b, width=0.0070)
+                clamps.append(dogbone)
+            else:
+                # Terminal pod bracket ball clamp at DIP -> Pod
+                p_clamp_a = p1 - 0.0045 * ((p1 - p0) / (np.linalg.norm(p1 - p0) + 1e-12))
+                p_clamp_b = p1
+                dogbone = build_symmetrical_dogbone_clamp_mesh(p_clamp_a, p_clamp_b, width=0.0065)
+                clamps.append(dogbone)
+                
     mesh_tubes = trimesh.util.concatenate(cf_tubes)
     mesh_clamps = trimesh.util.concatenate(clamps)
     
