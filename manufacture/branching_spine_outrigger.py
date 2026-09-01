@@ -79,10 +79,11 @@ def build_phalanx_carbon_strut_with_ball_standoff(p_start: np.ndarray, p_end: np
 def build_conformal_spine_tree_geometry(p_root: np.ndarray,
                                         mcp_nodes: dict[str, np.ndarray],
                                         digit_chains: dict[str, list[np.ndarray]],
+                                        e_dorsal: np.ndarray | None = None,
                                         r_spine_od: float = 0.0040,
                                         r_arch_od: float = 0.0030,
                                         r_branch_od: float = 0.0025) -> dict[str, trimesh.Trimesh]:
-    """Generate 3D CAD meshes featuring Tangentially Oriented CNC Clamps & Standoff Carbon Rods."""
+    """Generate 3D CAD meshes featuring Metacarpal-Plane Aligned CNC Clamps & Standoff Carbon Rods."""
     from manufacture.dogbone_clamps import build_oriented_joint_clamp
     
     cf_tubes = []
@@ -94,8 +95,10 @@ def build_conformal_spine_tree_geometry(p_root: np.ndarray,
     p_mcp_lit = mcp_nodes["little"]
     p_mcp_th = mcp_nodes["thumb"]
     
-    # Dorsal surface normal vector
-    e_dorsal = np.array([0.0, 0.0, 1.0])
+    # True anatomical dorsal normal vector (flat across metacarpal bed)
+    if e_dorsal is None:
+        e_dorsal = np.array([-0.968, 0.076, -0.239])
+    e_dorsal = e_dorsal / (np.linalg.norm(e_dorsal) + 1e-12)
     
     # -------------------------------------------------------------------------
     # 1. KNUCKLE CLAMP HUBS (Tangentially Oriented to Dorsal Surface)

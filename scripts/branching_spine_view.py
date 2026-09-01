@@ -132,6 +132,7 @@ def main():
 
     # 6. Build Geometry
     tree_parts = build_conformal_spine_tree_geometry(p_root, mcp_nodes, digit_chains,
+                                                    e_dorsal=e_o,
                                                     r_spine_od=0.0040, r_arch_od=0.0030, r_branch_od=0.0025)
 
     # 7. Audit Collisions using Signed Distance
