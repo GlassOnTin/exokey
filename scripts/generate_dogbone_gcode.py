@@ -29,6 +29,7 @@ import argparse
 import os
 import math
 from dataclasses import dataclass
+import numpy as np
 
 
 @dataclass
@@ -350,8 +351,33 @@ def main():
     with open(combined_path, "w") as f:
         f.write("\n".join(combined_lines))
         
-    print(f"Generated CNC G-code files in {args.outdir}/:")
-    print(f"  • {combined_path} ({len(combined_lines)} lines)")
+    # Export 3D STL models of the machined clamps
+    from manufacture.dogbone_clamps import build_nway_clamp_assembly
+    
+    # 2-way Dogbone STL
+    arm_2way = [np.array([-cfg.arm_radius_mm*1e-3, 0.0, 0.0]), np.array([cfg.arm_radius_mm*1e-3, 0.0, 0.0])]
+    stl_2way = build_nway_clamp_assembly(arm_2way, width=cfg.plate_width_mm*1e-3, plate_thick=cfg.stock_thickness_mm*1e-3, ball_dia=cfg.ball_diameter_mm*1e-3)
+    stl_2way.export(os.path.join(args.outdir, "clamp_2way_dogbone.stl"))
+    
+    # 3-way Tri-Lobe STL
+    arm_3way = [
+        np.array([cfg.arm_radius_mm*1e-3 * math.cos(math.radians(ang)), cfg.arm_radius_mm*1e-3 * math.sin(math.radians(ang)), 0.0])
+        for ang in [0, 120, 240]
+    ]
+    stl_3way = build_nway_clamp_assembly(arm_3way, width=cfg.plate_width_mm*1e-3, plate_thick=cfg.stock_thickness_mm*1e-3, ball_dia=cfg.ball_diameter_mm*1e-3)
+    stl_3way.export(os.path.join(args.outdir, "clamp_3way_trilobe.stl"))
+    
+    # 4-way Quad-Cross STL
+    arm_4way = [
+        np.array([cfg.arm_radius_mm*1e-3 * math.cos(math.radians(ang)), cfg.arm_radius_mm*1e-3 * math.sin(math.radians(ang)), 0.0])
+        for ang in [0, 90, 180, 270]
+    ]
+    stl_4way = build_nway_clamp_assembly(arm_4way, width=cfg.plate_width_mm*1e-3, plate_thick=cfg.stock_thickness_mm*1e-3, ball_dia=cfg.ball_diameter_mm*1e-3)
+    stl_4way.export(os.path.join(args.outdir, "clamp_4way_quadcross.stl"))
+    
+    print(f"Generated CNC G-code and 3D STLs in {args.outdir}/:")
+    print(f"  • G-code: {combined_path} ({len(combined_lines)} lines)")
+    print(f"  • STLs: clamp_2way_dogbone.stl, clamp_3way_trilobe.stl, clamp_4way_quadcross.stl")
     print(f"Total Parts: {len(items)} plates ({len(branch_list)} matching pairs)")
     print(f"Breakdown: {branch_list.count(2)}x 2-Way Dogbones | {branch_list.count(3)}x 3-Way Tri-Lobes | {branch_list.count(4)}x 4-Way Quad-Crosses")
 
