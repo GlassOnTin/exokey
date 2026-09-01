@@ -82,10 +82,10 @@ def build_phalanx_carbon_strut_with_ball_standoff(p_start: np.ndarray, p_end: np
 
 
 def build_symmetrical_dogbone_clamp_mesh(p1: np.ndarray, p2: np.ndarray,
-                                        width: float = 0.0075,
-                                        plate_thick: float = 0.0022,
-                                        gap: float = 0.0008,
-                                        r_ball: float = 0.0030) -> trimesh.Trimesh:
+                                        width: float = 0.0070,
+                                        plate_thick: float = 0.0020,
+                                        gap: float = 0.0006,
+                                        r_ball: float = 0.0024) -> trimesh.Trimesh:
     """Construct high-fidelity 3D CAD mesh for a 2-piece CNC aluminum dual-ball dogbone clamp."""
     v = p2 - p1
     L = float(np.linalg.norm(v))

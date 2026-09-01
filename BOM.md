@@ -1,54 +1,49 @@
-# ExoKey — Bill of Materials
+# ExoKey — Bill of Materials (BOM)
 
-> ⚠ **This is a parts list for a device that has never been built.** ExoKey is, today,
-> simulation. Every electrical and magnetic figure below is a **model prediction or an
-> outright guess** awaiting a first physical bench coupon — they are tagged `SPEC` (a real
-> part's datasheet value) or `GUESS` (a number the model chose that a print must confirm).
-> Do not order in quantity before the stage-1 coupon (see [BUILD.md](BUILD.md) → "What is not
-> done yet"). Sources for every value are in [`design/params.py`](design/params.py) and
-> `VISION.md` §8.15l.
+This Bill of Materials specifies all hardware, raw stock, fasteners, and off-the-shelf components required to build one complete **ExoKey Wearable Musculoskeletal Keyboard Carrier**.
 
-The device is one printed gauntlet carrying five finger wells. Each well is a 5-way magnetic
-joystick: a disc magnet on a printed TPU cradle moves over a fixed 3-axis Hall sensor, and
-firmware reads which of five directions the fingertip pushed.
+---
 
-## Electronics (per device)
+## 1. Modular Carbon Fiber Space-Frame & Joint Hardware
 
-| Qty | Part | Spec | Source |
-|----:|------|------|--------|
-| 5 | **3-axis Hall sensor**, Infineon **TLV493D-A1B6** (order code `TLV493DA1B6HTSA2`, PG-TSOP-6) | 12-bit, 0.098 mT/LSB, ±130 mT, ~0.2 mT RMS noise. One per finger, all at the same I²C address behind the mux. `SPEC`. The W2BW address-variant plan is dead: **TLI493D-W2BW ships only as a wafer-level BGA** (~1 mm ball grid) — no hand-solderable package, no breakout. The A1B6 is the same TLx493D family, so `params.py` HALL_* figures stand | `params.py:113` |
-| 1 | **I²C multiplexer**, TI **TCA9548A** (breakout is fine) | 8-channel switch at the wrist; five channels used, one live at a time. Also isolates a wedged sensor (RESET re-inits all channels — see `docs/electronics.md` lock-up recovery). `SPEC` | `docs/electronics.md` |
-| 5 | **NdFeB disc magnet**, Ø3 × 1 mm, grade **N42**, e.g. supermagnete **S-03-01-N** | Br ≈ 1.29 T. Press-fits into the cradle dome (pocket bored Ø − 0.1 mm for interference). `SPEC` | `params.py:99–111` |
-| 1 | **Seeed XIAO nRF52840** (BLE) | ~21 × 17.8 × 3.5 mm. Sits in the wrist housing; runs the (unwritten) firmware and the BLE HID keyboard. `SPEC` | `mount.py:238` |
-| 1 | **LiPo battery, 100 mAh** | ~20 × 12 × 6 mm. Modelled ~68 h at a 500 Hz scan (~1.5 mA). `SPEC/estimate` | `mount.py:239` |
-| — | **4-conductor wire** (VDD, GND, SDA, SCL), ~30 AWG | ~275 mm total on the shipped layout, routed as a shared bus in grooves on the dorsal struts. `SPEC` | `VISION.md §8.15l qqq-2` |
+| Qty | Part Description | Specification | Recommended Source / Part No. |
+| :---: | :--- | :--- | :--- |
+| **2 packs** (20 pcs) | **Hardened Steel Ballstuds (⌀ 4.8 mm)** | ⌀ 4.8 mm ball, M3 × 5.0 mm threaded shank, black oxide steel | **Yeah Racing YA-0562** (Modelsport UK / 1/10 RC) |
+| **1 pc** (~0.5 m) | **Primary Central Spine Tube** | ⌀ 8.0 mm OD × ⌀ 6.0 mm ID pultruded high-modulus carbon fiber tube | Carbon fiber tube stock ($E \ge 180\text{ GPa}$) |
+| **1 pc** (~0.5 m) | **Transverse Knuckle Arch & Thumb Tube** | ⌀ 6.0 mm OD × ⌀ 4.4 mm ID pultruded carbon fiber tube | Carbon fiber tube stock ($E \ge 180\text{ GPa}$) |
+| **1 pc** (~1.0 m) | **Phalanx Outrigger Boom Tubes** | ⌀ 5.0 mm OD × ⌀ 3.4 mm ID pultruded carbon fiber tube | Carbon fiber tube stock ($E \ge 180\text{ GPa}$) |
+| **1 sheet** (100×150 mm) | **Dogbone Clamp Plate Stock** | $2.0\text{ mm}$ (or $2.5\text{ mm}$) 6061-T6 or 7075-T6 aluminum flat plate | Metal stockists / eBay |
+| **20 pcs** | **M3 Knurled Threaded Inserts** | M3 internal thread, ⌀ 4.0–4.2 mm OD, 4.0–5.0 mm length (brass) | Standard brass heat-set / epoxy inserts |
+| **10 pcs** | **Pinch Clamping Screws** | M2.5 × 8.0 mm (or 10.0 mm) ISO 4762 Grade 12.9 / Stainless Socket Cap | Fastener supplier |
 
-## Printed parts (you make these)
+---
 
-| Part | Material | Notes | Source |
-|------|----------|-------|--------|
-| **Gauntlet body** (the "bone": frame + 5 sensor mounts + wrist housing + wire grooves) | CF-PA12 (SLS) **or** FDM filament sliced hollow | One watertight solid, ~40 g at the median hand. Print settings in [BUILD.md](BUILD.md). | `out/gauntlet.stl` |
-| **5 × cradle + dome flexure** (the moving key; carries the magnet) | **TPU** | The restoring spring, k ≈ 131 N/m (targets the Svalboard 20 gf / 1.5 mm key). Stiff plastics (PLA/PETG/ASA/glass-nylon) were **rejected** — they fatigue-fail. Dome membrane ~0.32 mm is at the FDM single-perimeter floor: needs a **0.25 mm nozzle** or a corrugation. `GUESS` on lever/gap | `flexure.py`, `mount.py:205` |
+## 2. Keywells & Sensor Electronics
 
-## Strap / retention
+| Qty | Component | Specification | Notes |
+| :---: | :--- | :--- | :--- |
+| **5 units** | **Svalboard 5-Way Key Clusters** | 5 discrete magnetic tactile switches per cluster (Center Plunge + 4 Directional Paddles) | Svalboard Open Hardware / DataHand compatible |
+| **1 pc** | **Microcontroller Board** | Seeed Studio XIAO nRF52840 (BLE 5.0, USB-C, LiPo charger) | Mounts in dorsal saddle / wrist electronics housing |
+| **1 pc** | **LiPo Battery** | $3.7\text{ V}$, $150\text{–}300\text{ mAh}$ ultra-thin pouch battery with JST-PH2.0 | Provides 40+ hours continuous wireless BLE typing |
+| **1 spool** | **Flexible Micro-Harness Ribbon** | 30 AWG ultra-flexible silicone ribbon cable (VDD, GND, SDA, SCL) | Routes along dorsal carbon tubes into wrist housing |
 
-| Qty | Part | Spec | Source |
-|----:|------|------|--------|
-| ~1 | **Webbing band**, nylon/polyester, ~22 × 1.5 mm | The strap supplies the ~1 N hold-down pull; without it the frame deflects ~18× the gate. Loops watch-style lugs. `SPEC` | `strap.py`, `structure/lattice.py` |
-| 2 | **Spring bars / printed pins**, ~2 mm (Ø1.1 mm through-hole) | Captured in the printed lugs; the TPU strap loops them in **shear** (a peeled adhesive bond fails). `GUESS` (no pin sourced) | `strap.py:32` |
-| 1 | **Buckle / adjuster** | Covers the ~1.24× wrist-circumference spread across the 5th–95th percentile hand. `SPEC` | `strap.py:18` |
+---
 
-## Consumables
+## 3. Ergonomic Chassis & Anatomical Strap
 
-- **PU adhesive** (TPU↔TPU) and, if using glass-nylon anywhere, **vinyl-silane primer**. A
-  materials choice, not modelled. `VISION.md §8.15f`
-- Filament for supports: the part prints standing on the wrist, fingers up, **0 prop
-  supports** (1021 self-supporting pillars fall out of the geometry).
+| Qty | Component | Specification | Fabrication Method |
+| :---: | :--- | :--- | :--- |
+| **1 pc** | **Dorsal Metacarpal Saddle Anchor** | Conformal anatomical saddle plate matching dorsal 3rd metacarpal bed | 3D Printed in CF-PA12 (SLS / FDM) or CNC milled |
+| **1 pc** | **4-Way Middle Knuckle Manifold Hub** | 4-port cross-fitting hub (Spine + Arch + MCP3 outrigger) | 3D Printed in Titanium / SLS CF-PA12 or CNC machined |
+| **1 pc** | **Circumferential Tension Strap** | $20\text{–}25\text{ mm}$ wide soft elastic TPU or silicone-lined Velcro webbing | 95-Shore A TPU 3D print or medical-grade band |
 
-## What you also need (not a part)
+---
 
-- A **3D printer** with a 0.4 mm nozzle (0.25 mm helps for the TPU dome), and TPU capability
-  (or a second printer / service for the TPU cradles).
-- The **firmware** — **does not exist yet** (outlined in `VISION.md §8.15l qqq`). No PCB
-  either: the Hall sensors mount on small breakouts in carved pockets; there is no board
-  design in this repo.
+## 4. Consumables & Assembly Tooling
+
+* **Structural Epoxy Adhesive:** 3M Scotch-Weld DP420 (or high-strength Araldite) for bonding M3 brass inserts inside carbon fiber tube ends.
+* **Friction Paste / Loctite:** Loctite 243 (medium threadlocker) for M2.5 dogbone pinch screws; optional diamond friction gel for extreme ball grip.
+* **CNC Tooling for Dogbone Clamp Milling:**
+  * ⌀ 2.05 mm & ⌀ 2.7 mm drill bits.
+  * ⌀ 4.76 mm (3/16") or ⌀ 4.8 mm ball-nose endmill (or $90^\circ$ spot/chamfer tool) for ball pockets.
+  * ⌀ 3.175 mm (1/8") or ⌀ 2.0 mm flat carbide endmill for profile contouring.

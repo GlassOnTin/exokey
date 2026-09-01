@@ -26,14 +26,14 @@ from dataclasses import dataclass
 @dataclass
 class CNCConfig:
     # Stock & Geometry
-    stock_thickness_mm: float = 2.5
-    ball_diameter_mm: float = 6.0
-    ball_spacing_mm: float = 16.0
-    plate_width_mm: float = 8.0
-    pocket_depth_mm: float = 1.3
+    stock_thickness_mm: float = 2.0
+    ball_diameter_mm: float = 4.8
+    ball_spacing_mm: float = 15.0
+    plate_width_mm: float = 7.0
+    pocket_depth_mm: float = 1.10
     num_pairs: int = 4
-    spacing_x_mm: float = 28.0
-    spacing_y_mm: float = 14.0
+    spacing_x_mm: float = 26.0
+    spacing_y_mm: float = 13.0
     
     # Screw / Drill Settings
     screw_type: str = "M2.5"  # M2, M2.5, M3
@@ -42,7 +42,7 @@ class CNCConfig:
     
     # Tooling
     tool_drill_dia: float = 2.5
-    tool_ball_dia: float = 6.0
+    tool_ball_dia: float = 4.8
     tool_mill_dia: float = 3.175     # 1/8" flat endmill for profile
     
     # Speeds & Feeds (Aluminum 6061)
@@ -263,8 +263,9 @@ def generate_op3_profiling(config: CNCConfig, parts: list[tuple[float, float, st
 def main():
     parser = argparse.ArgumentParser(description="Duet 2 CNC G-code Generator for Dual-Ball Dogbone Clamps")
     parser.add_argument("--pairs", type=int, default=4, help="Number of clamp plate pairs to machine (default: 4)")
-    parser.add_argument("--spacing", type=float, default=16.0, help="Ball pocket center-to-center distance in mm (default: 16.0)")
-    parser.add_argument("--thick", type=float, default=2.5, help="Stock aluminum sheet thickness in mm (default: 2.5)")
+    parser.add_argument("--ball-dia", type=float, default=4.8, help="Ball stud diameter in mm (default: 4.8 for Yeah Racing YA-0562)")
+    parser.add_argument("--spacing", type=float, default=15.0, help="Ball pocket center-to-center distance in mm (default: 15.0)")
+    parser.add_argument("--thick", type=float, default=2.0, help="Stock aluminum sheet thickness in mm (default: 2.0)")
     parser.add_argument("--screw", type=str, default="M2.5", choices=["M2", "M2.5", "M3"], help="Center clamp screw size (default: M2.5)")
     parser.add_argument("--outdir", type=str, default="out/cnc", help="Output directory for G-code files")
     args = parser.parse_args()
@@ -273,8 +274,12 @@ def main():
     
     cfg = CNCConfig(
         num_pairs=args.pairs,
+        ball_diameter_mm=args.ball_dia,
         ball_spacing_mm=args.spacing,
         stock_thickness_mm=args.thick,
+        pocket_depth_mm=1.10 if args.ball_dia <= 5.0 else 1.30,
+        plate_width_mm=7.0 if args.ball_dia <= 5.0 else 8.0,
+        tool_ball_dia=args.ball_dia,
         screw_type=args.screw
     )
     
@@ -289,7 +294,7 @@ def main():
     
     combined_lines.append("M5 ; Stop Spindle")
     combined_lines.append(f"G0 Z{cfg.z_safe_mm * 4:.2f} ; High Retract")
-    combined_lines.append("M0 \"Tool Change: Insert ⌀ 6.0mm Ball Endmill / Chamfer Tool & Re-Zero Z\" ; Pause for DWC")
+    combined_lines.append("M0 \"Tool Change: Insert ⌀ 4.8mm Ball Endmill / 90-deg Chamfer Tool & Re-Zero Z\" ; Pause for DWC")
     combined_lines.append(f"M3 S{cfg.spindle_rpm} ; Spindle ON")
     combined_lines.append("G4 P1500")
     
