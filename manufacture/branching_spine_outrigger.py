@@ -13,10 +13,11 @@ Kinematic & Structural Concept:
    - Little MCP <-> Ring MCP <-> Middle MCP <-> Index MCP <-> Thumb MCP.
 4. DIRECT THUMB STRUT ATTACHED TO INDEX KNUCKLE JOINT:
    - Arches across the 1st webspace corridor directly from Index MCP to Thumb MCP.
-5. SYMMETRICAL CNC ALUMINUM DUAL-BALL DOGBONE CLAMPS:
+5. SYMMETRICAL CNC ALUMINUM DUAL-BALL DOGBONE CLAMPS & STANDOFF RODS:
+   - Carbon fiber rods stop short at each end (4.5 - 5.5 mm standoff) to accommodate
+     metal ball-stud threaded shanks and hex collar transitions.
    - 2-piece symmetrical clamping sandwich plates (2.5 mm 6061-T6 aluminum).
    - Equidistant center M2.5 bolt pinches both ⌀ 6.0 mm ball studs simultaneously.
-   - Used at all kinematic articulation nodes (MCP, PIP, DIP, and Keywell Pod brackets).
 """
 from __future__ import annotations
 
@@ -57,6 +58,27 @@ def build_straight_cf_tube(p_start: np.ndarray, p_end: np.ndarray,
     T[:3, 3] = 0.5 * (p_start + p_end)
     cyl.apply_transform(T)
     return cyl
+
+
+def build_phalanx_carbon_strut_with_ball_standoff(p_start: np.ndarray, p_end: np.ndarray,
+                                                  r_cf_od: float = 0.0025,
+                                                  r_shank: float = 0.0017,
+                                                  standoff: float = 0.0050) -> tuple[trimesh.Trimesh, trimesh.Trimesh]:
+    """Build a carbon fiber tube that stops short for ball-studs, plus metallic shanks."""
+    v = p_end - p_start
+    L = float(np.linalg.norm(v))
+    u = v / (L + 1e-12)
+    
+    actual_standoff = min(standoff, max(0.0015, 0.4 * L))
+    p_tube_start = p_start + actual_standoff * u
+    p_tube_end = p_end - actual_standoff * u
+    
+    cf_tube = build_straight_cf_tube(p_tube_start, p_tube_end, r_od=r_cf_od, sections=14)
+    shank_start = build_straight_cf_tube(p_start, p_tube_start, r_od=r_shank, sections=10)
+    shank_end = build_straight_cf_tube(p_tube_end, p_end, r_od=r_shank, sections=10)
+    shanks = trimesh.util.concatenate([shank_start, shank_end])
+    
+    return cf_tube, shanks
 
 
 def build_symmetrical_dogbone_clamp_mesh(p1: np.ndarray, p2: np.ndarray,
@@ -128,7 +150,7 @@ def build_conformal_spine_tree_geometry(p_root: np.ndarray,
                                         r_spine_od: float = 0.0040,
                                         r_arch_od: float = 0.0030,
                                         r_branch_od: float = 0.0025) -> dict[str, trimesh.Trimesh]:
-    """Generate 3D CAD meshes featuring Symmetrical CNC Dual-Ball Dogbone Clamps."""
+    """Generate 3D CAD meshes featuring Symmetrical CNC Dual-Ball Dogbone Clamps & Standoff Carbon Rods."""
     cf_tubes = []
     clamps = []
     
@@ -137,8 +159,12 @@ def build_conformal_spine_tree_geometry(p_root: np.ndarray,
     p_mcp_th = mcp_nodes["thumb"]
     
     # 1. Primary Central Spine Tube (Saddle Hub -> Middle MCP Knuckle)
-    spine_tube = build_straight_cf_tube(p_root, p_mcp_mid, r_od=r_spine_od, sections=16)
-    cf_tubes.append(spine_tube)
+    # Tube stops short by 4.5mm at each hub collar
+    t_spine, s_spine = build_phalanx_carbon_strut_with_ball_standoff(
+        p_root, p_mcp_mid, r_cf_od=r_spine_od, r_shank=r_spine_od * 0.75, standoff=0.0045
+    )
+    cf_tubes.append(t_spine)
+    clamps.append(s_spine)
     
     # Saddle root collar hub
     root_hub = trimesh.creation.uv_sphere(radius=0.0045, count=[14, 14])
@@ -155,8 +181,11 @@ def build_conformal_spine_tree_geometry(p_root: np.ndarray,
     for i in range(len(arch_order) - 1):
         pA = mcp_nodes[arch_order[i]]
         pB = mcp_nodes[arch_order[i+1]]
-        t_arch = build_straight_cf_tube(pA, pB, r_od=r_arch_od, sections=14)
+        t_arch, s_arch = build_phalanx_carbon_strut_with_ball_standoff(
+            pA, pB, r_cf_od=r_arch_od, r_shank=r_arch_od * 0.75, standoff=0.0035
+        )
         cf_tubes.append(t_arch)
+        clamps.append(s_arch)
         
     for f in ["little", "ring", "index"]:
         c_node = trimesh.creation.uv_sphere(radius=0.0036, count=[12, 12])
@@ -181,21 +210,26 @@ def build_conformal_spine_tree_geometry(p_root: np.ndarray,
     dogbone_th = build_symmetrical_dogbone_clamp_mesh(p_clamp_th_a, p_clamp_th_b, width=0.0075)
     clamps.append(dogbone_th)
     
-    # Straight Carbon Fiber Bridge Tube across 1st Webspace
-    t_web = build_straight_cf_tube(p_clamp_idx_b, p_clamp_th_a, r_od=r_arch_od, sections=14)
+    # Straight Carbon Fiber Bridge Tube across 1st Webspace (stopping short for ball studs)
+    t_web, s_web = build_phalanx_carbon_strut_with_ball_standoff(
+        p_clamp_idx_b, p_clamp_th_a, r_cf_od=r_arch_od, r_shank=r_arch_od * 0.75, standoff=0.0040
+    )
     cf_tubes.append(t_web)
+    clamps.append(s_web)
     
-    # 4. Phalanx Branches per Digit with Symmetrical Dual-Ball Dogbone Clamps
+    # 4. Phalanx Branches per Digit with Symmetrical Dual-Ball Dogbone Clamps & Standoff Tubes
     for f, nodes in digit_chains.items():
         for i in range(len(nodes) - 1):
             p0, p1 = nodes[i], nodes[i+1]
             
-            # Shorten tube slightly to accommodate dual-ball clamp geometry at joints
-            t_link = build_straight_cf_tube(p0, p1, r_od=r_branch_od, sections=14)
+            # Carbon tube stops short by 5.0 mm at each end for ball-stud shank/collar
+            t_link, s_link = build_phalanx_carbon_strut_with_ball_standoff(
+                p0, p1, r_cf_od=r_branch_od, r_shank=0.0017, standoff=0.0050
+            )
             cf_tubes.append(t_link)
+            clamps.append(s_link)
             
             # Symmetrical CNC 2-Piece Dogbone Clamp bridging between successive joint nodes
-            # Formed at the intermediate articulated joint (e.g. PIP, DIP)
             if i < len(nodes) - 2:
                 # Symmetrical dogbone clamp centered around joint p1
                 p_prev_mid = 0.5 * (p0 + p1)
