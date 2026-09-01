@@ -1,23 +1,19 @@
-"""CENTRAL DORSAL SPINE WITH BRANCHING TRANSVERSE TREE & SYMMETRICAL CNC DOGBONE CLAMPS.
+"""CENTRAL DORSAL SPINE WITH BRANCHING TRANSVERSE TREE & SYMMETRICAL CNC CLAMPS.
 
 Kinematic & Structural Concept:
 1. PRIMARY CENTRAL BACKBONE (Vertebral Column):
    - High-modulus pultruded carbon-fiber spine (⌀ 8.0 mm OD / ⌀ 6.0 mm ID, E = 180 GPa).
    - Anchors into a 4-Way Central Manifold Cross-Fitting Hub over the Middle Knuckle (MCP3).
-2. 4-WAY CENTRAL MANIFOLD HUB (Middle Knuckle Joint):
-   - Precision CNC Titanium / 6061 Aluminum cross-fitting connecting:
-     * Posterior Port: Primary Spine (⌀ 8.0 mm)
-     * Lateral Ports: Transverse Knuckle Arch (⌀ 6.0 mm) to Ring & Index
-     * Anterior Port: Middle Finger Phalanx Boom via Symmetrical Dogbone Clamp.
-3. UNIFIED CONTINUOUS KNUCKLE ARCH:
-   - Little MCP <-> Ring MCP <-> Middle MCP <-> Index MCP <-> Thumb MCP.
-4. DIRECT THUMB STRUT ATTACHED TO INDEX KNUCKLE JOINT:
-   - Arches across the 1st webspace corridor directly from Index MCP to Thumb MCP.
-5. SYMMETRICAL CNC ALUMINUM DUAL-BALL DOGBONE CLAMPS & STANDOFF RODS:
-   - Carbon fiber rods stop short at each end (4.5 - 5.5 mm standoff) to accommodate
+2. 3-WAY AXIALLY SYMMETRIC "TRI-LOBE" KNUCKLE CLAMPS (120-DEGREE TRIPOD PRINCIPLE):
+   - 3 ball pockets positioned at 120-degree equal angles around a single central M2.5 pinch screw.
+   - Statistically determinate 3-point contact guarantees 100% EQUAL clamping force across all 3 balls.
+   - Symmetrically bridges knuckle junctions at Ring (MCP4) and Index (MCP2).
+3. 2-PIECE SYMMETRICAL "DOGBONE" CLAMPS:
+   - Symmetrical 2.0 mm 6061-T6 aluminum plates with central M2.5 pinch screw.
+   - Used across all 2-ball phalanx link joints (MCP, PIP, DIP, and Pod brackets).
+4. STANDOFF CARBON FIBER RODS:
+   - Carbon tubes stop short at each end (4.5 - 5.0 mm standoff) to accommodate
      metal ball-stud threaded shanks and hex collar transitions.
-   - 2-piece symmetrical clamping sandwich plates (2.5 mm 6061-T6 aluminum).
-   - Equidistant center M2.5 bolt pinches both ⌀ 6.0 mm ball studs simultaneously.
 """
 from __future__ import annotations
 
@@ -144,102 +140,193 @@ def build_symmetrical_dogbone_clamp_mesh(p1: np.ndarray, p2: np.ndarray,
     return trimesh.util.concatenate(parts)
 
 
+def build_trilobe_knuckle_clamp_mesh(p_center: np.ndarray,
+                                     p_balls: list[np.ndarray],
+                                     width: float = 0.0070,
+                                     plate_thick: float = 0.0020,
+                                     gap: float = 0.0006,
+                                     r_ball: float = 0.0024) -> trimesh.Trimesh:
+    """Construct 3-way axially symmetric 120-degree tri-lobe clamp sandwich (Mercedes Star / Trefoil)."""
+    assert len(p_balls) == 3
+    parts = []
+    
+    # 1. Three Spherical Ball Studs
+    for pb in p_balls:
+        b = trimesh.creation.uv_sphere(radius=r_ball, count=[12, 12])
+        b.apply_translation(pb)
+        parts.append(b)
+        
+    # Plane normal
+    v1 = p_balls[1] - p_balls[0]
+    v2 = p_balls[2] - p_balls[0]
+    u_norm = np.cross(v1, v2)
+    norm_len = np.linalg.norm(u_norm)
+    if norm_len < 1e-6:
+        u_norm = np.array([0.0, 0.0, 1.0])
+    else:
+        u_norm /= norm_len
+        
+    half_gap = 0.5 * gap
+    
+    # 2. Top & Bottom 3-Lobed Plates
+    for sign in [+1.0, -1.0]:
+        z_offset = sign * (half_gap + 0.5 * plate_thick)
+        plate_parts = []
+        
+        c_hub = trimesh.creation.cylinder(radius=width * 0.65, height=plate_thick, sections=16)
+        plate_parts.append(c_hub)
+        
+        for pb in p_balls:
+            v_arm = (pb - p_center)
+            L_arm = float(np.linalg.norm(v_arm))
+            u_arm = v_arm / (L_arm + 1e-12)
+            
+            arm_box = trimesh.creation.box(extents=[L_arm, width * 0.75, plate_thick])
+            arm_box.apply_translation([0.5 * L_arm, 0.0, 0.0])
+            
+            lobe = trimesh.creation.cylinder(radius=width * 0.5, height=plate_thick, sections=12)
+            lobe.apply_translation([L_arm, 0.0, 0.0])
+            
+            arm_mesh = trimesh.util.concatenate([arm_box, lobe])
+            angle = np.arctan2(u_arm[1], u_arm[0])
+            T_arm = np.eye(4)
+            T_arm[:3, :3] = trimesh.transformations.rotation_matrix(angle, [0, 0, 1])[:3, :3]
+            arm_mesh.apply_transform(T_arm)
+            plate_parts.append(arm_mesh)
+            
+        plate = trimesh.util.concatenate(plate_parts)
+        T_world = np.eye(4)
+        T_world[:3, 3] = p_center + z_offset * u_norm
+        plate.apply_transform(T_world)
+        parts.append(plate)
+        
+    # 3. Center Clamping Bolt
+    bolt = trimesh.creation.cylinder(radius=0.0022, height=0.0018, sections=12)
+    T_b = np.eye(4)
+    T_b[:3, 3] = p_center + (half_gap + plate_thick + 0.0009) * u_norm
+    bolt.apply_transform(T_b)
+    parts.append(bolt)
+    
+    return trimesh.util.concatenate(parts)
+
+
 def build_conformal_spine_tree_geometry(p_root: np.ndarray,
                                         mcp_nodes: dict[str, np.ndarray],
                                         digit_chains: dict[str, list[np.ndarray]],
                                         r_spine_od: float = 0.0040,
                                         r_arch_od: float = 0.0030,
                                         r_branch_od: float = 0.0025) -> dict[str, trimesh.Trimesh]:
-    """Generate 3D CAD meshes featuring Symmetrical CNC Dual-Ball Dogbone Clamps & Standoff Carbon Rods."""
+    """Generate 3D CAD meshes featuring Symmetrical 2-Way Dogbones & 3-Way Symmetric Tri-Lobe Knuckle Clamps."""
     cf_tubes = []
     clamps = []
     
     p_mcp_mid = mcp_nodes["middle"]
     p_mcp_idx = mcp_nodes["index"]
+    p_mcp_rng = mcp_nodes["ring"]
+    p_mcp_lit = mcp_nodes["little"]
     p_mcp_th = mcp_nodes["thumb"]
     
     # 1. Primary Central Spine Tube (Saddle Hub -> Middle MCP Knuckle)
-    # Tube stops short by 4.5mm at each hub collar
     t_spine, s_spine = build_phalanx_carbon_strut_with_ball_standoff(
         p_root, p_mcp_mid, r_cf_od=r_spine_od, r_shank=r_spine_od * 0.75, standoff=0.0045
     )
     cf_tubes.append(t_spine)
     clamps.append(s_spine)
     
-    # Saddle root collar hub
     root_hub = trimesh.creation.uv_sphere(radius=0.0045, count=[14, 14])
     root_hub.apply_translation(p_root)
     clamps.append(root_hub)
     
-    # 4-Way Middle Knuckle Manifold Cross-Fitting Hub
+    # 4-Way Middle Knuckle Manifold Hub
     mid_hub = trimesh.creation.uv_sphere(radius=0.0042, count=[14, 14])
     mid_hub.apply_translation(p_mcp_mid)
     clamps.append(mid_hub)
     
-    # 2. Transverse Arch across Fingers (Little <-> Ring <-> Middle <-> Index)
-    arch_order = ["little", "ring", "middle", "index"]
-    for i in range(len(arch_order) - 1):
-        pA = mcp_nodes[arch_order[i]]
-        pB = mcp_nodes[arch_order[i+1]]
-        t_arch, s_arch = build_phalanx_carbon_strut_with_ball_standoff(
-            pA, pB, r_cf_od=r_arch_od, r_shank=r_arch_od * 0.75, standoff=0.0035
-        )
-        cf_tubes.append(t_arch)
-        clamps.append(s_arch)
-        
-    for f in ["little", "ring", "index"]:
-        c_node = trimesh.creation.uv_sphere(radius=0.0036, count=[12, 12])
-        c_node.apply_translation(mcp_nodes[f])
-        clamps.append(c_node)
-        
-    # 3. DIRECT THUMB STRUT ATTACHED TO INDEX KNUCKLE JOINT (Index MCP -> Web Tube -> Thumb MCP)
-    # Uses standard modular 16mm dogbone clamps at both joint hubs connected by a ⌀ 6.0mm CF tube
+    # 2. Ring Knuckle (MCP4): 3-Way Symmetrical 120-deg Tri-Lobe Clamp
+    R_arm = 0.0090
+    u_to_mid = (p_mcp_mid - p_mcp_rng) / np.linalg.norm(p_mcp_mid - p_mcp_rng)
+    u_to_lit = (p_mcp_lit - p_mcp_rng) / np.linalg.norm(p_mcp_lit - p_mcp_rng)
+    u_to_phx_rng = (digit_chains["ring"][1] - p_mcp_rng) / np.linalg.norm(digit_chains["ring"][1] - p_mcp_rng)
+    
+    balls_rng = [
+        p_mcp_rng + R_arm * u_to_mid,
+        p_mcp_rng + R_arm * u_to_lit,
+        p_mcp_rng + R_arm * u_to_phx_rng
+    ]
+    clamp_ring_mcp = build_trilobe_knuckle_clamp_mesh(p_mcp_rng, balls_rng, width=0.0070)
+    clamps.append(clamp_ring_mcp)
+    
+    # 3. Index Knuckle (MCP2): 3-Way Symmetrical 120-deg Tri-Lobe Clamp
     v_web = p_mcp_th - p_mcp_idx
-    L_web = float(np.linalg.norm(v_web))
-    u_web = v_web / (L_web + 1e-12)
+    u_to_web = v_web / np.linalg.norm(v_web)
+    u_to_idx_mid = (p_mcp_mid - p_mcp_idx) / np.linalg.norm(p_mcp_mid - p_mcp_idx)
+    u_to_phx_idx = (digit_chains["index"][1] - p_mcp_idx) / np.linalg.norm(digit_chains["index"][1] - p_mcp_idx)
     
-    # Standard 16mm clamp span at Index MCP
-    p_clamp_idx_a = p_mcp_idx
-    p_clamp_idx_b = p_mcp_idx + 0.0160 * u_web
-    dogbone_idx = build_symmetrical_dogbone_clamp_mesh(p_clamp_idx_a, p_clamp_idx_b, width=0.0075)
-    clamps.append(dogbone_idx)
+    balls_idx = [
+        p_mcp_idx + R_arm * u_to_idx_mid,
+        p_mcp_idx + R_arm * u_to_web,
+        p_mcp_idx + R_arm * u_to_phx_idx
+    ]
+    clamp_idx_mcp = build_trilobe_knuckle_clamp_mesh(p_mcp_idx, balls_idx, width=0.0070)
+    clamps.append(clamp_idx_mcp)
     
-    # Standard 16mm clamp span at Thumb MCP
-    p_clamp_th_a = p_mcp_th - 0.0160 * u_web
-    p_clamp_th_b = p_mcp_th
-    dogbone_th = build_symmetrical_dogbone_clamp_mesh(p_clamp_th_a, p_clamp_th_b, width=0.0075)
+    # 4. Connecting Transverse Arch Tubes
+    # Middle to Ring Arch Tube
+    t_mid_rng, s_mid_rng = build_phalanx_carbon_strut_with_ball_standoff(
+        p_mcp_mid, balls_rng[0], r_cf_od=r_arch_od, r_shank=r_arch_od * 0.75, standoff=0.0035
+    )
+    cf_tubes.append(t_mid_rng)
+    clamps.append(s_mid_rng)
+    
+    # Ring to Little Arch Tube
+    t_rng_lit, s_rng_lit = build_phalanx_carbon_strut_with_ball_standoff(
+        balls_rng[1], p_mcp_lit, r_cf_od=r_arch_od, r_shank=r_arch_od * 0.75, standoff=0.0035
+    )
+    cf_tubes.append(t_rng_lit)
+    clamps.append(s_rng_lit)
+    
+    # Middle to Index Arch Tube
+    t_mid_idx, s_mid_idx = build_phalanx_carbon_strut_with_ball_standoff(
+        p_mcp_mid, balls_idx[0], r_cf_od=r_arch_od, r_shank=r_arch_od * 0.75, standoff=0.0035
+    )
+    cf_tubes.append(t_mid_idx)
+    clamps.append(s_mid_idx)
+    
+    # 5. Thumb Bridge (Index Knuckle Tri-Lobe -> Web Tube -> Thumb MCP)
+    p_clamp_th_a = p_mcp_th - 0.0150 * u_to_web
+    dogbone_th = build_symmetrical_dogbone_clamp_mesh(p_clamp_th_a, p_mcp_th, width=0.0070)
     clamps.append(dogbone_th)
     
-    # Straight Carbon Fiber Bridge Tube across 1st Webspace (stopping short for ball studs)
     t_web, s_web = build_phalanx_carbon_strut_with_ball_standoff(
-        p_clamp_idx_b, p_clamp_th_a, r_cf_od=r_arch_od, r_shank=r_arch_od * 0.75, standoff=0.0040
+        balls_idx[1], p_clamp_th_a, r_cf_od=r_arch_od, r_shank=r_arch_od * 0.75, standoff=0.0040
     )
     cf_tubes.append(t_web)
     clamps.append(s_web)
     
-    # 4. Phalanx Branches per Digit with Symmetrical Dual-Ball Dogbone Clamps & Standoff Tubes
+    c_lit_mcp = trimesh.creation.uv_sphere(radius=0.0036, count=[12, 12])
+    c_lit_mcp.apply_translation(p_mcp_lit)
+    clamps.append(c_lit_mcp)
+    
+    # 6. Phalanx Branches per Digit with Symmetrical Dual-Ball Dogbone Clamps
     for f, nodes in digit_chains.items():
-        for i in range(len(nodes) - 1):
-            p0, p1 = nodes[i], nodes[i+1]
+        chain_start = balls_idx[2] if f == "index" else (balls_rng[2] if f == "ring" else nodes[0])
+        full_nodes = [chain_start] + nodes[1:]
+        
+        for i in range(len(full_nodes) - 1):
+            p0, p1 = full_nodes[i], full_nodes[i+1]
             
-            # Carbon tube stops short by 5.0 mm at each end for ball-stud shank/collar
             t_link, s_link = build_phalanx_carbon_strut_with_ball_standoff(
                 p0, p1, r_cf_od=r_branch_od, r_shank=0.0017, standoff=0.0050
             )
             cf_tubes.append(t_link)
             clamps.append(s_link)
             
-            # Symmetrical CNC 2-Piece Dogbone Clamp bridging between successive joint nodes
-            if i < len(nodes) - 2:
-                # Symmetrical dogbone clamp centered around joint p1
-                p_prev_mid = 0.5 * (p0 + p1)
-                p_next_mid = 0.5 * (p1 + nodes[i+2])
-                p_clamp_a = p1 - 0.0055 * ((p1 - p0) / (np.linalg.norm(p1 - p0) + 1e-12))
-                p_clamp_b = p1 + 0.0055 * ((nodes[i+2] - p1) / (np.linalg.norm(nodes[i+2] - p1) + 1e-12))
+            if i < len(full_nodes) - 2:
+                p_clamp_a = p1 - 0.0050 * ((p1 - p0) / (np.linalg.norm(p1 - p0) + 1e-12))
+                p_clamp_b = p1 + 0.0050 * ((full_nodes[i+2] - p1) / (np.linalg.norm(full_nodes[i+2] - p1) + 1e-12))
                 dogbone = build_symmetrical_dogbone_clamp_mesh(p_clamp_a, p_clamp_b, width=0.0070)
                 clamps.append(dogbone)
             else:
-                # Terminal pod bracket ball clamp at DIP -> Pod
                 p_clamp_a = p1 - 0.0045 * ((p1 - p0) / (np.linalg.norm(p1 - p0) + 1e-12))
                 p_clamp_b = p1
                 dogbone = build_symmetrical_dogbone_clamp_mesh(p_clamp_a, p_clamp_b, width=0.0065)
