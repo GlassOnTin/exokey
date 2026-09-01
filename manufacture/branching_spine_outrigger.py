@@ -163,20 +163,27 @@ def build_conformal_spine_tree_geometry(p_root: np.ndarray,
         c_node.apply_translation(mcp_nodes[f])
         clamps.append(c_node)
         
-    # 3. DIRECT THUMB STRUT ATTACHED TO INDEX KNUCKLE JOINT (Index MCP -> Web Arch -> Thumb MCP)
-    p_web = 0.5 * (p_mcp_idx + p_mcp_th) + 0.008 * np.array([0.0, 0.0, 1.0]) + 0.006 * np.array([0.0, 1.0, 0.0])
+    # 3. DIRECT THUMB STRUT ATTACHED TO INDEX KNUCKLE JOINT (Index MCP -> Web Tube -> Thumb MCP)
+    # Uses standard modular 16mm dogbone clamps at both joint hubs connected by a ⌀ 6.0mm CF tube
+    v_web = p_mcp_th - p_mcp_idx
+    L_web = float(np.linalg.norm(v_web))
+    u_web = v_web / (L_web + 1e-12)
     
-    # Symmetrical Dogbone Clamp bridging Index Knuckle to Web Arch Node
-    c_idx_web = build_symmetrical_dogbone_clamp_mesh(p_mcp_idx, p_web, width=0.0075)
-    clamps.append(c_idx_web)
+    # Standard 16mm clamp span at Index MCP
+    p_clamp_idx_a = p_mcp_idx
+    p_clamp_idx_b = p_mcp_idx + 0.0160 * u_web
+    dogbone_idx = build_symmetrical_dogbone_clamp_mesh(p_clamp_idx_a, p_clamp_idx_b, width=0.0075)
+    clamps.append(dogbone_idx)
     
-    # Carbon tube from Web Arch Node to Thumb MCP Hub
-    t_web_th = build_straight_cf_tube(p_web, p_mcp_th, r_od=r_arch_od, sections=14)
-    cf_tubes.append(t_web_th)
+    # Standard 16mm clamp span at Thumb MCP
+    p_clamp_th_a = p_mcp_th - 0.0160 * u_web
+    p_clamp_th_b = p_mcp_th
+    dogbone_th = build_symmetrical_dogbone_clamp_mesh(p_clamp_th_a, p_clamp_th_b, width=0.0075)
+    clamps.append(dogbone_th)
     
-    c_th_mcp = trimesh.creation.uv_sphere(radius=0.0036, count=[12, 12])
-    c_th_mcp.apply_translation(p_mcp_th)
-    clamps.append(c_th_mcp)
+    # Straight Carbon Fiber Bridge Tube across 1st Webspace
+    t_web = build_straight_cf_tube(p_clamp_idx_b, p_clamp_th_a, r_od=r_arch_od, sections=14)
+    cf_tubes.append(t_web)
     
     # 4. Phalanx Branches per Digit with Symmetrical Dual-Ball Dogbone Clamps
     for f, nodes in digit_chains.items():
